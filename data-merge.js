@@ -107,7 +107,26 @@ function deleteLesson(data,id,billingId=''){
  return unlinkLessons(data,[id]);
 }
 const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
-const api = {COLLECTIONS, merge, valid, count, same, deleteMedia, deleteLesson};
+/* merge() can return the same records in a different text: keys in the other side's order, the `deleted` it always
+ * writes (`{}` when nothing was deleted, kinds in a fixed order), and `songLinks: []` on a performance without links.
+ * unchanged() tells that case from a real difference, so sync does not store and redraw a copy that says the same
+ * thing (cloud-sync.js). Anything else — a record, a field, a tombstone, the order of a list — is a difference. */
+const sorted = v => Array.isArray(v) ? v.map(sorted) : isObj(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sorted(v[k])])) : v;
+function plain(data) {
+  if (!isObj(data)) return data;
+  const out = {...data}, deleted = {}, deletedAt = {};
+  for (const [k, ids] of Object.entries(isObj(data.deleted) ? data.deleted : {})) {
+    if (!Array.isArray(ids)) deleted[k] = ids;
+    else if (ids.length) deleted[k] = COLLECTIONS.includes(k) ? [...new Set(ids.map(String))] : ids;
+  }
+  for (const [k, times] of Object.entries(isObj(data.deletedAt) ? data.deletedAt : {})) if (!isObj(times) || Object.keys(times).length) deletedAt[k] = times;
+  if (data.deleted === undefined || isObj(data.deleted)) out.deleted = deleted;
+  if (data.deletedAt === undefined || isObj(data.deletedAt)) out.deletedAt = deletedAt;
+  if (Array.isArray(data.performances)) out.performances = data.performances.map(p => isObj(p) && !p.songLinks ? {...p, songLinks:[]} : p);
+  return out;
+}
+const unchanged = (local, merged) => same(local, merged) || same(sorted(plain(local)), sorted(plain(merged)));
+const api = {COLLECTIONS, merge, valid, count, same, unchanged, deleteMedia, deleteLesson};
 root.VzipDataMerge = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof self !== 'undefined' ? self : globalThis);

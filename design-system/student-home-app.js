@@ -303,8 +303,15 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  V.route('practices',{title:'연습 기록',back:true,tab:'calendar',
   actions:()=>'<button type="button" class="icon-btn" data-home-add-practice aria-label="연습 기록 추가"><i class="ph ph-plus"></i></button>',
   render(){
-   const rows=[...V.db.practices].sort((a,b)=>String(b.date).localeCompare(String(a.date))||(b.created||0)-(a.created||0));
-   return rows.length?'<div class="list">'+rows.map(p=>'<button type="button" class="item" data-practice="'+esc(p.id)+'"><span class="avatar"><i class="ph ph-timer"></i></span><span class="item-main"><span class="item-title">'+esc(p.practiceMode==='training'?(p.detail||p.categoryLabel||'보컬 트레이닝'):(V.songTitle(p.songId)||'연습'))+'</span><span class="item-sub">'+esc(dayLabel(p.date))+' · '+esc(V.minutes(p.manualMinutes??p.minutes))+'</span></span><i class="ph ph-caret-right"></i></button>').join('')+'</div>':
+   // One heading per day (newest first), each record in the shared practice row: real time (V.practiceMinutes), where it
+   // was recorded, the person's own memo. Removed rows and empty step rows of 오늘의 연습 (their time lives in the goal's
+   // record) are left out of the list only; nothing stored changes.
+   const gone=new Set(V.db.deleted?.practices||[]);
+   const rows=[...V.db.practices].filter(p=>p&&!gone.has(p.id)&&!p.deleted&&!(V.practiceHidden?.(p))).sort((a,b)=>String(b.date).localeCompare(String(a.date))||(b.created||0)-(a.created||0));
+   const days=new Map();for(const p of rows){const k=String(p.date||'');if(!days.has(k))days.set(k,[]);days.get(k).push(p);}
+   const row=p=>V.practiceRow?V.practiceRow(p,{day:true}):'<button type="button" class="item" data-practice="'+esc(p.id)+'"><span class="item-main"><span class="item-title">'+esc(V.songTitle(p.songId)||'연습')+'</span></span></button>';
+   return rows.length?[...days].map(([d,list])=>{const total=list.reduce((s,p)=>s+(p.practiceTimeSource==='unconfirmed'?0:(V.practiceMinutes?.(p)||0)),0);
+     return '<h3 class="cal-group practice vz-practice-day"><span>'+esc(dayLabel(d))+'</span>'+(total>0?'<span class="vz-practice-day-total">'+esc(V.minutes(total))+'</span>':'')+'</h3><div class="list">'+list.map(row).join('')+'</div>';}).join(''):
     V.empty('timer','아직 연습 기록이 없어요.','<button type="button" class="btn" data-home-add-practice>연습 기록 추가</button>');
   },mount(main){document.querySelectorAll('[data-home-add-practice]').forEach(b=>b.onclick=()=>V.practiceSheet());}});
  applyTheme();

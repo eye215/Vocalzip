@@ -365,3 +365,6 @@ body .sheet-page.vl-observation-overlay .vl-observation-card{
 .vl-compare-actions button:only-child{border-color:#76558e;background:#251c30;color:#e4caff}
 .vl-day-report{margin-top:24px;padding-top:20px;border-top:1px solid #30283a}
 .vl-day-intro{margin:0 0 4px}
+
+/* v5 (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): every tap target is at least 44px. */
+.vl-chip-play,.vl-growth-ai-head button{min-height:44px}

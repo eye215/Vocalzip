@@ -327,7 +327,17 @@ VZ.confirmDiscard = () => {
   discardAsking = true;
   return VZ.confirm('작성 중인 내용이 있어요', '닫으면 입력한 내용이 저장되지 않아요. 닫을까요?', {ok:'닫기', cancel:'계속 작성', danger:true}).finally(() => { discardAsking = false; });
 };
-VZ.empty = (icon, text, action = '') => '<div class="empty"><i class="ph ph-' + icon + '"></i><div>' + VZ.esc(text) + '</div>' + action + '</div>';
+/** v5 loading (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): the list's own shape in #F2EFF7 blocks, no spinner.
+ * The words stay for screen readers (role=status). */
+VZ.loadingRows = (n = 3) => '<div class="list vz-loading" role="status" aria-live="polite"><span class="sr-only">불러오는 중…</span>' + '<div class="item" aria-hidden="true"><span class="vz-skel vz-skel-icon"></span><span class="item-main"><span class="vz-skel vz-skel-title"></span><span class="vz-skel vz-skel-sub"></span></span></div>'.repeat(n) + '</div>';
+/** v5 empty state: one line that says what is missing (first sentence, 14/20/600), any further sentences as a quiet
+ * helper line, and at most one action. The words are unchanged; a space keeps them readable as one text. */
+VZ.empty = (icon, text, action = '') => {
+  const s = String(text ?? ''), cut = s.search(/[.?!]\s/), head = cut < 0 ? s : s.slice(0, cut + 1), rest = cut < 0 ? '' : s.slice(cut + 2);
+  return '<div class="empty"><i class="ph ph-' + icon + '"></i><div class="vz-empty-title">' + VZ.esc(head) + '</div>' + (rest ? ' <p class="vz-empty-sub">' + VZ.esc(rest) + '</p>' : '') + action + '</div>';
+};
+/** v5 error state: danger-soft box, one plain sentence, a retry button carrying `attr`. No technical words on screen. */
+VZ.errorBox = (text, attr) => '<div class="empty vz-error" role="alert"><i class="ph ph-warning-circle"></i><div class="vz-empty-title">' + VZ.esc(text) + '</div><button type="button" class="btn sm secondary" ' + attr + '>다시 시도</button></div>';
 
 /** Song <select> with "새 곡 추가" option; returns html. Use VZ.readSong(form, name) to resolve. */
 VZ.songSelect = (name, value = '', {label = '곡', none = '곡 미지정'} = {}) => {

@@ -80,8 +80,8 @@ test('오늘 › 연습하기: one section with the four things you do — the �
     expect(b.h).toBeGreaterThanOrEqual(44); expect(b.l).toBeGreaterThanOrEqual(0); expect(b.r).toBeLessThanOrEqual(390); expect(b.icon).toBe(1);
   }
   // Three rows of 48px under the card; the card itself is a line per step and its button.
-  const cardBox = await row(page, 'practice-set').boundingBox();
-  expect((await section(page).boundingBox()).height - cardBox.height).toBeLessThanOrEqual(210);
+  // Measured in one read and retried: home may be drawn again in between, and a box read from a replaced node is null.
+  await expect.poll(() => section(page).evaluate(s => { const c = s.querySelector('[data-row="practice-set"]'); return c ? s.getBoundingClientRect().height - c.getBoundingClientRect().height : null; })).toBeLessThanOrEqual(210);
   expect(await overflow(page)).toEqual({wide:false, over:0});
   // Under 지금 할 것, above 오늘의 목표.
   const y = await page.evaluate(() => { const r = document.querySelector('.vz-student-home').shadowRoot, t = s => r.querySelector(s).getBoundingClientRect(); return {now:t('.vz-event').bottom, top:t('[data-home-practice]').top, bottom:t('[data-home-practice]').bottom, goals:t('.vz-goals').top}; });
@@ -261,7 +261,7 @@ test('one name per thing: 다음 연습 · 녹음 분석 · 곡 분석 — the o
   await check('리포트 보관함', '.vl-reports');
   await to(page, '#/practice-review');
   await check('다음 연습 (AI)', '[data-review]');
-  await expect(page.locator('#top h1')).toHaveText('다음 연습');
+  await expect(page.locator('#top h1')).toHaveText('다음 연습'); // one name per thing (성장 개편 안 B 4단계, owner-approved)
   await to(page, '#/analysis/a6');
   await check('녹음 분석', '[data-ana]');
   await expect(page.locator('#top h1')).toHaveText('녹음 분석');
@@ -279,7 +279,7 @@ for (const [width, height] of [[820, 1180], [1180, 820]]) test('iPad ' + width +
   expect(home.inMain).toBe(true);
   expect(home.practice.t).toBeGreaterThanOrEqual(home.now.b); expect(home.goals.t).toBeGreaterThanOrEqual(home.practice.b);
   expect(home.side.l).toBeGreaterThanOrEqual(home.practice.r);       // the summary column is beside it
-  expect(Math.min(...await section(page).locator('[data-row]').evaluateAll(els => els.map(e => e.getBoundingClientRect().height)))).toBeGreaterThanOrEqual(44);
+  await expect.poll(() => section(page).locator('[data-row]').evaluateAll(els => els.length ? Math.min(...els.map(e => e.getBoundingClientRect().height)) : 0)).toBeGreaterThanOrEqual(44);
   expect(await overflow(page)).toEqual({wide:false, over:0});
   await to(page, '#/growth-lab');
   await expect(page.locator('[data-lab-tool="reports"]')).toBeVisible();

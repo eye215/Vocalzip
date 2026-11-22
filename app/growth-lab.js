@@ -184,7 +184,7 @@ const ruleLine = () => '<p class="growth-lab-rule" data-lab-rule>' + (practice()
   : '지금까지의 모든 기간 · 곡 녹음만 셌어요. 성장 › 이번 달에서 연습 녹음 포함을 켜면 연습 녹음도 넣어 세요.') + '</p>';
 async function page(host, draw) {
   const my = ++request;
-  host.innerHTML = '<div class="empty compact">기록을 불러오는 중…</div>';
+  host.innerHTML = (window.VZ.loadingRows?.() ?? '<p class="muted" role="status">불러오는 중…</p>');
   let items;
   try { items = await M.list(); } catch { items = M.cached?.() || []; }
   const results = await readPrecision();

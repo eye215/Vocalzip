@@ -276,6 +276,12 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .ink-marker-role-fixed strong{font-weight:700;color:var(--vz-color-accent,#7a32f5)}
 .ink-marker-role-fixed small{flex-basis:100%;font-size:12px;line-height:18px;color:var(--vz-color-muted,#667085)}
 @media(max-width:350px){.ink-marker-roles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* 부르면서 체크에 넣기: one row with a check box, the whole row is the target. */
+.ink-marker-check{display:flex;align-items:flex-start;gap:12px;min-height:52px;box-sizing:border-box;padding:12px 14px;border-radius:14px;background:#fff;cursor:pointer}
+.ink-marker-check input{flex:none;width:22px;height:22px;margin:0;accent-color:var(--vz-color-accent,#7a32f5)}
+.ink-marker-check span{display:grid;gap:2px;min-width:0}
+.ink-marker-check b{font-size:14px;line-height:20px;font-weight:600;color:var(--vz-color-primary,#344054)}
+.ink-marker-check small{font-size:12px;line-height:18px;color:var(--vz-color-muted,#667085)}
 .ink-marker-error{margin:0;font-size:13px;line-height:18px;color:#c4322a}
 .ink-marker-error:empty{display:none}
 /* 목표로 넣기 (메모 → 오늘의 목표 / 숙제): the home goal sheet's rows; a line that is already there is greyed. */

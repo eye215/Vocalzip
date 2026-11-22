@@ -224,7 +224,7 @@
 .growth-chart-current span,.growth-chart-current small{font-size:10px;color:#83758d}
 .growth-chart-current strong{font-size:17px;line-height:1.3;color:#5e3ba2;letter-spacing:-.025em}
 .growth-next-item{align-items:start}
-.growth-next-item .btn{min-height:38px}
+.growth-next-item .btn{min-height:44px}
 .growth-panel,.growth-section{box-shadow:0 4px 18px rgba(66,39,99,.035)}
 .growth-intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(145px,190px);gap:10px;
  border:1px solid #e5d9f1;background:#fff;border-radius:18px;padding:15px 14px}
@@ -295,3 +295,6 @@
 .growth-song-choice strong{overflow-wrap:anywhere;font-weight:650}
 .growth-song-choice small{font-size:12px;font-weight:500;opacity:.78}
 .growth-song-choices .vz-choice{min-height:56px}
+
+/* v5 (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): every tap target is at least 44px. */
+.growth-metric-picks button,.growth-jumps button{min-height:44px}

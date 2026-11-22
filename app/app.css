@@ -362,7 +362,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 #vz-upload-pill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + var(--safe-b) + 10px);z-index:40;max-width:calc(100vw - 32px);padding:8px 14px;border-radius:999px;background:var(--ink);color:var(--bg);font-size:12px;font-weight:600;text-decoration:none;box-shadow:var(--shadow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* 공연 · 레슨 · 연습 */
 .timeline .t.performance:before{background:var(--vz-category-stage,#DE3E0A)}
-.hub-song{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
+.hub-song{grid-template-columns:auto minmax(0,1fr)} /* the 녹음 유형 select keeps its whole label; the song takes the rest */
+/* 가져오기 has its own sticky action button: the floating mic would sit on top of it. */
+body[data-vz-route="import-hub"] .vz-collection-record{display:none!important}
 .hub-song .chip{grid-column:1/-1}
 .dots .s{background:var(--vz-category-stage,#DE3E0A)}
 .legend{flex-wrap:wrap}
@@ -711,3 +713,36 @@ body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a:focus-visible{
 .ana-cmp tbody th{font-weight:500;color:#475467}
 .ana-cmp-held{color:#b54708;font-weight:600}
 .rep-score-key{margin:0 0 12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;display:grid;gap:6px}.rep-score-key p{margin:0}
+
+/* v5 upload result: 다음 단계 rows inside the result card (Home summary rows rhythm, no nested card). */
+.card .up-next-title{margin:4px 0 0;color:var(--vz-color-ink);font-size:15px;line-height:21px;font-weight:600}
+.card .list.up-next{margin:0;border-radius:0;background:transparent;box-shadow:none}
+.up-next .item{min-height:56px;padding:8px 0;gap:12px}
+.up-next .item+.item{border-top:1px solid #F2EFF7}
+.up-next button.item{width:100%;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.up-next .item>.ph:first-child{color:var(--vz-color-accent);font-size:20px}
+.btn.up-report{min-height:44px;font-size:14px}
+/* v5 import review: the many-file tools behind one fold, drawn as the V4 List filter row (#F3ECFF, R16, 48px, 13/18/600). */
+.hub-bulk{margin:0 0 12px;border-radius:16px;background:var(--vz-color-accent-soft)}
+.hub-bulk>summary{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 14px;list-style:none;cursor:pointer;color:var(--vz-color-ink-secondary);font-size:13px;line-height:18px;font-weight:600}
+.hub-bulk>summary::-webkit-details-marker{display:none}
+.hub-bulk>summary small{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vz-color-accent);font-size:13px;font-weight:600;text-align:right}
+.hub-bulk>summary .ph{flex:none;color:var(--vz-color-accent);transition:transform var(--vz-motion-fast)}
+.hub-bulk[open]>summary .ph{transform:rotate(180deg)}
+.hub-bulk>:not(summary){margin-left:14px;margin-right:14px}
+.hub-bulk>:last-child{padding-bottom:12px}
+/* Fields inside the purple fold stay readable: white, not the #F2EFF7 field fill that matches the fold. */
+.hub-bulk .field :is(select,input),.hub-bulk .field .pick-btn{background-color:#fff}
+/* v5 loading rows (VZ.loadingRows): the list's shape in #F2EFF7 blocks (R12), no spinner, no motion. */
+.vz-loading .item{min-height:60px}
+.vz-skel{display:block;border-radius:12px;background:var(--vz-input-bg,#F2EFF7)}
+.vz-skel-icon{flex:none;width:36px;height:36px;border-radius:10px}
+.vz-skel-title{width:58%;height:14px;margin:2px 0 8px}
+.vz-skel-sub{width:36%;height:10px}
+/* v5 (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): every tap target is at least 44px. */
+.score-actions .icon-btn{min-width:44px;min-height:44px;height:44px}
+
+/* 연습 기록 (#/practices): one heading per day with that day's real total on the right. */
+.cal-group.vz-practice-day{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:20px 4px 8px}
+.cal-group.vz-practice-day:first-child{margin-top:4px}
+.vz-practice-day-total{color:var(--vz-color-ink-muted);font-size:12px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}

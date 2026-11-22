@@ -1,6 +1,6 @@
 // VOCAL.zip v6 UI: main user flows, data compatibility with v5 records, and mobile layout.
 const {test, expect} = require('@playwright/test');
-require('./legacy-session-mode.cjs')(test,{approvedHome:info=>info.title==='Bottom navigation reaches the four main screens and the record button without horizontal overflow'});
+require('./legacy-session-mode.cjs')(test,{approvedHome:info=>['Bottom navigation reaches the four main screens and the record button without horizontal overflow','Practice records are grouped by day, say where they were recorded and leave out empty set steps'].includes(info.title)});
 const labClear = require('./lab-clear-selection.cjs');
 const fs = require('node:fs'), path = require('node:path');
 const KEY = 'vocal-zip_mvp_v1';
@@ -82,6 +82,103 @@ test('전체 녹음에서 고른 파일은 새 확인 화면을 거쳐 업로드
   await page.evaluate(() => window.__finishImport());
   await expect(page.locator('[data-result]')).toBeVisible();
   await expect(page.locator('[data-dash]')).toHaveCount(0);
+});
+
+// Named 'Import hub takes …' so upload-latency-check.yml runs it whenever app/import-hub.js changes.
+test('Import hub takes the many-file tools behind one fold that says what they would do', async ({page}) => {
+  await boot(page, {media:false});
+  const sr = 8000, n = sr * 26, b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
+  b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  await page.goto('/#/library');
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('[data-imp]').click();
+  const b2 = Buffer.from(b); b2[200] = 7; // a different take, so it is not flagged as a duplicate
+  await (await chooser).setFiles([{name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b}, {name:'2026-11-02_10-00-00.wav', mimeType:'audio/wav', buffer:b2}]);
+  await expect(page.locator('[data-hub] [data-import]')).toBeVisible({timeout:30000});
+  const fold = page.locator('[data-hub-bulk]');
+  // Closed at first: the everyday choices stay in sight, the bulk tools wait behind the fold.
+  await expect(fold).not.toHaveAttribute('open', '');
+  await expect(fold.locator('summary')).toContainText('한 번에 정하기');
+  await expect(page.locator('[data-hub] [data-all]')).toBeVisible();
+  await expect(page.locator('[data-hub] [data-none]')).toBeVisible();
+  await expect(page.locator('[data-hub] [data-approve-all]')).toBeHidden();
+  await expect(page.locator('[data-hub] [data-bulk-occ]')).toBeHidden();
+  const tap = await fold.locator('summary').evaluate(el => Math.round(el.getBoundingClientRect().height));
+  expect(tap).toBeGreaterThanOrEqual(44);
+  // Open, use a tool inside: the list redraws and the fold stays open.
+  await fold.locator('summary').click();
+  await expect(page.locator('[data-hub] [data-bulk-occ]')).toBeVisible();
+  await page.locator('[data-hub] [data-group]').click();
+  await expect(page.locator('[data-hub] [data-group]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-hub-bulk]')).toHaveAttribute('open', '');
+  await expect(page.locator('[data-hub] [data-import]')).toContainText('선택한 2개 가져오기');
+});
+
+test('Import hub takes you to the next steps after an upload: choose songs, then follow the analysis', async ({page}) => {
+  await boot(page, {media:false});
+  const sr = 8000, n = sr * 26, b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
+  b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  await page.goto('/#/library');
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('[data-imp]').click();
+  await (await chooser).setFiles({name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b});
+  await expect(page.locator('[data-hub] [data-import]')).toBeVisible({timeout:30000});
+  await page.evaluate(() => { VZ.media.importFile = async (file, choice) => ({id:choice.id, cloud:true, name:file.name, songId:'', recordedDate:choice.date || '2026-11-01'}); });
+  await page.locator('[data-hub] [data-import]').click();
+  const result = page.locator('[data-result]');
+  await expect(result).toContainText('저장 1개', {timeout:30000});
+  // The file has no song yet: 곡 정하기 comes first, 처리 내역 (where the automatic analysis is followed) last.
+  const steps = result.locator('[data-next-steps] .item-title');
+  const titles = (await steps.allTextContents()).map(s => s.trim());
+  expect(titles, JSON.stringify(titles)).toEqual(['곡 정하기', '처리 내역']);
+  await expect(result.locator('[data-next="song"]')).toHaveAttribute('href', '#/song-suggest');
+  await expect(result.locator('[data-next="song"]')).toContainText('곡이 정해지지 않은 녹음 1개');
+  await expect(result.locator('[data-retry-failed]')).toHaveCount(0); // nothing failed, so no retry step
+  await expect(result).not.toContainText('실패');
+  // Each step is a full-width row with a 44px+ target; the two buttons below keep their names.
+  const h = await result.locator('[data-next="song"]').evaluate(el => Math.round(el.getBoundingClientRect().height));
+  expect(h).toBeGreaterThanOrEqual(44);
+  await expect(result.getByRole('link', {name:'전체 녹음 보기'})).toBeVisible();
+  await expect(result.getByRole('button', {name:'다른 자료 가져오기'})).toBeVisible();
+});
+
+// v5 flows: 기록 › 날짜 › + offers every record kind of that tab, homework too (it was only on 숙제 and the lesson page).
+test('Calendar add menu offers 숙제 next to 레슨 일정 and 연습 기록 and opens the homework sheet', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/calendar');
+  // The day's + says what it opens: the 기록 추가 menu (it was labelled 일정 추가).
+  await expect(page.locator('.vz-calendar-day-head [data-add]')).toHaveAttribute('aria-label', '기록 추가');
+  await page.locator('.vz-calendar-day-head [data-add]').click();
+  const kinds = await page.locator('[data-calendar-add]').evaluateAll(b => b.map(x => x.dataset.calendarAdd));
+  expect(kinds, JSON.stringify(kinds)).toEqual(['stage', 'lesson', 'practice', 'homework']);
+  await page.locator('[data-calendar-add="homework"]').click();
+  await expect(sheet(page)).toBeVisible();
+  await expect(sheet(page)).toContainText('숙제');
+});
+
+// 연습 기록: by day, a source label instead of the memo tag, and the empty step rows of 오늘의 연습 left out (data unchanged).
+test('Practice records are grouped by day, say where they were recorded and leave out empty set steps', async ({page}) => {
+  const seed = legacy();
+  seed.practices.push(
+    {id:'ps-a', date:'2026-11-03', minutes:5, manualMinutes:5, practiceTimeSource:'practice-set', practiceMode:'training', songId:'', categoryLabel:'호흡', detail:'롱톤', technique:[{name:'롱톤', minutes:5}], memo:'[오늘의 연습] 롱톤', mediaIds:[], practiceSetId:'s1', practiceSetStep:'a', created:2},
+    {id:'ps-b', date:'2026-11-03', minutes:0, manualMinutes:0, practiceTimeSource:'practice-set', practiceMode:'training', songId:'', categoryLabel:'발성', detail:'립트릴', technique:[], memo:'[오늘의 연습] 립트릴', mediaIds:[], practiceSetId:'s1', practiceSetStep:'b', created:3});
+  await boot(page, {seed, media:false});
+  const before = await page.evaluate(() => JSON.stringify(VZ.db.practices));
+  await page.evaluate(() => { location.hash = '#/practices'; });
+  await expect(page.locator('#view [data-practice="ps-a"]')).toBeVisible();
+  await expect(page.locator('#view [data-practice="ps-b"]')).toHaveCount(0); // its time lives in the goal's record
+  const row = page.locator('#view [data-practice="ps-a"]');
+  await expect(row).toContainText('오늘의 연습');
+  await expect(row).not.toContainText('[오늘의 연습]');
+  await expect(page.locator('#view .vz-practice-day').first()).toBeVisible();
+  await row.click();
+  await expect(sheet(page).locator('[data-practice-source]')).toHaveText('오늘의 연습에서 기록');
+  await expect(sheet(page)).not.toContainText('[오늘의 연습]');
+  expect(await page.evaluate(() => JSON.stringify(VZ.db.practices))).toBe(before); // display only
 });
 
 test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
@@ -1934,6 +2031,119 @@ test('Settings shows one 파일 상태 line from this device and opens 처리 �
   await expect(page.locator('[data-processing-log]')).toContainText('fixture.m4a');
 });
 
+// Named with 'Settings' so ui-checks.yml (--grep 'Settings') runs it; the shared empty box is checked on the 설정 page.
+test('Settings shell: v5 empty state is a white R20 box without a dashed border and a 20px grey icon', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const box = document.createElement('div');
+    box.className = 'empty';
+    box.innerHTML = '<i class="ph ph-music-notes"></i><span>아직 없어요</span>';
+    document.getElementById('view').append(box);
+    const b = getComputedStyle(box), i = getComputedStyle(box.querySelector('i'));
+    const out = {border:b.borderTopStyle, radius:b.borderTopLeftRadius, bg:b.backgroundColor, icon:i.fontSize, iconColor:i.color};
+    box.remove();
+    return out;
+  });
+  expect(s, JSON.stringify(s)).toEqual({border:'none', radius:'20px', bg:'rgb(255, 255, 255)', icon:'20px', iconColor:'rgb(152, 162, 179)'});
+});
+
+// Named with 'Settings' so ui-checks.yml runs it. The shared button is 52px/R16/600; a small button keeps a 44px target.
+test('Settings shell: v5 shared buttons are 52px R16 weight 600 and small buttons keep a 44px target', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<button type="button" class="btn">저장</button><button type="button" class="btn secondary">취소</button><button type="button" class="btn sm secondary">일정 추가</button>';
+    document.getElementById('view').append(wrap);
+    const [p, sec, sm] = [...wrap.children].map(b => { const c = getComputedStyle(b); return {h:Math.round(b.getBoundingClientRect().height), r:c.borderTopLeftRadius, w:c.fontWeight}; });
+    wrap.remove();
+    return {p, sec, sm};
+  });
+  expect(s, JSON.stringify(s)).toEqual({p:{h:52, r:'16px', w:'600'}, sec:{h:52, r:'16px', w:'600'}, sm:{h:44, r:'12px', w:'600'}});
+});
+
+// Named with 'Settings' so ui-checks.yml runs it. Empty: one bold line + quiet helper, same words. Error: plain sentence + retry.
+test('Settings shell: v5 empty box leads with what is missing and errors offer 다시 시도 without technical words', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = VZ.empty('music-notes', '아직 악보가 없어요. PDF를 올려 두면 이 곡에서 바로 이어 볼 수 있어요.') + VZ.empty('link', '공유 중인 링크가 없어요.') + VZ.errorBox('공유 링크 목록을 불러오지 못했어요.', 'data-x');
+    document.getElementById('view').append(wrap);
+    const [two, one, err] = wrap.children, cs = el => getComputedStyle(el);
+    const out = {
+      twoText:two.textContent.replace(/\s+/g, ' ').trim(), twoTitle:two.querySelector('.vz-empty-title').textContent, twoSub:two.querySelector('.vz-empty-sub')?.textContent,
+      titleType:[cs(two.querySelector('.vz-empty-title')).fontSize, cs(two.querySelector('.vz-empty-title')).fontWeight], oneSub:one.querySelector('.vz-empty-sub') === null,
+      errRole:err.getAttribute('role'), errBg:cs(err).backgroundColor, errButton:err.querySelector('[data-x]')?.textContent, errText:err.querySelector('.vz-empty-title').textContent,
+    };
+    wrap.remove();
+    return out;
+  });
+  expect(s, JSON.stringify(s)).toEqual({
+    twoText:'아직 악보가 없어요. PDF를 올려 두면 이 곡에서 바로 이어 볼 수 있어요.', twoTitle:'아직 악보가 없어요.', twoSub:'PDF를 올려 두면 이 곡에서 바로 이어 볼 수 있어요.',
+    titleType:['14px', '600'], oneSub:true,
+    errRole:'alert', errBg:'rgb(253, 234, 234)', errButton:'다시 시도', errText:'공유 링크 목록을 불러오지 못했어요.',
+  });
+  // 처리 내역 opens with the shared loading rows, then its own content.
+  await page.evaluate(() => { location.hash = '#/processing-log'; });
+  await expect(page.locator('[data-processing-log]')).toBeVisible();
+  await expect(page.locator('[data-processing-log]')).not.toContainText('처리 상태를 불러오는 중');
+});
+
+// Named with 'Settings' so ui-checks.yml runs it. List screens load as their own row shape in #F2EFF7 blocks, not a text box.
+test('Settings shell: v5 loading rows are #F2EFF7 blocks in the list shape and still say 불러오는 중 to screen readers', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const wrap = document.createElement('div'); wrap.innerHTML = VZ.loadingRows(3);
+    document.getElementById('view').append(wrap);
+    const box = wrap.firstElementChild, blocks = [...box.querySelectorAll('.vz-skel')], row = box.querySelector('.item');
+    const out = {role:box.getAttribute('role'), said:box.querySelector('.sr-only')?.textContent, rows:box.querySelectorAll('.item').length,
+      bg:[...new Set(blocks.map(b => getComputedStyle(b).backgroundColor))], moving:blocks.some(b => getComputedStyle(b).animationName !== 'none'),
+      rowH:Math.round(row.getBoundingClientRect().height), hidden:row.getAttribute('aria-hidden')};
+    wrap.remove();
+    return out;
+  });
+  expect(s, JSON.stringify(s)).toEqual({role:'status', said:'불러오는 중…', rows:3, bg:['rgb(242, 239, 247)'], moving:false, rowH:60, hidden:'true'});
+});
+
+// Named with 'Settings' so ui-checks.yml runs it. A labelled field outside a sheet matches the sheet field (V4 Input/Textarea).
+test('Settings shell: v5 form fields are borderless #F2EFF7 R15 52px with a 2px #DCC4FF focus outline, screen rules still win', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<label class="field"><span>제목</span><input type="text" data-t></label><label class="field"><span>메모</span><textarea data-a></textarea></label><label class="field"><input type="checkbox" data-c></label>';
+    document.getElementById('view').append(wrap);
+    const read = el => { const c = getComputedStyle(el); return {border:c.borderTopStyle, bg:c.backgroundColor, r:c.borderTopLeftRadius, h:Math.round(el.getBoundingClientRect().height)}; };
+    const input = wrap.querySelector('[data-t]'), area = wrap.querySelector('[data-a]'), box = wrap.querySelector('[data-c]');
+    // A screen's own field rule (same weight, loaded later) still wins over the shared look: here a 44px minutes box.
+    const style = document.createElement('style'); style.textContent = '.vz-own-field input{min-height:44px;height:44px}'; document.head.append(style);
+    const own = document.createElement('label'); own.className = 'field vz-own-field'; own.innerHTML = '<input type="number">'; wrap.append(own);
+    const out = {input:read(input), area:read(area), checkboxBg:getComputedStyle(box).backgroundColor === 'rgb(242, 239, 247)', own:Math.round(own.querySelector('input').getBoundingClientRect().height)};
+    style.remove();
+    input.focus();
+    const f = getComputedStyle(input);
+    out.focus = {style:f.outlineStyle, width:f.outlineWidth, color:f.outlineColor};
+    wrap.remove();
+    return out;
+  });
+  expect(s.own, JSON.stringify(s)).toBe(44);
+  delete s.own;
+  expect(s, JSON.stringify(s)).toEqual({
+    input:{border:'none', bg:'rgb(242, 239, 247)', r:'15px', h:52},
+    area:{border:'none', bg:'rgb(242, 239, 247)', r:'15px', h:s.area.h}, // a textarea keeps the height its screen gives it
+    checkboxBg:false,
+    focus:{style:'solid', width:'2px', color:'rgb(220, 196, 255)'},
+  });
+});
+
 test('Settings puts the account first, keeps manual cloud tools folded, and groups the menu', async ({page}) => {
   const seed = legacy();
   seed.performances = [{id:'show1',ownerId:'ui-test-user',title:'첫 무대',start:'2025-07-24',status:'completed',sessions:[]}];
@@ -1948,7 +2158,9 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   expect(headings.map(h => h.trim())).toEqual(['연습', '분석', '파일·저장', '공유·점검']);
   // v5 settings groups: each row sits in the one group it belongs to (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md).
   const rows = async g => (await page.locator('[data-settings-group="' + g + '"] .item-title').allTextContents()).map(s => s.trim());
-  expect(await rows('practice')).toEqual(['하루 연습 목표 시간', '트레이닝 항목', '노래 연습실']);
+  // 노래 연습실 opens from 오늘 › 연습하기 only (one door for the things you do), not from 설정 too.
+  expect(await rows('practice')).toEqual(['하루 연습 목표 시간', '트레이닝 항목']);
+  await expect(page.locator('.vz-settings a[href="#/practice-room"]')).toHaveCount(0);
   expect((await rows('files')).filter(s => !s.startsWith('굿노트'))).toEqual(['처리 내역', '저장 공간', '녹음 찾기 (이 기기)', '내 데이터 내보내기', '기록 백업·복원']);
   expect(await rows('more')).toEqual(['공유 중인 링크', '녹음 중 블루투스 시험']);
   await expect(page.locator('.vz-settings-account [data-cloud]')).toBeVisible();

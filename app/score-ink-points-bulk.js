@@ -100,7 +100,8 @@ function review(v, {send, known, marks, later, why, aspects}) {
   v.signal?.addEventListener('abort', stopAll, {once:true});
   let running = send.length > 0, done = 0, stopped = false, failure = '', markSkipped = 0;
   const lessonOptions = '<option value="">선택 안 함</option>' + lessons.map(l => '<option value="' + esc(l.id) + '"' + (l.id === latest?.id ? ' selected' : '') + '>' + esc(VZ.dateLabel(l.date) + ' 레슨') + '</option>').join('');
-  const markList = marks.filter(m => { const dup = B.duplicate(existing(), m.text, m.measures); if (dup) markSkipped++; return !dup; });
+  // A mark already made a point (by 지적으로, or as its preset's 부르면서 체크에 넣기 does: the name alone) is skipped too.
+  const markList = marks.filter(m => { const dup = B.duplicate(existing(), m.text, m.measures) || B.duplicate(existing(), m.name, m.measures); if (dup) markSkipped++; return !dup; });
   const body = '<div class="vz-bulk" data-bulk>' +
     '<p class="vz-bulk-status" role="status" aria-live="polite" data-bulk-status></p>' +
     '<progress class="vz-bulk-progress" data-bulk-progress max="' + Math.max(1, send.length) + '" value="0"' + (send.length ? '' : ' hidden') + '></progress>' +

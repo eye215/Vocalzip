@@ -95,7 +95,8 @@ test('6. the day + button is clear of the floating mic, and 나의 공연 looks 
   await add.click();
   const style = l => l.evaluate(n => { const s = getComputedStyle(n); return [s.textDecorationLine, s.color, s.fontSize, s.fontWeight, s.minHeight, s.paddingLeft].join('|'); });
   const rows = page.locator('.sheet .vz-choice');
-  await expect(rows).toHaveCount(3);
+  // 나의 공연 · 레슨 일정 · 연습 기록 · 숙제 (숙제 added in v5).
+  await expect(rows).toHaveText([/나의 공연/, /레슨 일정/, /연습 기록/, /숙제/]);
   expect(await style(rows.nth(0))).toBe(await style(rows.nth(1)));
   expect(await rows.nth(0).evaluate(n => getComputedStyle(n).textDecorationLine)).toBe('none');
 });
