@@ -205,7 +205,7 @@ test('연습 전후 30초 녹음 (off by default): a take before the first step 
 test('the timeline and the resume state follow the session',()=>{
   const b=D.build(four(),{today:TODAY});
   assert.deepEqual(D.timeline(b.steps).map(x=>x.state),['next','left','left','left']);
-  assert.deepEqual(D.timeline(b.steps).map(x=>x.label),['목 풀기','호흡','발성','음감']);
+  assert.deepEqual(D.timeline(b.steps).map(x=>x.label),['목 풀기','호흡 · 추천','발성','음감']); // today's 기본기 (호흡, not measured yet) is marked
   let now=1_000_000;
   const s=P.start(b.steps,{id:'run1',date:TODAY,now});
   assert.equal(s.running,false);
