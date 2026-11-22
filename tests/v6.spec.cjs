@@ -85,6 +85,37 @@ test('전체 녹음에서 고른 파일은 새 확인 화면을 거쳐 업로드
 });
 
 // Named 'Import hub takes …' so upload-latency-check.yml runs it whenever app/import-hub.js changes.
+test('Import hub takes the many-file tools behind one fold that says what they would do', async ({page}) => {
+  await boot(page, {media:false});
+  const sr = 8000, n = sr * 26, b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
+  b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  await page.goto('/#/library');
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('[data-imp]').click();
+  const b2 = Buffer.from(b); b2[200] = 7; // a different take, so it is not flagged as a duplicate
+  await (await chooser).setFiles([{name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b}, {name:'2026-11-02_10-00-00.wav', mimeType:'audio/wav', buffer:b2}]);
+  await expect(page.locator('[data-hub] [data-import]')).toBeVisible({timeout:30000});
+  const fold = page.locator('[data-hub-bulk]');
+  // Closed at first: the everyday choices stay in sight, the bulk tools wait behind the fold.
+  await expect(fold).not.toHaveAttribute('open', '');
+  await expect(fold.locator('summary')).toContainText('한 번에 정하기');
+  await expect(page.locator('[data-hub] [data-all]')).toBeVisible();
+  await expect(page.locator('[data-hub] [data-none]')).toBeVisible();
+  await expect(page.locator('[data-hub] [data-approve-all]')).toBeHidden();
+  await expect(page.locator('[data-hub] [data-bulk-occ]')).toBeHidden();
+  const tap = await fold.locator('summary').evaluate(el => Math.round(el.getBoundingClientRect().height));
+  expect(tap).toBeGreaterThanOrEqual(44);
+  // Open, use a tool inside: the list redraws and the fold stays open.
+  await fold.locator('summary').click();
+  await expect(page.locator('[data-hub] [data-bulk-occ]')).toBeVisible();
+  await page.locator('[data-hub] [data-group]').click();
+  await expect(page.locator('[data-hub] [data-group]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-hub-bulk]')).toHaveAttribute('open', '');
+  await expect(page.locator('[data-hub] [data-import]')).toContainText('선택한 2개 가져오기');
+});
+
 test('Import hub takes you to the next steps after an upload: choose songs, then follow the analysis', async ({page}) => {
   await boot(page, {media:false});
   const sr = 8000, n = sr * 26, b = Buffer.alloc(44 + n * 2);
@@ -1997,6 +2028,53 @@ test('Settings shell: v5 shared buttons are 52px R16 weight 600 and small button
     return {p, sec, sm};
   });
   expect(s, JSON.stringify(s)).toEqual({p:{h:52, r:'16px', w:'600'}, sec:{h:52, r:'16px', w:'600'}, sm:{h:44, r:'12px', w:'600'}});
+});
+
+// Named with 'Settings' so ui-checks.yml runs it. Empty: one bold line + quiet helper, same words. Error: plain sentence + retry.
+test('Settings shell: v5 empty box leads with what is missing and errors offer 다시 시도 without technical words', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = VZ.empty('music-notes', '아직 악보가 없어요. PDF를 올려 두면 이 곡에서 바로 이어 볼 수 있어요.') + VZ.empty('link', '공유 중인 링크가 없어요.') + VZ.errorBox('공유 링크 목록을 불러오지 못했어요.', 'data-x');
+    document.getElementById('view').append(wrap);
+    const [two, one, err] = wrap.children, cs = el => getComputedStyle(el);
+    const out = {
+      twoText:two.textContent.replace(/\s+/g, ' ').trim(), twoTitle:two.querySelector('.vz-empty-title').textContent, twoSub:two.querySelector('.vz-empty-sub')?.textContent,
+      titleType:[cs(two.querySelector('.vz-empty-title')).fontSize, cs(two.querySelector('.vz-empty-title')).fontWeight], oneSub:one.querySelector('.vz-empty-sub') === null,
+      errRole:err.getAttribute('role'), errBg:cs(err).backgroundColor, errButton:err.querySelector('[data-x]')?.textContent, errText:err.querySelector('.vz-empty-title').textContent,
+    };
+    wrap.remove();
+    return out;
+  });
+  expect(s, JSON.stringify(s)).toEqual({
+    twoText:'아직 악보가 없어요. PDF를 올려 두면 이 곡에서 바로 이어 볼 수 있어요.', twoTitle:'아직 악보가 없어요.', twoSub:'PDF를 올려 두면 이 곡에서 바로 이어 볼 수 있어요.',
+    titleType:['14px', '600'], oneSub:true,
+    errRole:'alert', errBg:'rgb(253, 234, 234)', errButton:'다시 시도', errText:'공유 링크 목록을 불러오지 못했어요.',
+  });
+  // 처리 내역 opens with the shared loading rows, then its own content.
+  await page.evaluate(() => { location.hash = '#/processing-log'; });
+  await expect(page.locator('[data-processing-log]')).toBeVisible();
+  await expect(page.locator('[data-processing-log]')).not.toContainText('처리 상태를 불러오는 중');
+});
+
+// Named with 'Settings' so ui-checks.yml runs it. List screens load as their own row shape in #F2EFF7 blocks, not a text box.
+test('Settings shell: v5 loading rows are #F2EFF7 blocks in the list shape and still say 불러오는 중 to screen readers', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const wrap = document.createElement('div'); wrap.innerHTML = VZ.loadingRows(3);
+    document.getElementById('view').append(wrap);
+    const box = wrap.firstElementChild, blocks = [...box.querySelectorAll('.vz-skel')], row = box.querySelector('.item');
+    const out = {role:box.getAttribute('role'), said:box.querySelector('.sr-only')?.textContent, rows:box.querySelectorAll('.item').length,
+      bg:[...new Set(blocks.map(b => getComputedStyle(b).backgroundColor))], moving:blocks.some(b => getComputedStyle(b).animationName !== 'none'),
+      rowH:Math.round(row.getBoundingClientRect().height), hidden:row.getAttribute('aria-hidden')};
+    wrap.remove();
+    return out;
+  });
+  expect(s, JSON.stringify(s)).toEqual({role:'status', said:'불러오는 중…', rows:3, bg:['rgb(242, 239, 247)'], moving:false, rowH:60, hidden:'true'});
 });
 
 // Named with 'Settings' so ui-checks.yml runs it. A labelled field outside a sheet matches the sheet field (V4 Input/Textarea).

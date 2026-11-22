@@ -192,6 +192,13 @@ async function autoLoop() {
   }
   if (!hub.paused && !hub.pendingFiles?.length && hub.phase !== 'done') { hub.phase = 'done'; M.invalidate(); }
 }
+/** The line on the closed 한 번에 정하기 fold: what its tools would act on, so nothing useful hides unseen. */
+function bulkHint(rows) {
+  const sug = rows.filter(r => r.state !== 'done' && r.suggestions?.[0] && r.song !== r.suggestions[0].id).length;
+  const lesson = rows.filter(r => r.state !== 'done' && r.dateOk && !r.lessonId && lessonsOn(r.date).length).length;
+  const dup = rows.filter(r => r.dup && r.selected).length;
+  return [sug ? '추천곡 ' + sug + '개' : '', lesson ? '같은 날 레슨 ' + lesson + '개' : '', dup ? '중복 의심 ' + dup + '개' : ''].filter(Boolean).join(' · ') || '유형 · 곡 · 연습 기록';
+}
 /** A row the user may tick: 25 seconds or longer, or a length that could not be read (their tick decides). */
 const importable = r => r.duration == null || Number(r.duration) >= 25;
 /** ok | dup | needs-date | out | error */
@@ -417,10 +424,13 @@ function draw() {
   if (hub.phase === 'review') {
     h.innerHTML = '<div class="row" style="margin-bottom:8px"><span class="avatar"><i class="ph ph-' + s.icon + '"></i></span><strong class="grow">' + esc(s.title) + ' 분석 결과</strong><button type="button" class="btn sm ghost" data-again>다시 선택</button></div>' +
       '<div class="chips" style="flex-wrap:wrap;margin-bottom:10px">' + chips.map(([k, label]) => '<button type="button" class="chip" data-f="' + k + '" aria-pressed="' + (hub.filter === k) + '">' + label + '</button>').join('') + '</div>' +
-      '<div class="chips" style="flex-wrap:wrap;margin-bottom:10px"><button type="button" class="chip" data-all>전체 선택</button><button type="button" class="chip" data-none>선택 해제</button><button type="button" class="chip" data-nodup>중복 제외</button><button type="button" class="chip" data-approve-all>추천곡 일괄 승인</button><button type="button" class="chip" data-approve-lessons>레슨 연결 일괄 승인</button><button type="button" class="chip" data-group aria-pressed="' + hub.group + '">곡별 묶어 보기</button></div>' +
+      '<div class="chips" style="flex-wrap:wrap;margin-bottom:10px"><button type="button" class="chip" data-all>전체 선택</button><button type="button" class="chip" data-none>선택 해제</button></div>' +
+      // v5: the tools that act on many files at once wait behind one fold, with what they would do counted on it.
+      '<details class="hub-bulk" data-hub-bulk' + (hub.bulkOpen ? ' open' : '') + '><summary><span>한 번에 정하기</span><small>' + esc(bulkHint(rows)) + '</small><i class="ph ph-caret-down" aria-hidden="true"></i></summary>' +
+      '<div class="chips" style="flex-wrap:wrap;margin-bottom:10px"><button type="button" class="chip" data-nodup>중복 제외</button><button type="button" class="chip" data-approve-all>추천곡 일괄 승인</button><button type="button" class="chip" data-approve-lessons>레슨 연결 일괄 승인</button><button type="button" class="chip" data-group aria-pressed="' + hub.group + '">곡별 묶어 보기</button></div>' +
       '<label class="field"><span>선택한 파일의 녹음 유형 한 번에 지정</span><select data-bulk-occ><option value="">선택…</option>' + VZ.recordingType.importChoices().map(([k, v]) => '<option value="' + k + '">' + v + '</option>').join('') + '</select></label>' +
       '<label class="field"><span>선택한 파일의 곡 한 번에 지정</span><select data-bulk data-pick="song"><option value="">선택…</option>' + songOpts('').replace('<option value="">곡 미지정</option>', '<option value="__none">곡 미지정</option>') + '</select></label>' +
-      '<label class="item" style="padding:0 0 10px"><input type="checkbox" data-auto' + (hub.autoPractice ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main small">곡을 정한 곡 녹음은 그 날짜의 연습 기록으로 만들기 (시간은 직접 입력 · 같은 파일은 한 번만)</span></label>' +
+      '<label class="item" style="padding:0 0 10px"><input type="checkbox" data-auto' + (hub.autoPractice ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main small">곡을 정한 곡 녹음은 그 날짜의 연습 기록으로 만들기 (시간은 직접 입력 · 같은 파일은 한 번만)</span></label></details>' +
       '<div class="stack" data-list>' + (list || '<p class="small muted">이 조건에 해당하는 파일이 없어요.</p>') + '</div>' +
       '<div class="sheet-foot" style="position:sticky;bottom:calc(var(--nav-h) + var(--safe-b));margin:16px -16px 0;padding:12px 16px"><button type="button" class="btn block" data-import' + (selected.length ? '' : ' disabled') + '>선택한 ' + selected.length + '개 가져오기</button></div>';
     wireReview(h);
@@ -512,6 +522,8 @@ function wirePlay(h) {
 function wireReview(h) {
   const byRow = el => hub.rows.find(r => r.id === el.closest('[data-row]').dataset.row);
   h.querySelector('[data-again]').onclick = () => { hub.phase = 'pick'; hub.rows = []; draw(); };
+  // The fold stays as the person left it when the list redraws after a choice inside it.
+  h.querySelector('[data-hub-bulk]')?.addEventListener('toggle', e => { hub.bulkOpen = e.target.open; });
   h.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { hub.filter = b.dataset.f; draw(); });
   h.querySelector('[data-all]').onclick = () => { hub.rows.forEach(r => { if (r.status !== 'error' && Number(r.duration) >= 25) r.selected = true; }); draw(); };
   h.querySelector('[data-none]').onclick = () => { hub.rows.forEach(r => { r.selected = false; }); draw(); };
