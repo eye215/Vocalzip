@@ -77,12 +77,12 @@ test('three tabs with their own addresses; switching never piles up history and 
   await boot(page);
   await dock(page).click();
   await expect(page).toHaveURL(/#\/vocal-growth$/);
-  await expect(tabs(page)).toHaveText(['이번 달', '곡', '연구소']);
-  await expect(current(page)).toHaveText('이번 달');
+  await expect(tabs(page)).toHaveText(['나', '곡', '기록']);
+  await expect(current(page)).toHaveText('나');
   await expect(page.locator('[data-gm-section="done"]')).toBeVisible();
   const entered = await depth(page);
-  for (const [i, url, label, mark] of [[1, /#\/vocal-analysis$/, '곡', '[data-hub-song]'], [2, /#\/growth-lab$/, '연구소', '[data-lab-tool="reports"]'],
-    [0, /#\/vocal-growth$/, '이번 달', '[data-gm-section="done"]'], [2, /#\/growth-lab$/, '연구소', '[data-lab-tool="reports"]'], [1, /#\/vocal-analysis$/, '곡', '[data-hub-song]']]) {
+  for (const [i, url, label, mark] of [[1, /#\/vocal-analysis$/, '곡', '[data-hub-song]'], [2, /#\/growth-lab$/, '기록', '[data-lab-tool="reports"]'],
+    [0, /#\/vocal-growth$/, '나', '[data-gm-section="done"]'], [2, /#\/growth-lab$/, '기록', '[data-lab-tool="reports"]'], [1, /#\/vocal-analysis$/, '곡', '[data-hub-song]']]) {
     await tabs(page).nth(i).click();
     await expect(page).toHaveURL(url);
     await expect(current(page)).toHaveText(label);
@@ -103,13 +103,13 @@ test('three tabs with their own addresses; switching never piles up history and 
   await expect(page).toHaveURL(/#\/home$/);                          // one 뒤로 leaves 성장
   await page.goForward();
   await expect(page).toHaveURL(/#\/vocal-growth$/);                  // …and 앞으로 comes back to where it was
-  await expect(current(page)).toHaveText('이번 달');
+  await expect(current(page)).toHaveText('나');
   await expect(page.locator('[data-gm-period="all"]')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('a reload stays on the same tab and period; the /analysis and /training spellings land on their tabs', async ({page}) => {
   await boot(page);
-  for (const [hash, label, mark] of [['#/vocal-growth', '이번 달', '[data-gm-section="done"]'], ['#/vocal-analysis', '곡', '[data-hub-song]'], ['#/growth-lab', '연구소', '[data-lab-tool="reports"]']]) {
+  for (const [hash, label, mark] of [['#/vocal-growth', '나', '[data-gm-section="done"]'], ['#/vocal-analysis', '곡', '[data-hub-song]'], ['#/growth-lab', '기록', '[data-lab-tool="reports"]']]) {
     await page.goto('/' + hash);
     await expect(page.locator(mark).first()).toBeVisible();
     await page.reload();
@@ -193,7 +193,7 @@ test('뒤로 from the screens a tab opens returns to that tab, with 성장 lit o
     await expect(page).toHaveURL(url);
     await expect(dock(page)).toHaveAttribute('aria-current', 'page');
     await back(/#\/growth-lab$/);
-    await expect(current(page)).toHaveText('연구소');
+    await expect(current(page)).toHaveText('기록');
   }
   // 이번 달 → 지난 흐름 (월별, the default period) → 연습실 → 뒤로 keeps the month view; 뒤로 again is 이번 달.
   await tabs(page).nth(0).click();
@@ -208,7 +208,7 @@ test('뒤로 from the screens a tab opens returns to that tab, with 성장 lit o
   await expect(dock(page)).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('[data-growth-mode="monthly"]')).toHaveAttribute('aria-pressed', 'true');
   await back(/#\/vocal-growth$/);
-  await expect(current(page)).toHaveText('이번 달');
+  await expect(current(page)).toHaveText('나');
   // 오늘 → 노래 연습실 keeps 오늘 lit.
   await page.goto('/#/home'); await page.evaluate(() => { location.hash = '#/practice-room'; });
   await expect(page.locator('iframe.vzip-practice-room-frame')).toBeVisible();
@@ -226,7 +226,7 @@ test('a 성장 screen opened with nothing behind it: 뒤로 goes to its 성장 t
   await expect(page.locator('#top h1')).toHaveText('리포트 보관함');
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/growth-lab$/);                   // 리포트 보관함 belongs to 연구소
-  await expect(current(page)).toHaveText('연구소');
+  await expect(current(page)).toHaveText('기록');
   await page.evaluate(() => { location.hash = '#/vocal-lab/s1'; });
   await expect(page.locator('#top h1')).toHaveText('곡 분석');
   await page.locator('[data-back]').click();
@@ -235,7 +235,7 @@ test('a 성장 screen opened with nothing behind it: 뒤로 goes to its 성장 t
   await expect(page.locator('#top h1')).toHaveText('지난 흐름');
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/vocal-growth$/);                 // 지난 흐름 belongs to 이번 달
-  await expect(current(page)).toHaveText('이번 달');
+  await expect(current(page)).toHaveText('나');
   // Screens of the other menus keep their own fallback (오늘).
   await page.evaluate(() => { location.hash = '#/lessons'; });
   await expect(page.locator('#top h1')).toHaveText('레슨');
@@ -265,8 +265,8 @@ test('older deep links land where they did', async ({page}) => {
   await page.goto('/#/home'); await page.goto('/#/practice-room?result=roomaaaa1111');
   await expect(page.locator('iframe.vzip-practice-room-frame')).toHaveAttribute('src', /result=roomaaaa1111/);
   await page.goto('/#/home'); await page.goto('/#/vocal-growth');
-  await expect(current(page)).toHaveText('이번 달');
-  await expect(page.locator('[data-gm-section="changes"]')).toBeVisible();
+  await expect(current(page)).toHaveText('나');
+  await expect(page.locator('[data-gm-section="line"]')).toBeVisible();
   await page.goto('/#/home'); await page.goto('/#/vocal-growth?mode=monthly');
   await expect(page).toHaveURL(/#\/growth-flow\?period=month$/);
   await expect(page.locator('[data-growth-mode="monthly"]')).toHaveAttribute('aria-pressed', 'true');
@@ -278,7 +278,7 @@ test('older deep links land where they did', async ({page}) => {
   await expect(page.locator('[data-weekly-summary] .ws-week')).toBeVisible();
   await page.goto('/#/home'); await page.goto('/#/growth');
   await expect(page).toHaveURL(/#\/vocal-growth$/);
-  await expect(current(page)).toHaveText('이번 달');
+  await expect(current(page)).toHaveText('나');
   // The former 보컬 트레이닝 address: practice is on 오늘 now. Replaced, so 뒤로 returns to where it was typed.
   await page.goto('/#/home'); await page.goto('/#/vocal-growth'); await page.evaluate(() => { location.hash = '#/vocal-training'; });
   await expect(page).toHaveURL(/#\/home$/);
@@ -521,18 +521,16 @@ for (const [width, height] of [[820, 1180], [1180, 820]]) test('tablet ' + width
   await expect(page.locator('.growth-hub-hint')).toHaveCount(0);     // the hint belongs to 곡
   await tabs(page).nth(1).click();
   await expect(page.locator('.growth-hub-hint')).toBeVisible();
-  // 이번 달: 한 것 across the top, 달라진 것 on the left, 다음 연습 and 지난 흐름 on the right.
+  // 나: 큰 단계 beside the eight 기본기 tiles; the one line, 다음 연습 and 한 것 below, nothing wider than the screen.
   await tabs(page).nth(0).click();
   await expect(page.locator('[data-gm-section="next"]')).toBeVisible();
-  const month = await page.evaluate(() => {
+  const me = await page.evaluate(() => {
     const box = s => document.querySelector(s).getBoundingClientRect();
-    return {done:box('[data-gm-section="done"]'), changes:box('[data-gm-section="changes"]'), next:box('[data-gm-section="next"]'), flow:box('[data-gm-section="flow"]'), tabs:box('.growth-top-tabs').width, view:box('#view').width};
+    return {lv:box('[data-gme-lv]'), tile:box('[data-gme-tile]'), line:box('[data-gm-section="line"]'), next:box('[data-gm-section="next"]'), tabs:box('.growth-top-tabs').width, view:box('#view').width};
   });
-  expect(month.done.width).toBeGreaterThan(month.view - 2);
-  expect(month.next.left).toBeGreaterThan(month.changes.right);
-  expect(Math.abs(month.next.top - month.changes.top)).toBeLessThan(2);
-  expect(month.flow.top).toBeGreaterThan(month.next.bottom);
-  expect(month.tabs).toBeLessThan(month.view);                       // the tab box keeps a phone-like width
+  expect(me.tile.left).toBeGreaterThan(me.lv.right);
+  expect(me.next.top).toBeGreaterThan(me.lv.top);
+  expect(me.tabs).toBeLessThan(me.view);                       // the tab box keeps a phone-like width
   expect(await overflow(page)).toEqual({wide:false, over:0});
   // 지난 흐름 › 전체 분석: the six measures three across, AI 코치 beside 다음 연습; the cards themselves are unchanged.
   await to(page, REPORT_ALL);

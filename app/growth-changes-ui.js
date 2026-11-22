@@ -208,6 +208,8 @@ async function readPrecision() {
   try { return (await window.VzipPrecisionStore.list(owner())).map(r => r.result).filter(Boolean); } catch { return null; }
 }
 window.VzipGrowthChangesUI = {
+  /** The model behind the card (성장 › 나 takes ONE sentence from it: app/growth-me-model.js changeLine). */
+  model:(items, opts = {}) => model(items, null, opts),
   /** Drawn once the device store has answered (it is quick); a slow store is waited for 600 ms, then the card shows
    * "읽는 중" for that group and is drawn again when the answer comes — never redrawn under a finger otherwise. */
   async mount(host, items, opts = {}) {

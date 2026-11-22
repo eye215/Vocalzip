@@ -21,7 +21,8 @@
 const V = window.VZ, M = V?.media;
 if (!V || !M) return;
 const e = V.esc, G = window.VzipGrowthMetrics;
-const TABS = [['month', '이번 달', '#/vocal-growth'], ['songs', '곡', '#/vocal-analysis'], ['lab', '연구소', '#/growth-lab']];
+// 성장 v2 (.kiro/specs/growth-v2): 나 · 곡 · 기록.
+const TABS = [['me', '나', '#/vocal-growth'], ['songs', '곡', '#/vocal-analysis'], ['lab', '기록', '#/growth-lab']];
 /** The three 성장 tabs; `active` is month | songs | lab. Links, so each tab has its own address. */
 V.growthTabs = active => '<nav class="growth-top-tabs" aria-label="성장 메뉴">' + TABS.map(([key, label, href]) =>
   '<a href="' + href + '" data-growth-tab="' + key + '" data-growth-replace' + (key === active ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';

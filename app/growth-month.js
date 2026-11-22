@@ -114,7 +114,7 @@ function paintChanges(v) {
 
 /* ---------- ⓒ 다음 연습 ---------- */
 const CHIP = {homework:'숙제', 'lesson-point':'레슨 지적', skill:'기본기', measure:'측정', precision:'측정', goal:'계획', plan:'계획', ai:'AI'};
-const SHOWN = 5;
+const SHOWN = 3;
 const norm = s => window.VzipGrowthNext?.norm?.(s) ?? String(s || '').replace(/\s+/g, '');
 const todayGoals = () => (V.db.dailyGoals || []).filter(g => g?.date === V.today() && !(V.db.deleted?.dailyGoals || []).includes(g.id));
 function nextModel(v) {
@@ -195,15 +195,39 @@ function paintNext(v) {
   bindNext(v, next);
 }
 
-/* ---------- ⓓ 지난 흐름 ---------- */
-function flowHtml(v) {
-  const k = v.period.kind;
-  const sub = k === 'week' ? '주간 요약 · 요일별 연습 시간 · 저장·공유' : k === 'month' ? '월별 분석 · 꺾은선 · 음역 흐름 · AI 월간 코치 · 지난 기록·보관 리포트' : '전체 분석 · 꺾은선 · 음역 흐름 · AI 전체 코치 · 분석 기준';
-  return '<section class="gm-section gm-flow" data-gm-section="flow" aria-labelledby="gm-flow-title"><header class="gm-head"><h2 id="gm-flow-title">지난 흐름</h2>' +
-    '<p class="gm-basis" data-gm-basis="flow">' + e(WORDS[k].flow) + '</p></header>' +
-    '<div class="list icons"><a class="item" href="#/growth-flow?period=' + k + '" data-gm-flow><i class="ph ph-chart-line-up" aria-hidden="true"></i><span class="item-main"><span class="item-title">지난 흐름 보기</span><span class="item-sub">' + e(sub) + '</span></span><i class="ph ph-caret-right chev" aria-hidden="true"></i></a></div>' +
-    (k === 'week' ? '<p class="gm-note" data-gm-week-ai>주간 AI 코치는 아직 없어요. AI 코치는 월별·전체에서 쓸 수 있어요.</p>' : '') + '</section>';
+/* ---------- 나 (성장 v2): 큰 단계 · 기본기 8 · 달라진 한 줄 ---------- */
+const ME = window.VzipGrowthMe;
+/** A tiny line of the last measured days (values only; no axis). The better direction is up (`lower`: drawn upside down). */
+function sparkSvg(points, lower) {
+  if (points.length < 2) return '<span class="gme-spark-none" aria-hidden="true"></span>';
+  const vs = points.map(p => p.value), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1, w = 56, h = 18;
+  const xy = points.map((p, i) => [Math.round(i / (points.length - 1) * w), Math.round((lower ? (p.value - lo) / span : 1 - (p.value - lo) / span) * (h - 4) + 2)]);
+  return '<svg class="gme-spark" viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true"><polyline points="' + xy.map(p => p.join(',')).join(' ') + '"/><circle cx="' + xy.at(-1)[0] + '" cy="' + xy.at(-1)[1] + '" r="2.2"/></svg>';
 }
+function meHtml(v) {
+  if (!ME) return '';
+  let lv = null, tiles = [];
+  try { lv = ME.lv(V.db, V.today()); tiles = ME.tiles(V.db, V.today()); } catch (error) { console.error(error); }
+  const card = lv ? '<a class="gme-lv" href="#/levels" data-gme-lv><span class="gme-lv-num">Lv ' + lv.level + '</span><span class="gme-lv-copy"><strong>' + e(lv.name) + '</strong>' +
+    '<small>' + (lv.toNext == null ? '가장 높은 단계예요' : '다음 단계까지 ' + lv.toNext + '점') + ' · 오늘 +' + lv.today + '점</small>' +
+    '<span class="gme-bar" role="progressbar" aria-label="다음 단계까지" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + lv.percent + '"><i style="width:' + lv.percent + '%"></i></span></span></a>' : '';
+  const grid = tiles.length ? '<ul class="gme-tiles" data-gme-tiles>' + tiles.map(t => '<li><a href="#/levels/' + encodeURIComponent(t.id) + '" data-gme-tile="' + e(t.id) + '" data-state="' + e(t.state) + '">' +
+    '<span class="gme-tile-name">' + e(t.title) + (t.keeping ? '<i class="gme-keep" title="요즘도 유지 중" aria-label="요즘도 유지 중"></i>' : '') + '</span><strong>' + e(t.label) + '</strong>' + sparkSvg(t.spark, t.lower) + '</a></li>').join('') + '</ul>' : '';
+  return '<section class="gm-section gme-me" data-gm-section="me" aria-label="나">' + card + grid + '</section>';
+}
+function lineHtml(v) {
+  if (!ME) return '';
+  let line = null;
+  try { line = ME.changeLine(window.VzipGrowthChangesUI?.model?.(v.items, changeOpts(v)), v.period.kind); } catch (error) { console.error(error); }
+  return '<section class="gm-section gme-line" data-gm-section="line" aria-labelledby="gme-line-title"><h2 id="gme-line-title" class="gme-h">달라진 것</h2>' +
+    (line ? '<p class="gme-line-text" data-gme-line>' + e(line.text) + '</p><p class="gm-basis">' + e(line.basis) + '</p>' +
+      (line.songId ? '<a class="gc-chip gm-act" href="#/vocal-lab/' + encodeURIComponent(line.songId) + '" data-gme-listen><i class="ph ph-play" aria-hidden="true"></i>두 녹음 듣기</a>' : '')
+      : '<p class="gm-empty" data-gme-line-empty>' + e(WORDS[v.period.kind].changes) + ' 견줄 같은 곡 녹음이 아직 없어요. 같은 곡을 다시 녹음하고 분석하면 여기에 한 줄로 알려 드려요.</p>') +
+    '<a class="gm-more-link" href="#/growth-changes" data-gme-changes><span>곡마다 자세히</span><i class="ph ph-arrow-right" aria-hidden="true"></i></a></section>';
+}
+
+/** 지난 흐름 (the reports by period, also in 기록): one link under 한 것. */
+const flowLink = v => '<a class="gm-more-link gme-flow" href="#/growth-flow?period=' + v.period.kind + '" data-gm-flow><span>지난 흐름 보기 · ' + e(WORDS[v.period.kind].flow) + '</span><i class="ph ph-arrow-right" aria-hidden="true"></i></a>';
 
 /* ---------- the screen ---------- */
 function paint(v) {
@@ -212,7 +236,8 @@ function paint(v) {
   const bar = '<div class="gm-bar"><div class="growth-view-tabs growth-range gm-period" role="group" aria-label="성장 기간"><span class="growth-range-label" aria-hidden="true">기간</span>' +
     PERIODS.map(([key, label]) => '<button type="button" data-gm-period="' + key + '" aria-pressed="' + (key === k) + '" class="' + (key === k ? 'active' : '') + '">' + label + '</button>').join('') +
     '</div><p class="gm-label" data-gm-label>' + e(v.period.label) + '</p></div>';
-  v.host.innerHTML = bar + '<div class="gm-grid">' + doneHtml(v) + changesHtml(v) + nextHtml(v) + flowHtml(v) + '</div>' +
+  // 나: 큰 단계 · 기본기 · 달라진 한 줄 · 다음 연습 · 한 것. 달라진 것 자세히 (#/growth-changes): the full card on its own page.
+  v.host.innerHTML = (v.mode === 'changes' ? '' : meHtml(v)) + bar + '<div class="gm-grid">' + (v.mode === 'changes' ? changesHtml(v) + flowLink(v) : lineHtml(v) + nextHtml(v) + doneHtml(v) + flowLink(v)) + '</div>' +
     '<p class="small muted growth-disclaimer">수치는 음성 측정에 기반한 참고 정보예요. 분석하지 않은 녹음에는 결과를 만들어 넣지 않고, 연습 시간은 직접 적은 시간만 더해요.</p>';
   v.host.querySelectorAll('[data-gm-period]').forEach(b => b.onclick = () => {
     if (b.dataset.gmPeriod === v.period.kind) return;
@@ -221,8 +246,9 @@ function paint(v) {
     paint(v);
     v.host.querySelector('[data-gm-period="' + v.period.kind + '"]')?.focus();
   });
-  mountChanges(v, v.host.querySelector('[data-gm-section="changes"]'));
-  bindNext(v, v.host.querySelector('[data-gm-section="next"]'));
+  const changes = v.host.querySelector('[data-gm-section="changes"]'), next = v.host.querySelector('[data-gm-section="next"]');
+  if (changes) mountChanges(v, changes);
+  if (next) bindNext(v, next);
 }
 /** The 발성 정밀 측정 results of this account (read-only, this device), for 다음 연습; null when there is no store. */
 async function readPrecision() {
@@ -230,13 +256,13 @@ async function readPrecision() {
   const owner = window.vzipCloudUserId?.() || window.VzipAccountScope?.owner || 'local';
   try { return (await window.VzipPrecisionStore.list(owner)).map(r => r.result).filter(Boolean); } catch { return null; }
 }
-async function mount(host) {
+async function mount(host, mode = view?.host === host ? view.mode : 'me') {
   const my = ++request;
   const period = GM.period(V.growthPeriod?.get() || 'month', todayOf());
   let song = load(SONG_KEY);
   if (song && !V.song(song)) song = '';
   const cached = M.cached?.() || [];
-  view = {host, items:cached, period, practice:load(PRACTICE_KEY) === '1', song, results:null, next:null};
+  view = {host, mode, items:cached, period, practice:load(PRACTICE_KEY) === '1', song, results:null, next:null};
   if (cached.length) paint(view); else host.innerHTML = (window.VZ.loadingRows?.() ?? '<p class="muted" role="status">불러오는 중…</p>');
   let items;
   try { items = await M.list(); } catch (error) { items = cached; if (!cached.length && my === request && host.isConnected) host.insertAdjacentHTML('afterbegin', '<p class="growth-hub-note" role="status">녹음 목록을 불러오지 못해 녹음·변화 항목은 빠졌을 수 있어요.</p>'); }
@@ -247,7 +273,7 @@ async function mount(host) {
   view.results = results; paintNext(view);
 }
 V.route('vocal-growth', {title:'성장', tab:'growth', noAutoRefresh:true,
-  render:() => (V.growthTabs?.('month') || '') + '<div class="gm" data-growth-month></div>',
+  render:() => (V.growthTabs?.('me') || '') + '<div class="gm" data-growth-month></div>',
   mount(main, r) {
     // Older addresses of 결과 리포트 lead to where their content is now (one history entry, replaced).
     // #/vocal-growth/training (the former 보컬 트레이닝): practice is on 오늘 › 연습하기 now.
@@ -256,11 +282,17 @@ V.route('vocal-growth', {title:'성장', tab:'growth', noAutoRefresh:true,
     const q = r?.query, gc = q?.get('gc');
     const to = alias || (gc ? '#/growth-flow?period=all&gc=' + encodeURIComponent(gc) : q?.get('mode') === 'monthly' ? '#/growth-flow?period=month' : '');
     if (to) { location.replace(to); return; }
-    mount(main.querySelector('[data-growth-month]'));
+    mount(main.querySelector('[data-growth-month]'), 'me');
   },
   leave() { request++; }
 });
-const here = () => document.body.dataset.vzRoute === 'vocal-growth' && view?.host?.isConnected ? view : null;
+// 달라진 것 자세히: the full 무엇이 달라졌나 card for the period (전체 · 곡별, 연습 녹음 포함, 지표 자세히), from 나 and 기록.
+V.route('growth-changes', {title:'달라진 것', back:true, tab:'growth', noAutoRefresh:true,
+  render:() => '<div class="gm" data-growth-month></div>',
+  mount(main) { mount(main.querySelector('[data-growth-month]'), 'changes'); },
+  leave() { request++; }
+});
+const here = () => ['vocal-growth', 'growth-changes'].includes(document.body.dataset.vzRoute) && view?.host?.isConnected ? view : null;
 // A recording added or analysed meanwhile: everything again. A record (a goal, a lesson): 한 것 and 다음 연습 only, so the
 // 달라진 것 card (and a player in it) stays as it is.
 for (const name of ['vzip:analysis-saved', 'vzip:v6-media']) window.addEventListener(name, () => { const v = here(); if (v) mount(v.host); });

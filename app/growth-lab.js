@@ -1,5 +1,6 @@
-/* 성장 › 연구소 (#/growth-lab) — the third tab of 성장 (성장 개편 안 B, phase 4): the second-tier tools, small. Each row
- * says what it answers and what is there now ("결과 3개", "아직 없음"). Two groups:
+/* 성장 › 기록 (#/growth-lab; it was 연구소) — the third tab of 성장 (성장 v2): everything deep or archival in one list. Each
+ * row says what it answers and what is there now ("결과 3개", "아직 없음"). Three groups:
+ *   흐름·리포트    달라진 것 자세히 (#/growth-changes) · 월별 · 전체 리포트 · 주간 요약 (#/growth-flow?period=…)
  *   소리 깊이 보기  소리 길 흔적 · 발성 정밀 측정 · 발성 정밀 리포트 · MR로 다시 분석 · 녹음 하나 분석
  *   기록·기준      리포트 보관함 · 귀와 숫자 표 전체 (#/growth-ear) · 분석 기준·뺀 것 목록 (#/growth-basis)
  * The things you DO (오늘 연습 세트, 매일 보이스 체크, 노래 연습실, 보컬 트레이닝) are on 오늘 › 연습하기
@@ -22,6 +23,13 @@ let request = 0, view = null;   // view: {host, items, results (정밀 측정: u
 /* ---------- the rows ---------- */
 // [key, icon, name, what it answers, href ('' = a button), shown()]
 const GROUPS = [
+  // 성장 v2: what 나 says in one line, in full — and the reports that were 지난 흐름.
+  ['flow', '흐름·리포트', [
+    ['changes', 'arrows-left-right', '달라진 것 자세히', '기간마다 곡별로 무엇이 달라졌는지 · 연습 녹음 포함 · 지표 자세히', '#/growth-changes', () => true],
+    ['month-report', 'chart-line-up', '월별 리포트 · AI 월간 코치', '달마다의 흐름 · 꺾은선 · 음역 흐름 · 지난 기록', '#/growth-flow?period=month', () => true],
+    ['all-report', 'chart-line', '전체 리포트 · AI 전체 코치', '처음부터 지금까지 같은 곡의 처음과 최근', '#/growth-flow?period=all', () => true],
+    ['week-report', 'calendar-blank', '주간 요약', '주마다의 기록 · 요일별 연습 시간 · 저장·공유', '#/growth-flow?period=week', () => true]
+  ]],
   ['deep', '소리 깊이 보기', [
     ['voice-path', 'path', '소리 길 흔적 · 시험판', '두 녹음에서 소리가 어디서 달라졌는지 나란히 봐요', '#/voice-path', () => !!window.VzipVoicePath],
     ['precision', 'microphone', '발성 정밀 측정', '편안한 음역에서 8가지 과제로 목소리를 재요', '#/precision-measurement', () => !!V.precisionMeasurement],
@@ -56,7 +64,9 @@ function states(v) {
   return out;
 }
 const chev = '<i class="ph ph-caret-right chev" aria-hidden="true"></i>';
-const stateChip = (key, [text, on]) => '<span class="growth-hub-chip growth-lab-state" data-lab-state="' + key + '" data-state="' + (on ? 'ok' : 'none') + '"' + (text ? '' : ' hidden') + '>' + e(text) + '</span>';
+// A row with no state of its own (the reports of 흐름·리포트) shows none.
+const stateChip = (key, st) => !st ? '' : chipOf(key, st);
+const chipOf = (key, [text, on]) => '<span class="growth-hub-chip growth-lab-state" data-lab-state="' + key + '" data-state="' + (on ? 'ok' : 'none') + '"' + (text ? '' : ' hidden') + '>' + e(text) + '</span>';
 function rowHtml([key, icon, title, sub, href], st) {
   const inner = '<i class="ph ph-' + icon + '" aria-hidden="true"></i><span class="item-main"><span class="growth-hub-title"><span class="item-title">' + e(title) + '</span>' + stateChip(key, st) + '</span>' +
     '<span class="item-sub">' + e(sub) + '</span></span>' + chev;
@@ -68,7 +78,7 @@ function html(v) {
     GROUPS.map(([group, title, rows]) => {
       const shown = rows.filter(r => r[5]());
       return shown.length ? '<section class="growth-lab-group" data-lab-group="' + group + '" aria-labelledby="growth-lab-' + group + '"><h2 class="sec" id="growth-lab-' + group + '">' + title + '</h2>' +
-        '<div class="list icons growth-hub-list" data-lab-tools>' + shown.map(r => rowHtml(r, st[r[0]] || ['', false])).join('') + '</div></section>' : '';
+        '<div class="list icons growth-hub-list" data-lab-tools>' + shown.map(r => rowHtml(r, st[r[0]] || (r[0] in st ? ['', false] : null))).join('') + '</div></section>' : '';
     }).join('') +
     '<p class="small muted growth-disclaimer">수치는 음성 측정에 기반한 참고 정보예요. 발성 건강을 진단하지 않아요.</p>';
 }

@@ -74,12 +74,12 @@ test('성장 opens on 이번 달 with three tabs; the period control stays a sep
   await page.locator('.v-nav a[data-nav="growth"]').click();
   await expect(page).toHaveURL(/#\/vocal-growth$/);
   await expect(page.locator('#top h1')).toHaveText('성장');
-  await expect(tabs(page)).toHaveText(['이번 달', '곡', '연구소']);
-  await expect(current(page)).toHaveText('이번 달');
+  await expect(tabs(page)).toHaveText(['나', '곡', '기록']);
+  await expect(current(page)).toHaveText('나');
   await expect(page.locator('[data-gm-period="month"]')).toHaveAttribute('aria-pressed', 'true');   // 월별 by default
   await page.locator('[data-gm-period="week"]').click();
   await expect(page.locator('[data-gm-section="done"] h2')).toHaveText('이번 주에 한 것');
-  await expect(current(page)).toHaveText('이번 달');           // changing the period redraws the content, not the tabs
+  await expect(current(page)).toHaveText('나');           // changing the period redraws the content, not the tabs
   expect(await page.evaluate(() => { const t = document.querySelector('.growth-top-tabs').getBoundingClientRect(), p = document.querySelector('.growth-view-tabs').getBoundingClientRect(); return t.bottom <= p.top; })).toBe(true);
   for (const a of await tabs(page).all()) expect((await a.boundingBox()).height).toBeGreaterThanOrEqual(44);
   // The former 결과 리포트 (전체 · 월별 · 주간) is 지난 흐름, a sub-page of 이번 달.
@@ -133,7 +133,7 @@ test('곡: songs with an analysed take and their real counts (the rest folded as
 test('older links keep their screens; a bare #/vocal-lab lands on 곡 without trapping 뒤로', async ({page}) => {
   await boot(page, {comparisonReports:[{id:'r1', kind:'vocal-lab', songId:'s1', song:'Defying Gravity', created:Date.now(), mediaIds:['a5', 'a6'], snapshots:[]}]});
   await page.goto('/#/vocal-growth');
-  await expect(current(page)).toHaveText('이번 달');
+  await expect(current(page)).toHaveText('나');
   await page.evaluate(() => { location.hash = '#/vocal-lab'; });
   await expect(page).toHaveURL(/#\/vocal-analysis$/);
   await expect(page.locator('[data-hub-song]').first()).toBeVisible();
@@ -159,13 +159,13 @@ test('연구소: two small groups of tools, each with what it answers and its st
   await boot(page, {practices:ROOM, comparisonReports:[{id:'r1', kind:'vocal-lab', songId:'s1', song:'Defying Gravity', created:Date.now(), mediaIds:['a5', 'a6'], snapshots:[]}]});
   await page.evaluate(() => { location.hash = '#/growth-lab'; });
   await expect(page).toHaveURL(/#\/growth-lab$/);
-  await expect(current(page)).toHaveText('연구소');
+  await expect(current(page)).toHaveText('기록');
   await expect(page.locator('.v-nav a[data-nav="growth"]')).toHaveAttribute('aria-current', 'page');
   // 소리 깊이 보기 · 기록·기준, in this order (성장 개편 안 B, phase 4).
-  await expect(page.locator('[data-lab-group] h2')).toHaveText(['소리 깊이 보기', '기록·기준']);
+  await expect(page.locator('[data-lab-group] h2')).toHaveText(['흐름·리포트', '소리 깊이 보기', '기록·기준']);
   expect(await page.locator('[data-lab-group="deep"] [data-lab-tool]').evaluateAll(els => els.map(e => e.dataset.labTool))).toEqual(['voice-path', 'precision', 'precision-report', 'mr', 'take']);
   expect(await page.locator('[data-lab-group="records"] [data-lab-tool]').evaluateAll(els => els.map(e => e.dataset.labTool))).toEqual(['reports', 'ear', 'basis']);
-  await expect(page.locator('[data-lab-tool] .item-title')).toHaveText(['소리 길 흔적 · 시험판', '발성 정밀 측정', '발성 정밀 리포트', 'MR로 다시 분석', '녹음 하나 분석', '리포트 보관함', '귀와 숫자 표 전체', '분석 기준·뺀 것 목록']);
+  await expect(page.locator('[data-lab-tool] .item-title')).toHaveText(['달라진 것 자세히', '월별 리포트 · AI 월간 코치', '전체 리포트 · AI 전체 코치', '주간 요약', '소리 길 흔적 · 시험판', '발성 정밀 측정', '발성 정밀 리포트', 'MR로 다시 분석', '녹음 하나 분석', '리포트 보관함', '귀와 숫자 표 전체', '분석 기준·뺀 것 목록']);
   for (const row of await page.locator('[data-lab-tool]').all()) {
     expect((await row.locator('.item-sub').innerText()).trim().length).toBeGreaterThan(8);   // one line of what it answers
     expect((await row.boundingBox()).height).toBeGreaterThanOrEqual(44);
@@ -289,9 +289,12 @@ test('empty account: each tab says what is missing instead of showing numbers', 
   await expect(page.locator('[data-lab-state][data-state="ok"]')).toHaveCount(0);
   await tabs(page).nth(0).click();
   await expect(page).toHaveURL(/#\/vocal-growth$/);
-  await expect(current(page)).toHaveText('이번 달');
+  await expect(current(page)).toHaveText('나');
   await expect(page.locator('[data-gm-tile="minutes"] strong')).toHaveText('0분');
   await expect(page.locator('[data-gm-section="next"] [data-gm-chip="숙제"]')).toHaveCount(0);   // nothing made up
+  // 나 says there is nothing to compare yet; 달라진 것 자세히 says which part is missing.
+  await expect(page.locator('[data-gme-line-empty]')).toBeVisible();
+  await page.locator('[data-gme-changes]').click();
   await expect(page.locator('[data-growth-changes] [data-gc-empty="songs"]')).toBeVisible();
   expect(page.__errors).toEqual([]);
 });
