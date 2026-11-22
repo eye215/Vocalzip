@@ -187,52 +187,55 @@ const SKILLS=[
       {say:'“스~”를 한 번에 30초 넘게 이어요',kind:'hiss',conds:[{field:'value',min:30}]},
       {say:'“스~”를 30초 넘게, 처음부터 끝까지 고른 세기로 이어요',kind:'hiss',conds:[{field:'value',min:30},{field:'even',max:3}]},
       {say:'“스~”를 40초 넘게, 고른 세기로 이어요',kind:'hiss',conds:[{field:'value',min:40},{field:'even',max:3}]}]},
-  {id:'pitch',title:'음정',unit:'개',line:'들은 음을 그대로 내고 지키는 힘',by:['ear-follow'],
+  {id:'pitch',title:'음정',unit:'개',line:'들은 음을 그대로 내고 지키는 힘',by:['ear-follow','ear-scale'],
+    // hold: notes held (음 따라 부르기); scale5 / arpeggio: % of the notes of the 스케일 연습 sung right (app/daily-measure-model.js).
     steps:[
       {say:'들은 음 5개 가운데 3개를 ±25 cent 안에서 4초씩 유지해요',kind:'hold',conds:[{field:'value',min:3},{field:'hold',min:4},{field:'tolerance',max:25}]},
       {say:'들은 음 5개를 모두 ±25 cent 안에서 4초씩 유지해요',kind:'hold',conds:[{field:'value',min:5},{field:'hold',min:4},{field:'tolerance',max:25}]},
-      {say:'5음 스케일을 80% 넘게 맞게 불러요',kind:'scale5',conds:[{field:'value',min:80}],soon:'스케일 실시간 음정 연습'},
-      {say:'5음 스케일을 90% 넘게 맞게 불러요',kind:'scale5',conds:[{field:'value',min:90}],soon:'스케일 실시간 음정 연습'},
-      {say:'옥타브 아르페지오를 90% 넘게 맞게 불러요',kind:'arpeggio',conds:[{field:'value',min:90}],soon:'아르페지오 실시간 음정 연습'}]},
+      {say:'5음 스케일을 80% 넘게 맞게 불러요',kind:'scale5',conds:[{field:'value',min:80}]},
+      {say:'5음 스케일을 90% 넘게 맞게 불러요',kind:'scale5',conds:[{field:'value',min:90}]},
+      {say:'옥타브 아르페지오를 90% 넘게 맞게 불러요',kind:'arpeggio',conds:[{field:'value',min:90}]}]},
   {id:'sustain',title:'지속음',unit:'cent',line:'한 음을 흔들리지 않게 길게 잇는 힘',by:['voice-hum','voice-mum'],
     // value: how much the pitch moved during the hold (standard deviation in cent, the middle one of the held notes).
+    // “멈” 롱톤 grows with the step: 6 s, 8 s from 2단계, and a note near the top (highValue) from 4단계 (daily-set-model adapt).
     steps:[
       {say:'한 음을 4초 동안, 흔들림 20 cent 안으로 이어요',kind:'longtone',conds:[{field:'hold',min:4},{field:'value',max:20}]},
       {say:'한 음을 6초 동안, 흔들림 20 cent 안으로 이어요',kind:'longtone',conds:[{field:'hold',min:6},{field:'value',max:20}]},
-      {say:'한 음을 8초 동안, 흔들림 20 cent 안으로 이어요',kind:'longtone',conds:[{field:'hold',min:8},{field:'value',max:20}],soon:'8초 롱톤 연습'},
-      {say:'한 음을 8초 동안, 흔들림 12 cent 안으로 이어요',kind:'longtone',conds:[{field:'hold',min:8},{field:'value',max:12}],soon:'8초 롱톤 연습'},
-      {say:'높은 음에서도 8초 동안, 흔들림 8 cent 안으로 이어요',kind:'longtone',conds:[{field:'hold',min:8},{field:'value',max:8},{field:'highValue',max:8}],soon:'높은 음 8초 롱톤 연습'}]},
-  {id:'path',title:'소리 길',sub:'연결',unit:'반음',line:'낮은 음에서 높은 음까지 끊기지 않게 잇는 힘',by:[],soon:'낮은 음에서 높은 음으로 미끄러지듯 잇는 사이렌 연습',
+      {say:'한 음을 8초 동안, 흔들림 20 cent 안으로 이어요',kind:'longtone',conds:[{field:'hold',min:8},{field:'value',max:20}]},
+      {say:'한 음을 8초 동안, 흔들림 12 cent 안으로 이어요',kind:'longtone',conds:[{field:'hold',min:8},{field:'value',max:12}]},
+      {say:'높은 음에서도 8초 동안, 흔들림 8 cent 안으로 이어요',kind:'longtone',conds:[{field:'hold',min:8},{field:'value',max:8},{field:'highValue',max:8}]}]},
+  {id:'path',title:'소리 길',sub:'연결',unit:'반음',line:'낮은 음에서 높은 음까지 끊기지 않게 잇는 힘',by:['loosen-siren'],
+    how:'사이렌: “우~”로 낮은 음에서 높은 음까지 미끄러지듯 올라갔다 내려와요. 마이크로 음 높이를 따라가며 몇 반음을 이었는지, 끊기거나 뒤집힌 곳이 있는지 재요.',
     // value: how far the siren went (semitones); breaks / flips: how many times the sound stopped or flipped.
     steps:[
-      {say:'사이렌으로 5도(7반음)를 끊김 없이 올라가요',conds:[{field:'value',min:7},{field:'breaks',max:0}]},
-      {say:'5도를 끊김 없이 올라갔다 내려와요',conds:[{field:'value',min:7},{field:'breaks',max:0},{field:'both',min:1}]},
-      {say:'한 옥타브를 끊김 없이 올라갔다 내려와요',conds:[{field:'value',min:12},{field:'breaks',max:0},{field:'both',min:1}]},
-      {say:'한 옥타브를 소리가 뒤집히지 않게 올라갔다 내려와요',conds:[{field:'value',min:12},{field:'breaks',max:0},{field:'flips',max:0},{field:'both',min:1}]},
-      {say:'한 옥타브 반을 끊김도 뒤집힘도 없이 올라갔다 내려와요',conds:[{field:'value',min:18},{field:'breaks',max:0},{field:'flips',max:0},{field:'both',min:1}]}]},
-  {id:'range',title:'음역',unit:'반음',line:'편하게 낼 수 있는 음의 폭',by:['voice-hum','voice-mum','ear-follow'],comfort:true,
-    // The exercises of today stay inside the comfortable range, so for now only the start is measured: growth beyond it
-    // needs the 스케일 연습 (the next exercise type, rising key by key). A wider note that IS held still counts.
-    limit:'지금은 기준만 재요. 처음보다 넓어진 음역은 조를 하나씩 올려 가는 스케일 연습이 생기면 그때부터 재요.',
+      {say:'사이렌으로 5도(7반음)를 끊김 없이 올라가요',kind:'siren',conds:[{field:'value',min:7},{field:'breaks',max:0}]},
+      {say:'5도를 끊김 없이 올라갔다 내려와요',kind:'siren',conds:[{field:'value',min:7},{field:'breaks',max:0},{field:'both',min:1}]},
+      {say:'한 옥타브를 끊김 없이 올라갔다 내려와요',kind:'siren',conds:[{field:'value',min:12},{field:'breaks',max:0},{field:'both',min:1}]},
+      {say:'한 옥타브를 소리가 뒤집히지 않게 올라갔다 내려와요',kind:'siren',conds:[{field:'value',min:12},{field:'breaks',max:0},{field:'flips',max:0},{field:'both',min:1}]},
+      {say:'한 옥타브 반을 끊김도 뒤집힘도 없이 올라갔다 내려와요',kind:'siren',conds:[{field:'value',min:18},{field:'breaks',max:0},{field:'flips',max:0},{field:'both',min:1}]}]},
+  {id:'range',title:'음역',unit:'반음',line:'편하게 낼 수 있는 음의 폭',by:['voice-hum','voice-mum','voice-high','ear-follow','ear-scale'],comfort:true,
+    // The long tones stay inside the comfortable range; growth beyond it comes from the 스케일 연습, whose key rises a
+    // semitone a round and whose top note is held 2 s (it stops at the first top not held comfortably).
     note:'가장 높이 낸 한 음이나 큰 소리는 세지 않아요. 편하게 2초 넘게 유지한 음만 세요.',
     // count: how many different notes were held comfortably in one exercise; gain: semitones beyond the first week's range.
     steps:[
       {say:'편하게 2초 넘게 유지한 음이 한 번에 3개 넘게 있어요 (내 처음 음역을 정해요)',kind:'comfortable',conds:[{field:'count',min:3}]},
-      {say:'처음 잰 음역보다 1반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:1}],soon:'조를 하나씩 올려 가는 스케일 연습'},
-      {say:'처음 잰 음역보다 3반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:3}],soon:'조를 하나씩 올려 가는 스케일 연습'},
-      {say:'처음 잰 음역보다 5반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:5}],soon:'조를 하나씩 올려 가는 스케일 연습'},
-      {say:'처음 잰 음역보다 6반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:6}],soon:'조를 하나씩 올려 가는 스케일 연습'}]},
-  {id:'high',title:'고음',unit:'cent',line:'편한 음역의 맨 위를 힘주지 않고 내는 힘',by:[],comfort:true,soon:'편한 음역의 맨 위 음들을 힘주지 않고 2초씩 유지하는 연습',
+      {say:'처음 잰 음역보다 1반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:1}]},
+      {say:'처음 잰 음역보다 3반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:3}]},
+      {say:'처음 잰 음역보다 5반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:5}]},
+      {say:'처음 잰 음역보다 6반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:6}]}]},
+  {id:'high',title:'고음',unit:'cent',line:'편한 음역의 맨 위를 힘주지 않고 내는 힘',by:['voice-high'],comfort:true,
+    how:'맨 위 음 유지: 편한 음역의 맨 위와 그 아래 음을 들은 대로 2초씩 이어요. 맨 위 음은 모음을 바꿔 가며 해요.',
     note:'가장 높은 음이나 큰 소리를 세는 것이 아니에요. 목이 불편한 날은 건너뛰어도 돼요.',
     // fromTop: semitones from the top of the comfortable range (0 = the top note); value: wobble in cent; vowels: how many vowels.
     steps:[
-      {say:'편한 음역 맨 위에서 3반음 아래 음을 2초, 흔들림 20 cent 안으로 유지해요',conds:[{field:'fromTop',min:-3},{field:'value',max:20}]},
-      {say:'편한 음역의 맨 위 음을 2초, 흔들림 20 cent 안으로 유지해요',conds:[{field:'fromTop',min:0},{field:'value',max:20}]},
-      {say:'편한 음역의 맨 위 음을 2초, 흔들림 12 cent 안으로 유지해요',conds:[{field:'fromTop',min:0},{field:'value',max:12}]},
-      {say:'맨 위 음을 모음 두 가지(아·에)로, 흔들림 12 cent 안으로 유지해요',conds:[{field:'fromTop',min:0},{field:'value',max:12},{field:'vowels',min:2}]},
-      {say:'맨 위 음을 모음 세 가지(아·에·이)로, 흔들림 12 cent 안으로 유지해요',conds:[{field:'fromTop',min:0},{field:'value',max:12},{field:'vowels',min:3}]}]},
+      {say:'편한 음역 맨 위에서 3반음 아래 음을 2초, 흔들림 20 cent 안으로 유지해요',kind:'top',conds:[{field:'fromTop',min:-3},{field:'value',max:20}]},
+      {say:'편한 음역의 맨 위 음을 2초, 흔들림 20 cent 안으로 유지해요',kind:'top',conds:[{field:'fromTop',min:0},{field:'value',max:20}]},
+      {say:'편한 음역의 맨 위 음을 2초, 흔들림 12 cent 안으로 유지해요',kind:'top',conds:[{field:'fromTop',min:0},{field:'value',max:12}]},
+      {say:'맨 위 음을 모음 두 가지(아·에)로, 흔들림 12 cent 안으로 유지해요',kind:'top',conds:[{field:'fromTop',min:0},{field:'value',max:12},{field:'vowels',min:2}]},
+      {say:'맨 위 음을 모음 세 가지(아·에·이)로, 흔들림 12 cent 안으로 유지해요',kind:'top',conds:[{field:'fromTop',min:0},{field:'value',max:12},{field:'vowels',min:3}]}]},
   {id:'vibrato',title:'비브라토',unit:'초',line:'긴 음 끝에서 고르게 떨리는 소리',by:['voice-vibrato'],
-    how:'롱톤 비브라토: 들은 음을 8초 동안 이어요. 처음 4초는 곧게, 신호가 울리면 떨어요. 두 가지 높이로 한 번씩 해요.',
+    how:'롱톤 비브라토: 들은 음을 8초 동안 이어요. 처음 4초는 곧게, 신호가 울리면 떨어요. 두 가지 높이로 한 번씩 해요(4단계부터는 두 번째를 “오~”로).',
     // value: seconds of vibrato in one tone; rate: times a second; extent: width in cent (half of peak-to-peak) —
     // the thresholds of 소리 길 흔적 (VIB, from app/voice-path-model.js). tail / regular / cued: 1 when shown;
     // variants: how many different pitches had a cued, regular vibrato.
@@ -241,7 +244,7 @@ const SKILLS=[
       {say:'비브라토를 3초 넘게 고르게 이어요',kind:'vibrato',conds:[{field:'value',min:3},{field:'regular',min:1},...VIB.conds]},
       {say:'곧게 내다가 신호에 맞춰 비브라토를 넣고 3초 넘게 이어요',kind:'vibrato',conds:[{field:'value',min:3},{field:'regular',min:1},{field:'cued',min:1},...VIB.conds]},
       {say:'두 가지 높이에서 모두 신호에 맞춰 비브라토를 넣어요',kind:'vibrato',conds:[{field:'value',min:3},{field:'regular',min:1},{field:'cued',min:1},{field:'variants',min:2},...VIB.conds]},
-      {say:'모음을 바꿔도(아·오) 신호에 맞춰 비브라토를 넣어요',kind:'vibrato',conds:[{field:'value',min:3},{field:'regular',min:1},{field:'cued',min:1},{field:'vowels',min:2},...VIB.conds],soon:'모음을 바꿔 가며 하는 비브라토 연습'}]},
+      {say:'모음을 바꿔도(아·오) 신호에 맞춰 비브라토를 넣어요',kind:'vibrato',conds:[{field:'value',min:3},{field:'regular',min:1},{field:'cued',min:1},{field:'vowels',min:2},...VIB.conds]}]},
   {id:'rhythm',title:'리듬',unit:'ms',line:'박자에 맞춰 소리를 내는 힘',by:['rhythm-ta'],
     how:'“타” 따라 하기: 박자 소리를 들으며 한 마디를 듣고, 다음 마디에 같은 리듬을 “타”로 따라 해요. 마이크로 “타”가 박자에서 얼마나 떨어졌는지 재요.',
     // value: the middle distance of the “타” from the beat (ms); level: 1 quarter notes · 2 eighth notes with rests ·
@@ -276,6 +279,10 @@ function cleanMeasure(m){
  *   음정   how many of the notes were held inside the tolerance for the whole hold
  *   지속음  the wobble of the held notes (their middle value), with the hold's length
  *   음역   the lowest and highest note held comfortably (as sung: an octave under or over counts as that octave)
+ *   고음   (notes with `fromTop`: semitones from the top of the comfortable range, and `vowel`) the highest of them held
+ *          steadily IN the octave played (an octave under is not a high note): its wobble, and at the top how many
+ *          different vowels were held within 12 cent
+ * A note with `top:true` (the 4단계 “멈” 롱톤 adds one near the top) also gives 지속음 its `highValue`.
  */
 function fromHold(exercise,notes){
   const e=exercise||{},areas=list(e.measure),all=list(notes).filter(n=>isObj(n)&&Number.isInteger(n.midi)&&fin(n.held)),out=[];
@@ -284,11 +291,22 @@ function fromHold(exercise,notes){
   if(areas.includes('pitch'))out.push({area:'pitch',kind:'hold',value:ok.length,of:all.length,unit:'개',hold:Number(e.hold)||0,tolerance:Number(e.tolerance)||0});
   if(areas.includes('sustain')){
     const sds=ok.map(n=>n.sd).filter(fin);
-    if(sds.length)out.push({area:'sustain',kind:'longtone',value:round1(median(sds)),unit:'cent',hold:Number(e.hold)||0,count:sds.length,of:all.length});
+    const highs=ok.filter(n=>n.top===true&&!n.octave).map(n=>n.sd).filter(fin);
+    if(sds.length)out.push({area:'sustain',kind:'longtone',value:round1(median(sds)),unit:'cent',hold:Number(e.hold)||0,count:sds.length,of:all.length,...(highs.length?{highValue:round1(Math.max(...highs))}:{})});
   }
   if(areas.includes('range')){
     const held=all.filter(n=>n.held>=RULES.comfortSeconds).map(n=>n.midi+12*(Number.isInteger(n.octave)?n.octave:0));
     if(held.length){const low=Math.min(...held),high=Math.max(...held);out.push({area:'range',kind:'comfortable',value:high-low,unit:'반음',low,high,seconds:RULES.comfortSeconds,count:new Set(held).size});}
+  }
+  if(areas.includes('high')){
+    const steady=ok.filter(n=>Number.isInteger(n.fromTop)&&!n.octave&&fin(n.sd)&&n.held>=RULES.comfortSeconds);
+    if(steady.length){
+      const atTop=steady.filter(n=>n.fromTop>=0),calm=atTop.filter(n=>n.sd<=12);
+      const m=calm.length?{fromTop:0,value:round1(Math.max(...calm.map(n=>n.sd))),vowels:new Set(calm.map(n=>n.vowel||'')).size}:
+        atTop.length?{fromTop:0,value:round1(Math.min(...atTop.map(n=>n.sd))),vowels:0}:
+        (()=>{const top=Math.max(...steady.map(n=>n.fromTop)),at=steady.filter(n=>n.fromTop===top);return {fromTop:top,value:round1(Math.min(...at.map(n=>n.sd))),vowels:0};})();
+      out.push({area:'high',kind:'top',...m,unit:'cent',seconds:RULES.comfortSeconds,of:all.length});
+    }
   }
   return out;
 }
@@ -344,6 +362,9 @@ function valueText(a,m){
   if(m.area==='range'&&Number.isInteger(m.low)&&Number.isInteger(m.high))return noteName(m.low)+'–'+noteName(m.high)+' · '+m.count+'개 음'+(m.gain>0?' · 처음보다 +'+m.gain+'반음':'');
   if(m.area==='breath'&&m.kind==='hiss')return '가장 긴 스 '+m.value+'초'+(fin(m.even)?' · 세기 흔들림 '+m.even+' dB':'');
   if(m.area==='rhythm'&&m.kind==='rhythm')return (RHYTHM_WORDS[m.level]||'리듬')+(fin(m.bpm)?' '+m.bpm+'박':'')+' · 박자와 '+m.value+' ms'+(fin(m.hit)?' · '+m.hit+'% 맞춤':'');
+  if(m.area==='pitch'&&(m.kind==='scale5'||m.kind==='arpeggio'))return (m.kind==='arpeggio'?'아르페지오':'5음 스케일')+' '+m.value+'% 맞춤'+(fin(m.of)?' · '+m.of+'음':'');
+  if(m.area==='path'&&m.kind==='siren')return '사이렌 '+m.value+'반음 · '+(m.breaks?'끊김 '+m.breaks+'번':'끊김 없이')+(m.flips?' · 뒤집힘 '+m.flips+'번':'')+(m.both?' · 올라갔다 내려옴':'');
+  if(m.area==='high'&&m.kind==='top')return (m.fromTop>=0?'맨 위 음':'맨 위에서 '+(-m.fromTop)+'반음 아래')+' · 흔들림 '+m.value+' cent'+(m.vowels>1?' · 모음 '+m.vowels+'가지':'');
   if(m.area==='vibrato'&&m.kind==='vibrato')return m.value>0&&fin(m.rate)?'비브라토 '+m.value+'초 · 1초에 '+m.rate+'번 · 폭 '+m.extent+' cent'+(m.cued?' · 신호에 맞춤':''):'비브라토가 아직 안 보였어요';
   return m.value+(m.unit||a.unit?' '+(m.unit||a.unit):'');
 }

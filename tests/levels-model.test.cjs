@@ -119,9 +119,13 @@ test('a step is earned only when its criterion is met on 3 DIFFERENT days, then 
   // Two steps at once when the higher criterion was met on three days too (in order: 1 before 2).
   const both = db([day(1), day(2), day(3)].map(d => set(d, [pitch(5)])));
   assert.deepEqual(L.award(both, env()).map(x => x.step), [1, 2]);
-  // A step whose measure does not exist yet (5음 스케일) is not passed over.
+  // A step measured by another exercise (5음 스케일) is not passed over by the held notes…
   assert.equal(L.skill(both, 'pitch', env()).step, 2);
-  assert.equal(L.skill(both, 'pitch', env()).next.soon, '스케일 실시간 음정 연습');
+  assert.equal(L.skill(both, 'pitch', env()).next.soon, '');
+  // …and is met by the scale's own measure (kind scale5); 90% meets 3 and 4, not the arpeggio's 5.
+  both.practices.push(...[day(4), day(5), day(6)].map(d => set(d, [{area:'pitch', kind:'scale5', value:92, unit:'%', right:46, of:50}])));
+  assert.deepEqual(L.award(both, env()).map(x => x.step), [3, 4]);
+  assert.equal(L.skill(both, 'pitch', env()).recent[0].text, '5음 스케일 92% 맞춤 · 50음');
   // Only finished items count: a measure on a skipped or unfinished item is not a measure.
   const skipped = db([day(1), day(2), day(3)].map(d => set(d, [pitch(5)], {state:'skipped'})));
   assert.equal(L.skill(skipped, 'pitch', env()).state, 'ready');
@@ -197,9 +201,10 @@ test('음역: only notes held comfortably count, the first week is the start, st
   assert.deepEqual(later.practicePlans.find(p => p.id === 'level-state').rangeBase, {low:60, high:67, from:day(1), to:day(7)});
   later.deleted.practices = week.map(p => p.id);
   assert.deepEqual(L.skill(later, 'range', env(day(16))).base, {low:60, high:67, closed:true});
-  // Said plainly: with today's exercises only the start is measured (growth needs the 스케일 연습) — a wider note that IS held still counts, as above.
-  assert.match(L.skill(db(), 'range', env()).limit, /^지금은 기준만 재요\./);
-  assert.deepEqual(L.skill(db(), 'range', env()).steps.map(s => !!s.soon), [false, true, true, true, true]);
+  // Growth is measured by the 스케일 연습 (its key rises; its top note is held 2 s): no step is 준비 중 any more.
+  assert.equal(L.skill(db(), 'range', env()).limit, '');
+  assert.deepEqual(L.skill(db(), 'range', env()).steps.map(s => !!s.soon), [false, false, false, false, false]);
+  assert.ok(L.skill(db(), 'range', env()).by.includes('ear-scale'));
   assert.equal(L.skill(later, 'range', env(day(16))).steps[2].soon, '');
   // Guardrails: a single highest note (peak), a note not held for 2 seconds, or a reading without a hold length is not a measure.
   for (const bad of [range(60, 84, {peak:true}), range(60, 84, {seconds:1.2}), (() => { const m = range(60, 84); delete m.seconds; return m; })()]) {
@@ -225,15 +230,17 @@ test('no step for volume: loudness is never a measure and no criterion reads it'
   for (const m of [null, 3, {area:'pitch'}, {area:'pitch', value:'4'}, {area:'', value:1}, {value:1}, {area:'pitch', value:NaN}]) assert.equal(L.cleanMeasure(m), null);
 });
 
-test('areas without an exercise are 준비 중, and take measures later with no change to the model', () => {
+test('every area has a measuring exercise now (none is 준비 중), and a measure takes the same rules with no change to the model', () => {
   const none = L.skills(db(), env());
-  assert.deepEqual(none.map(a => [a.id, a.state]), [['breath', 'ready'], ['pitch', 'ready'], ['sustain', 'ready'], ['path', 'soon'], ['range', 'ready'], ['high', 'soon'], ['vibrato', 'ready'], ['rhythm', 'ready']]);
-  assert.ok(none.filter(a => a.state === 'soon').every(a => a.soon && a.next.soon === a.soon && a.steps.every(s => s.soon)));
+  assert.deepEqual(none.map(a => [a.id, a.state]), [['breath', 'ready'], ['pitch', 'ready'], ['sustain', 'ready'], ['path', 'ready'], ['range', 'ready'], ['high', 'ready'], ['vibrato', 'ready'], ['rhythm', 'ready']]);
+  assert.ok(none.every(a => a.by.length && a.steps.every(s => !s.soon)));
+  assert.deepEqual(none.find(a => a.id === 'path').by, ['loosen-siren']);
+  assert.deepEqual(none.find(a => a.id === 'high').by, ['voice-high']);
   // The day an exercise writes {area, value, unit, …}: the same rules apply — measured, calibrated, awarded.
   const future = [
     ['breath', {area:'breath', kind:'hiss', value:16, unit:'초', even:2}, 1],
     ['path', {area:'path', kind:'siren', value:12, unit:'반음', breaks:0, flips:1, both:1}, 3],
-    ['high', {area:'high', kind:'top-hold', value:11, unit:'cent', fromTop:0, seconds:2, vowels:1}, 3],
+    ['high', {area:'high', kind:'top', value:11, unit:'cent', fromTop:0, seconds:2, vowels:1}, 3],
     ['vibrato', {area:'vibrato', kind:'vibrato', value:3.4, unit:'초', rate:5.5, extent:22, regular:1, tail:1}, 2],
     ['rhythm', {area:'rhythm', kind:'rhythm', value:55, unit:'ms', level:2, bpm:80, hit:90}, 2]
   ];
@@ -309,4 +316,25 @@ test('선생님 지적 배지 and the 기준표 text', () => {
   // Numbers only: no ids, song titles or badge words.
   for (const hidden of ['practice-set:', 'point:', 's1', '곡 하나', '턱 내리기', 'level-state', 'skill-step']) assert.ok(!text.includes(hidden), hidden);
   assert.equal(text.split('\n').filter(l => /^\[/.test(l)).length, 8);
+});
+
+test('fromHold: 고음 is the highest steady note IN the octave played, vowels at the top within 12 cent; 롱톤 keeps the high note apart', () => {
+  const high = {measure:['high', 'range'], hold:2, tolerance:25};
+  const n = (fromTop, vowel, sd, extra = {}) => ({midi:67 + fromTop, ok:true, held:2, sd, fromTop, vowel, ...extra});
+  let ms = L.fromHold(high, [n(-3, '아', 9), n(-1, '아', 14), n(0, '아', 10), n(0, '에', 11), n(0, '이', 15)]);
+  assert.deepEqual(ms.find(m => m.area === 'high'), {area:'high', kind:'top', fromTop:0, value:11, vowels:2, unit:'cent', seconds:2, of:5});
+  // The top only an octave under: not a high note; the highest steady one in the octave played counts.
+  ms = L.fromHold(high, [n(-3, '아', 9), n(0, '아', 8, {octave:-1}), n(0, '에', 30, {ok:false, held:.8})]);
+  assert.deepEqual(ms.find(m => m.area === 'high'), {area:'high', kind:'top', fromTop:-3, value:9, vowels:0, unit:'cent', seconds:2, of:3});
+  assert.equal(L.fromHold(high, [n(0, '아', 9, {ok:false, held:1})]).filter(m => m.area === 'high').length, 0);
+  // Steps: s1 at 3 below within 20, s4 two vowels at the top within 12.
+  const days = m => db([day(1), day(2), day(3)].map(d => set(d, [m])));
+  assert.deepEqual(L.award(days({area:'high', kind:'top', fromTop:-3, value:9, unit:'cent', seconds:2, vowels:0}), env(day(16))).map(x => x.step), [1]);
+  assert.deepEqual(L.award(days({area:'high', kind:'top', fromTop:0, value:11, unit:'cent', seconds:2, vowels:2}), env(day(16))).map(x => x.step), [1, 2, 3, 4]);
+  // 지속음: the 4단계 롱톤's last note (top:true) gives highValue; 8 s within 8 cent there and overall is 5단계.
+  const long = {measure:['sustain'], hold:8, tolerance:25};
+  ms = L.fromHold(long, [{midi:60, ok:true, held:8, sd:6}, {midi:63, ok:true, held:8, sd:7}, {midi:65, ok:true, held:8, sd:7.5, top:true}]);
+  assert.deepEqual(ms, [{area:'sustain', kind:'longtone', value:7, unit:'cent', hold:8, count:3, of:3, highValue:7.5}]);
+  assert.deepEqual(L.award(days(ms[0]), env(day(16))).map(x => x.step), [1, 2, 3, 4, 5]);
+  assert.equal(L.fromHold(long, [{midi:60, ok:true, held:8, sd:6}])[0].highValue, undefined);
 });

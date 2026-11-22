@@ -93,7 +93,7 @@ async function openList(page) {await to(page, '#/practice-set');await expect(pag
 const run = page => page.locator('[data-pset-run]');
 const primary = page => run(page).locator('[data-run-primary]');
 /** 고르기 with one exercise per group, so the built-in steps are the same on any date. */
-const PINNED = {id:'daily-set-prefs',kind:'daily-set-prefs',v:1,off:{'loosen-liptrill':true,'loosen-hum':true,'breath-pulse':true,'breath-hiss':true,'voice-liptrill5':true,'voice-mum':true,'voice-vibrato':true},groupsOff:{rhythm:true},replace:{}};
+const PINNED = {id:'daily-set-prefs',kind:'daily-set-prefs',v:1,off:{'loosen-liptrill':true,'loosen-hum':true,'breath-pulse':true,'breath-hiss':true,'voice-liptrill5':true,'voice-mum':true,'voice-vibrato':true,'voice-high':true,'loosen-siren':true,'ear-scale':true},groupsOff:{rhythm:true},replace:{}};
 /** Only the person's own steps: every built-in exercise group resting — 숙제 goal, warm-up, personal goal, 곡에 적용하기,
  * recording (five steps, as 오늘 연습 세트 had). */
 const ownSeed = () => {

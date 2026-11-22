@@ -39,7 +39,7 @@ jobs:
       - run: npx playwright install --with-deps chromium webkit
       # 오늘의 연습: the set list and the person's own steps (practice-set), the card, the doing screen, 고르기 and the takes (daily-set).
       # 단계: the line on 오늘, the 단계 page, the step a finished set earns, the kept rows through a sync (levels).
-      # 호흡 · 리듬 · 비브라토: the measuring exercises on the doing screen and what they write for 단계 (daily-set-measure).
+      # 호흡 · 리듬 · 비브라토 · 스케일 · 사이렌 · 맨 위 음: the measuring exercises on the doing screen and what they write for 단계 (daily-set-measure).
       - run: npx playwright test tests/practice-set.spec.cjs tests/daily-set.spec.cjs tests/daily-set-measure.spec.cjs tests/levels.spec.cjs --project=chromium-mobile --project=webkit-mobile --project=chromium-desktop --workers=2
       - uses: actions/upload-artifact@v4
         if: always()

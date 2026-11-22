@@ -11,8 +11,8 @@ const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
  from:()=>{const c={};for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle','in','limit'])c[m]=()=>c;c.then=r=>r({data:[],error:null});return c}})};`;
 /** 고르기 with one exercise per group, so the set is the same on any date: 목·어깨 풀기 → “스~” → 허밍 롱톤 → 음 따라 부르기
- * (리듬 rests; the measuring exercises have their own spec, tests/daily-set-measure.spec.cjs). */
-const PINNED = {id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'loosen-liptrill':true, 'loosen-hum':true, 'breath-pulse':true, 'breath-hiss':true, 'voice-liptrill5':true, 'voice-mum':true, 'voice-vibrato':true}, groupsOff:{rhythm:true}, replace:{}};
+ * (리듬 rests; the measuring exercises — 사이렌 · 맨 위 음 · 스케일 too — have their own spec, tests/daily-set-measure.spec.cjs). */
+const PINNED = {id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'loosen-liptrill':true, 'loosen-hum':true, 'breath-pulse':true, 'breath-hiss':true, 'voice-liptrill5':true, 'voice-mum':true, 'voice-vibrato':true, 'voice-high':true, 'loosen-siren':true, 'ear-scale':true}, groupsOff:{rhythm:true}, replace:{}};
 const seed = (extra = {}) => ({categories:[], songs:[{id:'s1', title:'This Is the Moment'}], lessons:[], assignments:[], practices:[], performances:[], comparisonReports:[], dailyGoals:[],
   practicePlans:[{...PINNED}], settings:{voiceCheck:{voiceType:'alto', refNote:60, highNote:69, tones:true}}, ...extra});
 /** Fake mic (window.__mic: {opened, stopped, deny}), fake pitch (window.__sing Hz, 0 = silence), reference notes
@@ -430,12 +430,12 @@ test('고르기: which exercises take turns, a group resting, 처음대로 — s
   // Keep only 허밍 in 목 풀기, rest 음감 altogether.
   await sheet.locator('.dset-opt').filter({has:page.locator('[value="loosen-hum"]')}).click();
   await sheet.locator('[data-group="ear"] .dset-switch').click();
-  await expect(sheet.locator('[data-group="ear"] [name=ex]')).toBeDisabled();
+  expect(await sheet.locator('[data-group="ear"] [name=ex]').evaluateAll(els => els.length >= 2 && els.every(e => e.disabled))).toBe(true);
   await page.getByRole('button', {name:'저장'}).click();
   await expect(page.locator('.toast').last()).toContainText('오늘 연습에 바로 반영했어요');
   const row = (await db(page)).practicePlans.filter(p => p.kind === 'daily-set-prefs');
   expect(row).toHaveLength(1);
-  expect(row[0]).toEqual(expect.objectContaining({id:'daily-set-prefs', off:{'loosen-neck':true, 'loosen-liptrill':true}, groupsOff:{ear:true}, recording:false}));
+  expect(row[0]).toEqual(expect.objectContaining({id:'daily-set-prefs', off:{'loosen-neck':true, 'loosen-liptrill':true, 'loosen-siren':true}, groupsOff:{ear:true}, recording:false}));
   // Today (not started yet) follows at once; tomorrow's 목 풀기 is 허밍 again, and 음감 stays out.
   await expect(line(page)).toHaveCount(4);
   expect((await names())[0]).toBe('허밍');

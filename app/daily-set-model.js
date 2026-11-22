@@ -63,12 +63,19 @@ const GROUPS=[
  * without it, then nothing is measured):
  *      'hiss'    tries, inhale                                  one “스~” as long as possible, its length and evenness
  *      'rhythm'  (rounds from the 리듬 step reached)            listen to a bar of “타”, say it back on the next bar
- *      'vibrato' offsets, hold, cue, syllable                   an 8-second tone: straight, then vibrato on the cue */
+ *      'vibrato' offsets, hold, cue, syllable                   an 8-second tone: straight, then vibrato on the cue
+ *      'scale'   syllable                                       a scale (or the arpeggio from 음정 4단계) sung back to the
+ *                                                              beat, the key rising a semitone a round (음정 · 음역)
+ *      'siren'   tries, hold, syllable                          a glide up and back down (소리 길)
+ * 'hold' with tops:[semitones from the top of the comfortable range…] and vowels:[…] is 고음 (맨 위 음 유지).
+ * adapt: 'sustain' | 'vibrato' — the exercise grows with the area's step (adapt() below). */
 const CATALOG=[
   {id:'loosen-neck',group:'loosen',title:'목·어깨 풀기',why:'목과 어깨 힘이 풀리면 소리가 훨씬 편하게 나와요',minutes:3,mic:false,mode:'timed',
     steps:[{text:'어깨를 귀까지 올렸다가 툭 떨어뜨려요',seconds:55},{text:'고개를 천천히 좌우로 기울여요',seconds:55},{text:'입을 크게 벌려 하품하듯 목 안을 열어요',seconds:55}]},
   {id:'loosen-liptrill',group:'loosen',title:'립트릴',why:'입술을 떨면 목에 힘을 주지 않고 숨을 흘려보낼 수 있어요',minutes:3,mic:false,mode:'timed',
     steps:[{text:'입술을 가볍게 붙이고 “부르르” 떨어요',seconds:55},{text:'떨면서 낮은 음에서 높은 음으로 천천히 올라가요',seconds:55},{text:'높은 음에서 낮은 음으로 미끄러지듯 내려와요',seconds:55}]},
+  {id:'loosen-siren',group:'loosen',title:'사이렌',why:'낮은 음에서 높은 음까지 미끄러지듯 이으면 소리 길이 부드럽게 열려요',minutes:3,mic:true,mode:'siren',
+    tries:3,hold:10,syllable:'우~',text:'“우~”로 낮은 음에서 높은 음까지 미끄러지듯 올라갔다 내려와요',measure:['path']},
   {id:'loosen-hum',group:'loosen',title:'허밍',why:'작은 허밍은 목을 부드럽게 깨워 줘요',minutes:3,mic:false,mode:'timed',
     steps:[{text:'입을 다물고 편한 음으로 “음~” 해요',seconds:55},{text:'코와 입술이 간질간질 울리는지 느껴 봐요',seconds:55},{text:'“음~”으로 아는 노래 한 줄을 흥얼거려요',seconds:55}]},
   {id:'breath-s',group:'breath',title:'“스~” 길게 내쉬기',why:'숨을 고르게 오래 내쉴수록 긴 소절이 편해져요',minutes:3,mic:false,mode:'breath',
@@ -80,13 +87,17 @@ const CATALOG=[
   {id:'voice-hum',group:'voice',title:'허밍 롱톤',why:'입을 다문 소리는 음을 맞추는 데만 집중하기 좋아요',minutes:3,mic:true,mode:'hold',
     offsets:[0,2,4,2,0],hold:4,tolerance:25,syllable:'음~',text:'들린 음을 “음~”으로 4초 동안 이어요',measure:['sustain','range']},
   {id:'voice-mum',group:'voice',title:'“멈” 롱톤',why:'“ㅁ”으로 시작하면 소리가 앞으로 모여서 편해져요',minutes:3,mic:true,mode:'hold',
-    offsets:[0,3,5],hold:6,tolerance:25,syllable:'멈~',text:'들린 음을 “멈~”으로 6초 동안 이어요',measure:['sustain','range']},
+    offsets:[0,3,5],hold:6,tolerance:25,syllable:'멈~',text:'들린 음을 “멈~”으로 6초 동안 이어요',measure:['sustain','range'],adapt:'sustain'},
   {id:'ear-follow',group:'ear',title:'음 따라 부르기',why:'듣고 바로 같은 음을 내는 힘이 음정의 바탕이에요',minutes:3,mic:true,mode:'hold',
     count:5,hold:4,tolerance:25,syllable:'아~',text:'들린 음을 “아~”로 4초 동안 이어요',measure:['pitch','range']},
   {id:'breath-hiss',group:'breath',title:'“스~” 길게',why:'한 번에 길고 고르게 내쉬는 숨이 긴 소절을 받쳐 줘요',minutes:2,mic:true,mode:'hiss',
     tries:2,inhale:3,text:'크게 들이쉬고 “스~”를 한 번에 최대한 길게 내쉬어요',measure:['breath']},
   {id:'voice-vibrato',group:'voice',title:'롱톤 비브라토',why:'곧게 내다가 원할 때 떨 수 있으면 긴 음 끝이 자연스러워져요',minutes:3,mic:true,mode:'vibrato',
-    offsets:[0,4],hold:8,cue:4,syllable:'아~',text:'들린 음을 8초 동안 이어요. 처음엔 곧게, 신호가 울리면 떨어요',measure:['vibrato']},
+    offsets:[0,4],hold:8,cue:4,syllable:'아~',text:'들린 음을 8초 동안 이어요. 처음엔 곧게, 신호가 울리면 떨어요',measure:['vibrato'],adapt:'vibrato'},
+  {id:'voice-high',group:'voice',title:'맨 위 음 유지',why:'편한 음역 맨 위를 힘주지 않고 내는 연습이 고음을 편하게 해 줘요',minutes:2,mic:true,mode:'hold',
+    tops:[-3,-1,0,0,0],vowels:['아~','아~','아~','에~','이~'],hold:2,tolerance:25,syllable:'아~',text:'들린 음을 힘주지 않고 2초 동안 이어요. 목이 불편하면 건너뛰어요',measure:['high','range']},
+  {id:'ear-scale',group:'ear',title:'스케일 따라 부르기',why:'음을 차례로 정확히 짚는 힘이 멜로디를 바르게 만들어요',minutes:3,mic:true,mode:'scale',
+    syllable:'아',text:'들은 스케일을 화면의 박자에 맞춰 “아”로 따라 불러요',measure:['pitch','range']},
   {id:'rhythm-ta',group:'rhythm',title:'“타” 따라 하기',why:'박자를 듣고 제때 소리 내는 힘이 노래의 리듬을 살려요',minutes:3,mic:true,mode:'rhythm',
     text:'한 마디를 듣고, 다음 마디에 같은 리듬을 “타”로 따라 해요',measure:['rhythm']}
 ];
@@ -321,7 +332,8 @@ function seeded(seed){let x=(seed*2654435761)>>>0||1;return ()=>{x^=x<<13;x>>>=0
 /** The target notes (MIDI) of a hold exercise on a date. */
 function notesFor(e,c,date){
   if(!e||!['hold','vibrato'].includes(e.mode)||!c)return [];
-  if(Array.isArray(e.offsets)){const base=Math.min(baseNote(c),c.high-Math.max(...e.offsets));return e.offsets.map(o=>Math.max(c.low,base)+o);}
+  if(Array.isArray(e.tops))return e.tops.map(t=>Math.max(c.low,c.high+t));
+  if(Array.isArray(e.offsets)){const base=Math.min(baseNote(c),c.high-Math.max(...e.offsets));return [...e.offsets.map(o=>Math.max(c.low,base)+o),...(Number.isInteger(e.highNote)?[Math.max(c.low,c.high+e.highNote)]:[])];}
   const low=c.low+1,high=Math.max(low+3,c.high-2),rand=seeded(dayNumber(date)+e.id.length),out=[];
   while(out.length<(e.count||5)){
     const n=low+Math.floor(rand()*(high-low+1));
@@ -329,6 +341,33 @@ function notesFor(e,c,date){
     out.push(n);
   }
   return out;
+}
+/** What a hold exercise's note i carries into its result: fromTop / vowel (고음), top (the 4단계 high note of 롱톤). */
+function noteTags(e,i){
+  if(!e)return {};
+  if(Array.isArray(e.tops))return {fromTop:e.tops[i],...(e.vowels?.[i]?{vowel:String(e.vowels[i]).replace(/~$/,'')}:{})};
+  if(Number.isInteger(e.highNote)&&Array.isArray(e.offsets)&&i===e.offsets.length)return {top:true};
+  return {};
+}
+/** The syllable of note / round i. */
+const syllableOf=(e,i)=>e?.vowels?.[i]||e?.syllable||'';
+/**
+ * An exercise as it is done at the step reached in its area (stepOf(area) → 0–5): the same id, so rotation, 고르기 and
+ * the run row do not change — only what is asked grows.
+ *   'sustain' (“멈” 롱톤)  6 s; 8 s once 지속음 2단계 is earned (3·4단계 ask for 8 s); and from 4단계 a last note
+ *                          2 semitones under the top of the comfortable range (5단계: 높은 음에서도)
+ *   'vibrato'              from 비브라토 4단계 the second round is sung on “오~” (5단계: 모음을 바꿔도)
+ */
+function adapt(e,stepOf){
+  if(!e||!e.adapt)return e;
+  const step=Number(typeof stepOf==='function'?stepOf(e.adapt==='sustain'?'sustain':'vibrato'):0)||0;
+  if(e.adapt==='sustain'){
+    const hold=step>=2?8:e.hold,high=step>=4;
+    if(hold===e.hold&&!high)return e;
+    return {...e,hold,...(high?{highNote:-2}:{}),text:'들린 음을 “'+e.syllable+'”으로 '+hold+'초 동안 이어요'+(high?'. 마지막은 높은 음이에요':'')};
+  }
+  if(e.adapt==='vibrato'&&step>=4)return {...e,vowels:['아~','오~'],text:'들린 음을 8초 동안 이어요. 처음엔 곧게, 신호가 울리면 떨어요. 두 번째는 “오~”로 해요'};
+  return e;
 }
 const NOTE_NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const noteName=n=>NOTE_NAMES[((n%12)+12)%12]+(Math.floor(n/12)-1);
@@ -399,6 +438,6 @@ const runsOn=(db,date)=>live(db,'practices').filter(p=>p.dailySet&&p.date===date
 return {GROUPS,SONG,CATALOG,NEXT_MAX,NEXT_MINUTES,TAKE_SECONDS,MAX_STEPS,PREFS_ID,PREFS_KIND,groupOf,exercise,exercisesOf,
   prefs,cleanPrefs,setExercise,setGroup,savePrefs,resetPrefs,rotation,pick,dayNumber,
   ownKey,nextItems,ownSteps,build,isOwn,totalMinutes,modeOf,labelOf,shortTitle,timeline,progress,finishItem,stop,
-  word,holdStart,holdTick,holdResult,comfort,baseNote,notesFor,noteName,
+  word,holdStart,holdTick,holdResult,comfort,baseNote,notesFor,noteTags,syllableOf,adapt,noteName,
   rowId,measuresOf,summary,save,runsOn};
 });
