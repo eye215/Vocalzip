@@ -295,3 +295,6 @@
 .growth-song-choice strong{overflow-wrap:anywhere;font-weight:650}
 .growth-song-choice small{font-size:12px;font-weight:500;opacity:.78}
 .growth-song-choices .vz-choice{min-height:56px}
+
+/* v5 (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): every tap target is at least 44px. */
+.growth-metric-picks button,.growth-jumps button{min-height:44px}

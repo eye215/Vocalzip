@@ -236,7 +236,7 @@ async function mount(host) {
   if (song && !V.song(song)) song = '';
   const cached = M.cached?.() || [];
   view = {host, items:cached, period, practice:load(PRACTICE_KEY) === '1', song, results:null, next:null};
-  if (cached.length) paint(view); else host.innerHTML = '<div class="empty compact">기록을 불러오는 중…</div>';
+  if (cached.length) paint(view); else host.innerHTML = window.VZ.loadingRows();
   let items;
   try { items = await M.list(); } catch (error) { items = cached; if (!cached.length && my === request && host.isConnected) host.insertAdjacentHTML('afterbegin', '<p class="growth-hub-note" role="status">녹음 목록을 불러오지 못해 녹음·변화 항목은 빠졌을 수 있어요.</p>'); }
   if (my !== request || !host.isConnected) return;

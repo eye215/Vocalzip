@@ -2030,6 +2030,35 @@ test('Settings shell: v5 shared buttons are 52px R16 weight 600 and small button
   expect(s, JSON.stringify(s)).toEqual({p:{h:52, r:'16px', w:'600'}, sec:{h:52, r:'16px', w:'600'}, sm:{h:44, r:'12px', w:'600'}});
 });
 
+// Named with 'Settings' so ui-checks.yml runs it. Empty: one bold line + quiet helper, same words. Error: plain sentence + retry.
+test('Settings shell: v5 empty box leads with what is missing and errors offer 다시 시도 without technical words', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = VZ.empty('music-notes', '아직 악보가 없어요. PDF를 올려 두면 이 곡에서 바로 이어 볼 수 있어요.') + VZ.empty('link', '공유 중인 링크가 없어요.') + VZ.errorBox('공유 링크 목록을 불러오지 못했어요.', 'data-x');
+    document.getElementById('view').append(wrap);
+    const [two, one, err] = wrap.children, cs = el => getComputedStyle(el);
+    const out = {
+      twoText:two.textContent.replace(/\s+/g, ' ').trim(), twoTitle:two.querySelector('.vz-empty-title').textContent, twoSub:two.querySelector('.vz-empty-sub')?.textContent,
+      titleType:[cs(two.querySelector('.vz-empty-title')).fontSize, cs(two.querySelector('.vz-empty-title')).fontWeight], oneSub:one.querySelector('.vz-empty-sub') === null,
+      errRole:err.getAttribute('role'), errBg:cs(err).backgroundColor, errButton:err.querySelector('[data-x]')?.textContent, errText:err.querySelector('.vz-empty-title').textContent,
+    };
+    wrap.remove();
+    return out;
+  });
+  expect(s, JSON.stringify(s)).toEqual({
+    twoText:'아직 악보가 없어요. PDF를 올려 두면 이 곡에서 바로 이어 볼 수 있어요.', twoTitle:'아직 악보가 없어요.', twoSub:'PDF를 올려 두면 이 곡에서 바로 이어 볼 수 있어요.',
+    titleType:['14px', '600'], oneSub:true,
+    errRole:'alert', errBg:'rgb(253, 234, 234)', errButton:'다시 시도', errText:'공유 링크 목록을 불러오지 못했어요.',
+  });
+  // 처리 내역 opens with the shared loading rows, then its own content.
+  await page.evaluate(() => { location.hash = '#/processing-log'; });
+  await expect(page.locator('[data-processing-log]')).toBeVisible();
+  await expect(page.locator('[data-processing-log]')).not.toContainText('처리 상태를 불러오는 중');
+});
+
 // Named with 'Settings' so ui-checks.yml runs it. List screens load as their own row shape in #F2EFF7 blocks, not a text box.
 test('Settings shell: v5 loading rows are #F2EFF7 blocks in the list shape and still say 불러오는 중 to screen readers', async ({page}) => {
   await boot(page);
