@@ -97,7 +97,7 @@ test('그림 붙여넣기 keeps the picture on this device at once (offline too)
  await pasteFromMore(dialog);
  // Decoding and shrinking the picture is slow on a busy WebKit runner: wait for it, not a fixed 5 s.
  // On a miss the poll shows what the sheet said instead of a bare 0.
- await expect.poll(async()=>(await pictures(page)).length||[await dialog.locator('[data-ink-save-state]').textContent(),await page.locator('.toast').allTextContents()].join(' | '),{timeout:20000}).toBe(1);
+ await expect.poll(async()=>(await pictures(page)).length||[await dialog.locator('[data-ink-save-state]').textContent(),await dialog.locator('[data-ink-status]').textContent(),await page.locator('.toast').allTextContents()].join(' | '),{timeout:20000}).toBe(1);
  expect((await records(page)).length).toBe(before+1);
  const [pic]=await pictures(page);
  expect(pic).toMatchObject({tool:'note',mode:'pen',color:'#ffffff',page:1,songId:'s1',scoreId:'score-ink',imageW:400,imageH:200});
