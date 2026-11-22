@@ -37,7 +37,8 @@ body:not(.vz-home-mode) .empty > i.ph:first-child { font-size:var(--vz-icon-size
 body:not(.vz-home-mode) .empty .vz-empty-title { color:var(--vz-color-ink); font-size:14px; line-height:20px; font-weight:600; }
 body:not(.vz-home-mode) .empty .vz-empty-sub { margin:0; color:var(--vz-color-ink-muted); font-size:12px; line-height:18px; }
 body:not(.vz-home-mode) .empty.vz-error { background:var(--vz-color-danger-soft); box-shadow:none; }
-body:not(.vz-home-mode) .empty.vz-error > i.ph:first-child { color:var(--vz-color-danger); }body:not(.vz-home-mode) .card { padding:var(--vz-card-padding); }
+body:not(.vz-home-mode) .empty.vz-error > i.ph:first-child { color:var(--vz-color-danger); }
+body:not(.vz-home-mode) .card { padding:var(--vz-card-padding); }
 body:not(.vz-home-mode) .card.flat { box-shadow:none; }
 body:not(.vz-home-mode) .stack { gap:var(--vz-card-gap); }
 body:not(.vz-home-mode) .card.accent { background:var(--vz-gradient-recent); color:#fff; }
