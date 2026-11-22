@@ -11,8 +11,9 @@ function library(){
  });
  return loading;
 }
+const image=url=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(Error('붙여넣은 그림을 읽지 못했어요.'));img.src=url;});
 const digest=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
-async function make({document:source,binding,annotations,check=()=>{},onProgress=()=>{}}){
+async function make({document:source,binding,annotations,check=()=>{},onProgress=()=>{},picture}){
  check();
  if(!source||!binding||!Array.isArray(annotations)||annotations.some(s=>!Ink.valid(s)||s.ownerId!==binding.ownerId||s.songId!==binding.songId||s.scoreId!==binding.scoreId||s.r2Key!==binding.r2Key||s.pdfHash!==binding.pdfHash))throw Error('이 악보의 개인 필기인지 확인해 주세요.');
  const [lib,bytes]=await Promise.all([library(),source.getData()]);check();
@@ -35,7 +36,10 @@ async function make({document:source,binding,annotations,check=()=>{},onProgress
    if(notes.length){
     viewerSpace();
     for(const n of notes){
-     check();const m=Ink.noteLayout(n,viewport.width,viewport.height,ctx),r=Math.min(m.radius,m.w/2,m.h/2);
+     check();
+     // A pasted picture: the picture alone, filling its rect (see-through stays see-through). picture(n) gives its address.
+     if(n.imageKey){const url=await picture?.(n);check();if(url){ctx.drawImage(await image(url),n.rect[0]*viewport.width,n.rect[1]*viewport.height,n.rect[2]*viewport.width,n.rect[3]*viewport.height);check();}continue;}
+     const m=Ink.noteLayout(n,viewport.width,viewport.height,ctx),r=Math.min(m.radius,m.w/2,m.h/2);
      ctx.beginPath();ctx.moveTo(m.x+r,m.y);ctx.arcTo(m.x+m.w,m.y,m.x+m.w,m.y+m.h,r);ctx.arcTo(m.x+m.w,m.y+m.h,m.x,m.y+m.h,r);ctx.arcTo(m.x,m.y+m.h,m.x,m.y,r);ctx.arcTo(m.x,m.y,m.x+m.w,m.y,r);ctx.closePath();
      ctx.save();ctx.shadowColor='rgba(16,24,40,.18)';ctx.shadowBlur=.006*viewport.width*unit;ctx.shadowOffsetY=.002*viewport.width*unit;ctx.fillStyle=n.color;ctx.fill();ctx.restore();
      if(m.lines.length){ctx.save();ctx.clip();ctx.fillStyle=Ink.NOTE_INK;ctx.font='400 '+m.size+'px '+Ink.NOTE_FAMILY;ctx.textBaseline='alphabetic';for(const line of m.lines)ctx.fillText(line.text,line.x,line.y);ctx.restore();}

@@ -59,6 +59,14 @@ const pdfCache={
   for(const key of await cache.keys())if(key.url.includes(part))await cache.delete(key);
  }
 };
+/* 그림 붙여넣기: the PNG is kept on this device (Cache Storage, beside the PDF copies, by its R2 key) as soon as it is
+ * pasted, so it shows at once and offline; the device that pasted it uploads it to R2 when it can. Other devices fetch
+ * it once through a signed address and keep a copy. Nothing here is ever removed from R2 or from this device. */
+const PICTURE_CACHE='vzip-score-picture-v1',pictureAddress=key=>'https://vzip-score.invalid/picture/'+encodeURIComponent(key);
+const pictureCache={
+ async get(key){if(!window.caches)return null;const r=await (await caches.open(PICTURE_CACHE)).match(pictureAddress(key));return r?r.blob():null;},
+ async put(key,blob){if(!window.caches)throw Error('이 브라우저는 그림을 기기에 보관할 수 없어요.');await (await caches.open(PICTURE_CACHE)).put(pictureAddress(key),new Response(blob,{headers:{'content-type':'image/png'}}));}
+};
 /** Strokes attached to the PDF (vocalzip-ink.json), bound to this account and this exact PDF. Anything malformed is
  * left out as a whole file rather than shown half; the PDF itself still opens. */
 const INK_ATTACHMENT='vocalzip-ink.json',INK_ATTACHMENT_MAX=30*1024*1024;
@@ -129,7 +137,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   '<div class="score-ink-ink-preview" data-ink-ink-preview hidden><button type="button" data-ink-width-quick aria-label="굵기 고르기" title="굵기 고르기" aria-expanded="false"><span></span></button><button type="button" data-ink-color-quick aria-label="색상 고르기" title="색상 고르기" aria-expanded="false"><span></span></button></div></div>'+
   '<div class="score-ink-tools" role="toolbar" aria-label="필기 도구">'+tools.map((t,i)=>'<button type="button" data-ink-tool="'+t+'" aria-label="'+names[i]+'" title="'+names[i]+'" aria-pressed="'+(t===tool)+'"><i class="ph ph-'+icons[i]+'"></i><span>'+names[i]+'</span></button>').join('')+button('marker-mode','bookmark-simple','악보 표시')+
   '</div>'+
-  '<div class="score-ink-actions">'+button('undo','arrow-counter-clockwise','필기 되돌리기')+button('redo','arrow-clockwise','필기 다시 실행')+button('clear','trash','현재 페이지 필기 삭제')+button('settings','sliders-horizontal','색상·굵기·투명도 설정')+button('performance','eye','무대용 보기')+button('fullscreen','arrows-out','전체화면')+'</div>'+
+  '<div class="score-ink-actions">'+button('undo','arrow-counter-clockwise','필기 되돌리기')+button('redo','arrow-clockwise','필기 다시 실행')+button('paste','clipboard-text','그림 붙여넣기')+button('clear','trash','현재 페이지 필기 삭제')+button('settings','sliders-horizontal','색상·굵기·투명도 설정')+button('performance','eye','무대용 보기')+button('fullscreen','arrows-out','전체화면')+'</div>'+
   '<div class="score-ink-quick" data-ink-quick hidden><div class="score-ink-quick-row" data-ink-quick-color-row><span>색상</span><div class="score-ink-quick-options" data-ink-quick-colors></div></div><div class="score-ink-quick-row" data-ink-quick-size-row><span data-ink-quick-size-label>굵기</span><div class="score-ink-quick-options" data-ink-quick-sizes></div></div></div>'+
   '<div class="score-ink-full-actions" data-ink-full-actions hidden><button type="button" data-ink-more aria-label="더보기" aria-expanded="false"><i class="ph ph-dots-three"></i><span>더보기</span></button></div>'+
   '<div class="score-ink-marker-palette" data-ink-marker-palette hidden><div class="score-ink-marker-list" data-ink-marker-list role="group" aria-label="악보 표기"></div>'+
@@ -153,7 +161,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   '<select data-ink-zoom aria-label="악보 확대"><option value="1">화면 맞춤</option><option value="1.5">150%</option><option value="2">200%</option></select></div>'+
   '<section class="score-ink-thumbnails" data-ink-thumbnails aria-label="악보 페이지 미리보기" hidden><div class="score-ink-thumbnails-head"><strong>페이지 이동</strong>'+button('thumb-close','x','페이지 미리보기 닫기')+'</div><form data-ink-jump-form><label>페이지 번호 <input type="number" data-ink-jump-input min="1" inputmode="numeric" aria-label="이동할 페이지 번호"></label><button type="submit">이동</button></form><div class="score-ink-thumb-grid" data-ink-thumb-grid></div><div class="score-ink-thumb-nav">'+button('thumb-prev','caret-left','앞 페이지 목록')+'<span data-ink-thumb-range></span>'+button('thumb-next','caret-right','다음 페이지 목록')+'</div></section>'+
   '<div class="score-ink-selection-bar" data-ink-selection-bar role="group" aria-label="선택한 필기" hidden><span data-ink-selection-count></span><button type="button" data-ink-recognize hidden>텍스트로 변환</button><button type="button" data-ink-to-point hidden>지적으로</button>'+button('selection-smaller','minus','선택 필기 축소')+button('selection-larger','plus','선택 필기 확대')+button('selection-delete','trash','선택 필기 삭제')+button('selection-clear','x','필기 선택 해제')+'</div>'+
-  '<div class="score-ink-memo-bar" data-ink-memo-bar role="group" aria-label="메모" hidden><p data-ink-memo-hint>메모를 붙일 곳을 눌러 주세요.</p><div class="score-ink-memo-colors" data-ink-memo-colors role="group" aria-label="메모 색"></div>'+
+  '<div class="score-ink-memo-bar" data-ink-memo-bar role="group" aria-label="메모" hidden><p data-ink-memo-hint>메모를 붙일 곳을 눌러 주세요.</p><button type="button" data-ink-memo-paste><i class="ph ph-clipboard-text" aria-hidden="true"></i>그림 붙여넣기</button><div class="score-ink-memo-colors" data-ink-memo-colors role="group" aria-label="메모 색"></div>'+
   '<div class="score-ink-memo-modes"><button type="button" data-ink-memo-mode="text" aria-pressed="false"><i class="ph ph-text-aa" aria-hidden="true"></i>글자로 쓰기</button><button type="button" data-ink-memo-mode="pen" aria-pressed="false"><i class="ph ph-pen" aria-hidden="true"></i>펜으로 쓰기</button><button type="button" data-ink-memo-done hidden>완료</button><button type="button" data-ink-memo-goals hidden><i class="ph ph-target" aria-hidden="true"></i>목표로 넣기</button></div>'+
   button('memo-delete','trash','메모 삭제')+button('memo-close','x','메모 선택 해제')+'</div>'+
   '<p class="score-ink-status" data-ink-status role="status" aria-live="polite">PDF를 준비하고 있어요.</p><a class="score-ink-original-quick" data-ink-original-quick target="_blank" rel="noopener" hidden>원본 PDF 열기</a>'+
@@ -536,9 +544,47 @@ VZ.openScoreInk=(songId,scoreId)=>{
  async function ask(title,message,options){await outside();return VZ.confirm(title,message,options);}
  /** Saves an open text field (never discards what was typed), then drops the memo selection or the unplaced memo. */
  function memoEnd(){if(memoEditEnd())memoClear();}
+ /* 붙여넣은 그림 on screen: an address for each picture (the copy on this device, or fetched once from R2 and kept),
+  * and its <image> element kept between redraws so the picture is not decoded again for every stroke. */
+ const pictures=new Map(),pictureNodes=new Map();
+ const PICTURE_QUEUE='vzip_score_picture_pending_v1:'+owner;
+ const queue={read(){try{const v=JSON.parse(viewStorage.getItem(PICTURE_QUEUE)||'[]');return Array.isArray(v)?v.filter(k=>typeof k==='string'):[];}catch{return [];}},
+  write(list){try{if(list.length)viewStorage.setItem(PICTURE_QUEUE,JSON.stringify(list));else viewStorage.removeItem(PICTURE_QUEUE);}catch{}}};
+ function pictureUrl(key){
+  const known=pictures.get(key);
+  if(known?.url)return known.url;
+  if(known&&(known.loading||Date.now()-known.failed<30000))return null;
+  pictures.set(key,{loading:true});
+  (async()=>{
+   let blob=await pictureCache.get(key).catch(()=>null);
+   if(!blob){
+    if(navigator.onLine===false)throw Error('offline');
+    const response=await deadline(fetch(await window.VzipR2.url(key)),20000,'그림 받기 지연');
+    if(!response.ok)throw Error('picture '+response.status);
+    blob=await response.blob();
+    if(blob.size>Ink.PICTURE_BYTES||!/^image\/png\b/.test(blob.type||'image/png'))throw Error('picture type');
+    blob=new Blob([blob],{type:'image/png'});pictureCache.put(key,blob).catch(()=>{});
+   }
+   return URL.createObjectURL(blob);
+  })().then(url=>{if(closed){URL.revokeObjectURL(url);return;}pictures.set(key,{url});paint();},()=>{if(!closed){pictures.set(key,{failed:Date.now()});paint();}});
+  return null;
+ }
  function noteNode(n,pageAspect,draft=false){
   const m=Ink.noteLayout(n,1000,1000*pageAspect,noteCtx||=document.createElement('canvas').getContext('2d')),g=svgNode('g',{class:'score-ink-note','data-ink-note':n.id});
   if(draft)g.dataset.draft='';
+  if(n.imageKey){
+   g.dataset.inkPicture='';const url=pictureUrl(n.imageKey);
+   if(!url){
+    // Not here yet (another device has not uploaded it, or it is still loading): a light frame where it goes.
+    g.dataset.inkPictureState=pictures.get(n.imageKey)?.failed?'missing':'loading';
+    g.append(svgNode('rect',{x:m.x,y:m.y,width:m.w,height:m.h,rx:m.radius,class:'score-ink-note-bg score-ink-picture-wait','vector-effect':'non-scaling-stroke'}));
+    return g;
+   }
+   let img=pictureNodes.get(n.id);
+   if(!img||img.getAttribute('href')!==url){img=svgNode('image',{href:url,preserveAspectRatio:'xMidYMid meet',class:'score-ink-note-bg score-ink-note-image'});pictureNodes.set(n.id,img);}
+   for(const [k,v]of Object.entries({x:m.x,y:m.y,width:m.w,height:m.h}))img.setAttribute(k,v);
+   g.append(img);return g;
+  }
   // A soft two-step shadow drawn as shapes: CSS filters on SVG children are unreliable in Safari.
   g.append(svgNode('rect',{x:m.x,y:m.y+4,width:m.w,height:m.h,rx:m.radius+2,fill:'#101828',opacity:'.05'}),svgNode('rect',{x:m.x,y:m.y+1.5,width:m.w,height:m.h,rx:m.radius,fill:'#101828',opacity:'.1'}));
   g.append(svgNode('rect',{x:m.x,y:m.y,width:m.w,height:m.h,rx:m.radius,fill:n.color,class:'score-ink-note-bg'}));
@@ -570,15 +616,18 @@ VZ.openScoreInk=(songId,scoreId)=>{
   bar.dataset.state=memoEdit?'edit':draft?'draft':row?'selected':'hint';
   const locked=busy||exportBusy||!!pending,mode=draft?profiles.memo.mode:row?.mode;
   bar.querySelector('[data-ink-memo-hint]').hidden=!!target;
-  bar.querySelector('[data-ink-memo-colors]').hidden=!target;
+  const paste=bar.querySelector('[data-ink-memo-paste]');paste.hidden=!!target;paste.disabled=locked;
+  const picture=!!row?.imageKey;bar.dataset.picture=String(picture);
+  bar.querySelector('[data-ink-memo-colors]').hidden=!target||picture;
   bar.querySelectorAll('[data-ink-memo-color]').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.inkMemoColor===target?.color));b.disabled=locked;});
-  bar.querySelectorAll('[data-ink-memo-mode]').forEach(b=>{b.hidden=!target||!!memoEdit;b.setAttribute('aria-pressed',String(b.dataset.inkMemoMode===mode));b.disabled=locked;});
+  bar.querySelectorAll('[data-ink-memo-mode]').forEach(b=>{b.hidden=!target||!!memoEdit||picture;b.setAttribute('aria-pressed',String(b.dataset.inkMemoMode===mode));b.disabled=locked;});
   bar.querySelector('[data-ink-memo-done]').hidden=!memoEdit;
   // 목표로 넣기: only a 글자 memo has lines to turn into goals.
   const goals=bar.querySelector('[data-ink-memo-goals]');goals.hidden=!row||row.mode!=='text'||!(row.text||memoEdit);goals.disabled=locked;
   const remove=bar.querySelector('[data-ink-memo-delete]'),close=bar.querySelector('[data-ink-memo-close]');
   remove.hidden=!row;remove.disabled=locked;close.hidden=!target||!!memoEdit;
-  close.setAttribute('aria-label',draft?'메모 붙이기 취소':'메모 선택 해제');close.title=close.getAttribute('aria-label');
+  close.setAttribute('aria-label',draft?'메모 붙이기 취소':picture?'그림 선택 해제':'메모 선택 해제');close.title=close.getAttribute('aria-label');
+  remove.setAttribute('aria-label',picture?'그림 삭제':'메모 삭제');remove.title=remove.getAttribute('aria-label');
  }
  function memoEditOpen(row){
   if(memoEdit||performance||closed)return;
@@ -631,7 +680,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(busy||exportBusy||pending||!memoEditEnd())return;
   const row=memoRow();if(!row)return;
   const ink=Ink.linked(store.list(binding,row.page),row);
-  if((row.text||ink.length)&&!await ask('메모 삭제',ink.length?'이 메모와 그 위에 쓴 필기 '+ink.length+'개를 함께 지울까요?':'이 메모를 지울까요?',{ok:'삭제',danger:true}))return;
+  // A picture's row is tombstoned like any memo; its PNG stays in R2 and on this device (nothing is deleted there).
+  if((row.text||ink.length)&&!await ask(row.imageKey?'그림 삭제':'메모 삭제',ink.length?'이 '+(row.imageKey?'그림과':'메모와')+' 그 위에 쓴 필기 '+ink.length+'개를 함께 지울까요?':'이 메모를 지울까요?',{ok:'삭제',danger:true}))return;
   if(closed||pending)return;
   try{
    current();const now=store.list(binding,row.page),fresh=now.find(s=>s.id===row.id&&Ink.same(s,row));
@@ -658,9 +708,17 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(drag.moved&&drag.row){
    const row=drag.row,dx=p[0]-drag.start[0],dy=p[1]-drag.start[1];
    memo.preview=drag.kind==='move'?Ink.transform([row,...drag.ink],{dx,dy},aspect):
-    [{...row,rect:Ink.noteRect(row.rect[0],row.rect[1],Math.min(1-row.rect[0],row.rect[2]+dx),Math.min(1-row.rect[1],row.rect[3]+dy),aspect)}];
+    [{...row,rect:row.imageKey?pictureRect(row,dx,dy):Ink.noteRect(row.rect[0],row.rect[1],Math.min(1-row.rect[0],row.rect[2]+dx),Math.min(1-row.rect[1],row.rect[3]+dy),aspect)}];
   }
   if(!memoFrame)memoFrame=requestAnimationFrame(()=>{memoFrame=0;paint();});return true;
+ }
+ /** A picture resized from its corner: the corner follows the drag, the sides keep the picture's proportions,
+  *  and it stays inside the page. */
+ function pictureRect(row,dx,dy){
+  const [x,y,w0,h0]=row.rect,k=h0/w0,round=n=>Math.round(n*100000)/100000; // k: height (of page height) per width
+  const min=Math.max(Ink.NOTE_MIN,Ink.NOTE_MIN/k)*1.001,want=Math.max(w0+dx,(h0+dy)/k);
+  const w=Math.max(min,Math.min(want,1-x,(1-y)/k));
+  return [x,y,round(Math.min(w,1-x)),round(Math.min(w*k,1-y))];
  }
  function memoUp(commit){
   const drag=memo?.drag;if(!drag)return;
@@ -678,7 +736,104 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(preview.every((s,i)=>Ink.same(s,old[i]))){paint();return;}
   const add=preview.map(reissue);memo.id=add[0].id;apply({add,remove:old});
  }
- const exportSignature=rows=>JSON.stringify(rows.map(s=>[s.id,s.page,s.tool,s.color,s.width,Ink.opacity(s),s.points,s.rect,s.mode,s.text,s.glyph,s.size,s.smooth,s.pressure]));
+ /* 그림 붙여넣기: a picture on the clipboard — GoodNotes' lasso → 복사 puts one there (PNG) — goes on the page in view as a
+  * picture memo (a 스티커 메모 record with imageKey, see app/score-ink-model.js). The record carries only the key and
+  * the size; the PNG (long side at most Ink.PICTURE_SIDE px, PNG so see-through stays see-through) is kept on this
+  * device first — it shows at once and offline — and uploaded to R2 by this device (mediaId scorepic-…), now or on a
+  * later open or when back online. The clipboard is read only on the user's own paste (더보기 › 그림 붙여넣기, the
+  * 메모 row, or ⌘V); the picture goes nowhere but this device and the account's R2. */
+ const PASTE_TYPES=['image/png','image/jpeg','image/webp'];
+ const pasteReady=()=>ready&&!busy&&!pending&&!exportBusy&&!performance&&!!binding&&!closed;
+ const TEXT_ONLY='클립보드에 글자만 있어요. 굿노트에서 올가미로 고른 뒤 ‘복사’를 누르고 다시 붙여넣어 주세요.',NO_PICTURE='클립보드에 붙여넣을 그림이 없어요. 굿노트에서 올가미로 고른 뒤 ‘복사’를 눌러 주세요.',NOT_NOW='악보 준비나 저장이 끝난 뒤 다시 붙여넣어 주세요.';
+ function pasteSay(text){say(text,true);VZ.toast(text,'error');}
+ async function pasteFromClipboard(){
+  if(!pasteReady()){pasteSay(performance?'무대용 보기에서는 붙여넣을 수 없어요. 편집으로 돌아가 주세요.':NOT_NOW);return;}
+  if(!navigator.clipboard?.read){pasteSay('이 브라우저는 버튼으로 붙여넣을 수 없어요. 키보드의 ⌘V로 붙여넣어 주세요.');return;}
+  let items;
+  // Called straight from the tap, so the browser lets it read (Safari shows its own 붙여넣기 button to confirm).
+  try{items=await navigator.clipboard.read();}catch(e){pasteSay(e?.name==='NotAllowedError'?'붙여넣기를 허용하지 않아 그림을 가져오지 못했어요.':'클립보드를 읽지 못했어요.');return;}
+  for(const item of items||[]){const type=PASTE_TYPES.find(t=>item.types?.includes(t));if(type){let blob;try{blob=await item.getType(type);}catch{pasteSay('클립보드의 그림을 읽지 못했어요.');return;}await pastePicture(blob);return;}}
+  pasteSay((items||[]).some(i=>i.types?.some(t=>t.startsWith('text/')))?TEXT_ONLY:NO_PICTURE);
+ }
+ function pasteEvent(event){
+  if(closed||!el?.isConnected||event.defaultPrevented)return;
+  if(event.target?.closest?.('input,textarea,[contenteditable]:not([contenteditable=false])'))return; // text fields paste text as usual
+  if([...document.querySelectorAll('.sheet-back')].at(-1)!==el.parentNode)return; // another sheet is on top
+  const items=[...(event.clipboardData?.items||[])],file=items.find(i=>i.kind==='file'&&PASTE_TYPES.includes(i.type))?.getAsFile();
+  if(file){event.preventDefault();if(pasteReady())pastePicture(file);else pasteSay(NOT_NOW);return;}
+  if(items.some(i=>i.kind==='string'))pasteSay(TEXT_ONLY);
+ }
+ const loadPicture=blob=>new Promise((resolve,reject)=>{const url=URL.createObjectURL(blob),img=new Image();img.onload=()=>{URL.revokeObjectURL(url);resolve(img);};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('그림을 읽지 못했어요.'));};img.src=url;});
+ /** The picture as a PNG at most Ink.PICTURE_SIDE px on its long side and Ink.PICTURE_BYTES long (made smaller step
+  *  by step until it fits): {blob, width, height} — the PNG's own pixels. */
+ async function pictureData(blob){
+  const img=await loadPicture(blob),W=img.naturalWidth,H=img.naturalHeight;
+  if(!(W>0&&H>0))throw Error('그림 크기를 확인하지 못했어요.');
+  for(let side=Math.min(Ink.PICTURE_SIDE,Math.max(W,H));side>=48;side=Math.floor(side*.8)){
+   const k=side/Math.max(W,H),c=document.createElement('canvas');c.width=Math.max(1,Math.round(W*k));c.height=Math.max(1,Math.round(H*k));
+   const ctx=c.getContext('2d');ctx.imageSmoothingQuality='high';ctx.drawImage(img,0,0,c.width,c.height);
+   const png=await new Promise(resolve=>c.toBlob(resolve,'image/png')),size=[c.width,c.height];c.width=c.height=0;
+   if(png?.size&&png.size<=Ink.PICTURE_BYTES)return {blob:new Blob([png],{type:'image/png'}),width:size[0],height:size[1]};
+  }
+  throw Error('그림이 너무 커서 붙여넣지 못했어요. 조금 작게 골라 복사해 주세요.');
+ }
+ /** Uploads the pictures pasted on this device that are not in R2 yet (oldest first). Quietly waits for the next open
+  *  or for the connection when it cannot; a picture whose copy is gone from this device stays listed. */
+ let uploading=null;
+ function uploadPictures(){
+  if(uploading||closed||navigator.onLine===false||!window.VzipR2?.enabled?.())return uploading;
+  return uploading=(async()=>{
+   for(const key of queue.read()){
+    if(closed)break;
+    const mediaId=key.split('/')[2];
+    if(!key.startsWith('u/'+owner+'/')||!/^scorepic-/.test(mediaId||''))continue;
+    const blob=await pictureCache.get(key).catch(()=>null);if(!blob)continue;
+    try{
+     current();
+     const receipt=await window.VzipR2.upload(new File([blob],'picture.png',{type:'image/png'}),{mediaId,type:'image/png'});
+     if(receipt?.key!==key)throw Error('업로드한 그림의 위치가 달라요.');
+     queue.write(queue.read().filter(k=>k!==key));
+    }catch(e){if(!closed&&e.name!=='AbortError')say('그림은 이 기기에 있어요 · 다음에 다시 올릴게요. ('+e.message+')');break;}
+   }
+  })().finally(()=>{uploading=null;});
+ }
+ /** Where the page shows on screen now, as page fractions: the middle of it. */
+ function visibleMiddle(){
+  const page=box.getBoundingClientRect(),view=stage.getBoundingClientRect();
+  const left=Math.max(page.left,view.left),right=Math.min(page.right,view.right),top=Math.max(page.top,view.top),bottom=Math.min(page.bottom,view.bottom);
+  if(right<=left||bottom<=top||!page.width||!page.height)return [.5,.5];
+  return [((left+right)/2-page.left)/page.width,((top+bottom)/2-page.top)/page.height];
+ }
+ async function pastePicture(blob){
+  finishStroke();selectionEnd(false);if(!memoEditEnd())return;
+  const atPage=pageNo,bound=binding?.pdfHash;
+  saveState('붙여넣는 중…','pending');
+  let data,key;
+  try{
+   data=await pictureData(blob);current();
+   // On this device first (shows at once and offline), listed for upload, then the record.
+   key=Ink.pictureKey(owner,'scorepic-'+VZ.uid());await pictureCache.put(key,data.blob);
+   queue.write([...queue.read().filter(k=>k!==key),key]);pictures.set(key,{url:URL.createObjectURL(data.blob)});
+  }catch(e){saveState('이 기기에 저장됨','local');pasteSay(e.message);return;}
+  if(closed)return;
+  if(!pasteReady()||pageNo!==atPage||binding?.pdfHash!==bound){saveState('이 기기에 저장됨','local');pasteSay('붙여넣는 동안 페이지가 바뀌었어요. 다시 붙여넣어 주세요.');return;}
+  // As large on the page as it was on the screen it was copied from (2× pixels), at most 80% of the page.
+  const ratio=data.height/data.width,fit=Math.min(.8,.9/(ratio/aspect));
+  let w=Math.max(.1,Math.min(fit,data.width/2/Math.max(1,baseWidth||box.getBoundingClientRect().width))),h=w*ratio/aspect;
+  if(h<Ink.NOTE_MIN){w=Math.min(1,Ink.NOTE_MIN*aspect/ratio*1.001);h=w*ratio/aspect;}
+  if(w>1||h>1){const k=Math.min(1/w,1/h);w*=k;h*=k;}
+  const round=n=>Math.round(n*100000)/100000,[cx,cy]=visibleMiddle();
+  w=round(w);h=round(h);const x=round(Math.max(0,Math.min(1-w,cx-w/2))),y=round(Math.max(0,Math.min(1-h,cy-h/2)));
+  const id=VZ.uid(),row={version:1,id,...binding,page:pageNo,tool:'note',color:'#ffffff',rect:[x,y,Math.min(w,round(1-x)),Math.min(h,round(1-y))],mode:'pen',note:id,imageKey:key,imageW:data.width,imageH:data.height,imageBytes:data.blob.size,createdAt:Date.now()};
+  try{current();if(!Ink.valid(row))throw Error('그림을 붙일 자리를 확인하지 못했어요.');}catch(e){saveState('이 기기에 저장됨','local');pasteSay(e.message);return;}
+  // Shown selected with the 선택 tool: drag to move it, the corner to resize it, 그림 삭제 in its row.
+  if(tool!=='select')el.querySelector('[data-ink-tool="select"]').click();
+  apply({add:[row],remove:[]});if(pending)return;
+  memo={id,page:pageNo,draft:null,preview:null,drag:null};paint();
+  VZ.toast('그림을 붙여넣었어요. 끌어서 옮기고, 모서리로 크기를 바꿀 수 있어요.');
+  uploadPictures();
+ }
+ const exportSignature=rows=>JSON.stringify(rows.map(s=>[s.id,s.page,s.tool,s.color,s.width,Ink.opacity(s),s.points,s.rect,s.mode,s.text,s.glyph,s.size,s.smooth,s.pressure,s.imageKey]));
  function readNotes(){
   try{const saved=JSON.parse(viewStorage.getItem(notesKey)||'null');notes=saved?.pdfHash===binding?.pdfHash&&saved?.r2Key===score.r2Key&&Array.isArray(saved.notes)?saved.notes.filter(n=>n&&n.page>=1&&n.page<=2000&&typeof n.text==='string'&&n.text.length<=1200&&n.x>=0&&n.x<=1&&n.y>=0&&n.y<=1).slice(0,300):[];}catch{notes=[];}
  }
@@ -849,6 +1004,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const button=el.querySelector('[data-ink-export]'),rows=store.list(binding),stamp=exportSignature(rows);exportBusy=true;button.disabled=true;paint();say('필기 PDF를 만들고 있어요.');
   try{
    const blob=await Export.make({document:doc,binding,annotations:rows,check:()=>{current();if(closed||controller.signal.aborted)throw new DOMException('닫힘','AbortError');},
+    picture:async n=>{const url=pictureUrl(n.imageKey)||await new Promise(resolve=>setTimeout(()=>resolve(pictureUrl(n.imageKey)),1500));if(!url)throw Error('붙여넣은 그림을 아직 받지 못했어요. 연결된 뒤 다시 만들어 주세요.');return url;},
     onProgress:(page,total)=>say('필기 PDF 준비 '+page+' / '+total+'쪽')});
    current();if(exportSignature(store.list(binding))!==stamp)throw Error('내보내는 동안 필기가 바뀌었어요. 다시 만들어 주세요.');
    invalidateExport();exportUrl=URL.createObjectURL(blob);exportStamp=stamp;
@@ -1510,7 +1666,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   closed=true;memoEdit=null;visionController?.abort();clearTimeout(performanceTimer);clearTimeout(prepareTimer);prepareTask?.cancel();prepared.clear();closeThumbnails();clearSelection();invalidateExport();document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);resetGestures();renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
   if(canvas){canvas.width=0;canvas.height=0;}cleanupHook();window.removeEventListener('vzip:auth-changed',changed);window.removeEventListener('vzip:data-changed',changed);
   if(VZ.scoreInkBeforeOutside===outside)delete VZ.scoreInkBeforeOutside;
-  window.removeEventListener('beforeunload',unload);document.removeEventListener('visibilitychange',hidden);VZ.setGuard(null);
+  window.removeEventListener('beforeunload',unload);document.removeEventListener('visibilitychange',hidden);document.removeEventListener('paste',pasteEvent);window.removeEventListener('online',uploadPictures);
+  for(const p of pictures.values())if(p.url)URL.revokeObjectURL(p.url);pictures.clear();pictureNodes.clear();VZ.setGuard(null);
  }
  function unload(event){selectionEnd();finishStroke();memoEditEnd();if(pending){event.preventDefault();event.returnValue='';}}
  function hidden(){if(document.visibilityState==='hidden'){selectionEnd();finishStroke();memoEditEnd();}}
@@ -1714,6 +1871,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-last]').onclick=()=>{if(viewReady&&doc)turnTo(doc.numPages);};
   el.querySelector('[data-ink-zoom]').onchange=event=>{zoom=Number(event.target.value);renderPage();};
   el.querySelector('[data-ink-undo]').onclick=()=>{memoEnd();if(!pending&&undo.length){clearSelection();apply(inverse(undo.at(-1)),'undo');}};
+  el.querySelector('[data-ink-paste]').onclick=pasteFromClipboard;
   el.querySelector('[data-ink-redo]').onclick=()=>{memoEnd();if(!pending&&redo.length){clearSelection();apply(inverse(redo.at(-1)),'redo');}};
   {const bar=el.querySelector('[data-ink-memo-bar]'),colors=bar.querySelector('[data-ink-memo-colors]');
    for(const [color,label]of Ink.NOTE_COLORS){const b=document.createElement('button');b.type='button';b.dataset.inkMemoColor=color;b.style.setProperty('--sample-color',color);b.setAttribute('aria-label',label+' 메모');b.title=label;b.setAttribute('aria-pressed','false');b.onclick=()=>memoColor(color);colors.append(b);}
@@ -1723,6 +1881,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    bar.querySelector('[data-ink-memo-done]').onclick=()=>memoEditEnd();
    bar.querySelector('[data-ink-memo-goals]').onclick=memoGoals;
    bar.querySelector('[data-ink-memo-delete]').onclick=memoDelete;
+   bar.querySelector('[data-ink-memo-paste]').onclick=pasteFromClipboard;
    bar.querySelector('[data-ink-memo-close]').onclick=()=>{memoEnd();paint();};}
   el.querySelector('[data-ink-selection-smaller]').onclick=()=>resizeSelection(.9);
   el.querySelector('[data-ink-selection-larger]').onclick=()=>resizeSelection(1.1);
@@ -1857,7 +2016,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  cleanupHook=scope?.beforeLeave(()=>{if(active||selection?.drag||memo?.drag||memoEdit||pending)throw Error('악보 필기를 먼저 저장하고 계정을 바꿔 주세요.');sheet.close();})||(()=>{});
  document.addEventListener('fullscreenchange',nativeFullscreenChanged);
  window.addEventListener('vzip:auth-changed',changed);window.addEventListener('vzip:data-changed',changed);
- window.addEventListener('beforeunload',unload);document.addEventListener('visibilitychange',hidden);
+ window.addEventListener('beforeunload',unload);document.addEventListener('visibilitychange',hidden);document.addEventListener('paste',pasteEvent);window.addEventListener('online',uploadPictures);
  VZ.setGuard(()=>{selectionEnd();finishStroke();memoEditEnd();return pending?'필기가 아직 저장되지 않았어요. 먼저 다시 저장해 주세요.':null;});
  (async()=>{
   try{
@@ -1935,7 +2094,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(savedView?.pdfHash&&savedView.pdfHash!==pdfHash){
     pageNo=1;zoom=1;zoomValue();await renderPage();current();if(closed)return;
    }
-   ready=true;stage.dataset.viewOnly='false';rememberView();saveState('필기 준비됨','local');svg.style.pointerEvents=performance?'none':'';svg.dataset.tool=tool;
+   ready=true;stage.dataset.viewOnly='false';uploadPictures();rememberView();saveState('필기 준비됨','local');svg.style.pointerEvents=performance?'none':'';svg.dataset.tool=tool;
    // Memo text is measured to wrap it: once the app font is in, lay it out again with the real widths.
    document.fonts?.load?.('400 16px Pretendard').then(()=>{if(!closed)paint();}).catch(()=>{});
    visionAsked=window.VzipR2.scoreVisionAvailable?.().then(result=>{if(closed)return;visionAvailable=!!result.available;syncVisionTools();paint();}).catch(()=>{if(!closed)syncVisionTools();});
