@@ -100,7 +100,9 @@ function todayOwn(today){try{const v=JSON.parse(store().getItem(OWN_KEY())||'nul
 function saveTodayOwn(date,own){try{store().setItem(OWN_KEY(),JSON.stringify({date,own}));}catch{}}
 function fresh(own){
   const today=V.today();own||=todayOwn(today);
-  const built=D.build(V.db,{today,recentSongId:recentSongId(),...(own?{own}:{})});
+  // 내 로드맵's focus (what the recordings show to fix) goes first in its groups (app/roadmap.js).
+  let focus=null;try{focus=V.roadmap?.()?.focus||null;}catch{}
+  const built=D.build(V.db,{today,recentSongId:recentSongId(),...(own?{own}:{}),...(focus?.length?{focus}:{})});
   const slot=built.template?.slot||'';
   return {today,steps:built.steps,own:built.own,base:built.base,slot,prefs:built.prefs};
 }

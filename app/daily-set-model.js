@@ -10,7 +10,8 @@
  *      rotate by the date: the same day always gives the same one, and none repeats until the list is through.
  *      기본기 추천: the exercise of today's 기본기 focus (app/levels-model.js focus — the area one more day from its
  *      next step, else one not measured yet, else the one measured longest ago) takes its group's place today
- *      (step.focus says why), when it is on.
+ *      (step.focus says why), when it is on. options.focus (내 로드맵, app/roadmap-model.js — what the recordings
+ *      show to fix) takes its place when given: each of its exercises first in its own group.
  *   3. The person's own steps from 오늘 연습 세트 (today's goals and 반복 목표, what a saved 요일/기본 세트 holds). One
  *      tagged for a group (prefs.replace) takes that group's place instead.
  *   4. 곡 (the group SONG, on unless turned off in 고르기), as 오늘 연습 세트 always ended: ONE automatic step
@@ -226,12 +227,15 @@ function build(db={},options={}){
     const songs=new Set([...lead,...own.filter(s=>s.kind!=='record')].map(s=>s.songId).filter(Boolean));
     own=own.filter(s=>s.kind!=='record'||songs.has(s.songId));
   }
-  const groups=[],f=focusOf(db,today,pf);
+  // 내 로드맵's focus (options.focus, from the recordings — app/roadmap-model.js) else the 기본기 focus: one per group.
+  const focusList=(Array.isArray(options.focus)&&options.focus.length?options.focus:[focusOf(db,today,pf)]).filter(x=>{const e=x&&exercise(x.exercise);return !!e&&!pf.off[e.id]&&!pf.groupsOff[e.group];});
+  const groups=[];
   for(const g of GROUPS){
     if(pf.groupsOff[g.id])continue;
     const tagged=own.filter(s=>pf.replace[ownKey(db,s)]===g.id);
     if(tagged.length){own=own.filter(s=>!tagged.includes(s));groups.push(...tagged.map(s=>({...s,group:g.id,replaces:g.id})));continue;}
-    if(f&&exercise(f.exercise)?.group===g.id){groups.push({...exerciseStep(exercise(f.exercise)),focus:{area:f.area,title:f.title,step:f.step,why:f.why}});continue;}
+    const f=focusList.find(x=>exercise(x.exercise).group===g.id);
+    if(f){groups.push({...exerciseStep(exercise(f.exercise)),focus:{area:f.area,title:f.title,step:f.step,why:f.why,...(f.from?{from:f.from}:{})}});continue;}
     const e=pick(pf,g.id,today);
     if(e)groups.push(exerciseStep(e));
   }

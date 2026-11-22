@@ -1,0 +1,30 @@
+/* 내 로드맵 (app/roadmap.js): what the recordings show to fix, its exercise, and the eight 기본기 areas at a glance. */
+.rm{display:grid;gap:12px;padding-bottom:24px;}
+.rm-basis{margin:0;padding:10px 12px;border-radius:12px;background:#F8F5FD;color:#4A3B66;font-size:13px;line-height:19px;}
+.rm-h{margin:12px 0 0;font-size:17px;line-height:24px;font-weight:700;}
+.rm-focus-list,.rm-areas{display:grid;gap:10px;margin:0;padding:0;list-style:none;}
+.rm-focus{padding:14px;border-radius:18px;background:#fff;box-shadow:0 1px 0 rgba(16,24,40,.04),0 0 0 1px #EFE9F8;}
+.rm-focus-head{display:flex;align-items:center;gap:8px;}
+.rm-focus-head strong{font-size:17px;line-height:24px;}
+.rm-num{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#7A32F5;color:#fff;font-size:13px;font-weight:700;}
+.rm-from{margin-left:auto;padding:0 8px;border-radius:99px;background:#F3ECFF;color:#6E3FD1;font-size:12px;line-height:20px;font-weight:600;}
+.rm-why{margin:8px 0 4px;color:#344054;font-size:14px;line-height:20px;word-break:keep-all;}
+.rm-goal{margin:0 0 8px;color:#475467;font-size:13px;line-height:19px;}
+.rm-goal b{margin-right:4px;color:#6E3FD1;}
+.rm-ex{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;align-items:center;margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#F8F5FD;}
+.rm-ex i{grid-row:span 2;color:#7A32F5;font-size:20px;}
+.rm-ex span{font-size:14px;line-height:20px;font-weight:600;}
+.rm-ex small{color:#667085;font-size:12px;line-height:18px;}
+.rm-actions{display:flex;flex-wrap:wrap;gap:8px;}
+.rm-actions .btn{flex:1 1 140px;min-height:44px;}
+.rm-areas a{display:grid;grid-template-columns:auto 1fr auto;grid-template-rows:auto auto;gap:2px 8px;align-items:center;min-height:56px;padding:8px 12px;border-radius:14px;background:#fff;color:inherit;text-decoration:none;box-shadow:0 0 0 1px #EFE9F8;}
+.rm-areas strong{font-size:15px;line-height:21px;}
+.rm-areas small{grid-column:1/3;color:#667085;font-size:12px;line-height:18px;}
+.rm-areas i{grid-row:1/3;grid-column:3;color:#98A2B3;}
+.rm-chip{justify-self:start;padding:0 8px;border-radius:99px;background:#F2F4F7;color:#475467;font-size:12px;line-height:20px;font-weight:600;}
+.rm-areas a[data-state=fix] .rm-chip{background:#7A32F5;color:#fff;}
+.rm-areas a[data-state=ok] .rm-chip{background:#ECFDF3;color:#067647;}
+.rm-song{display:grid;gap:8px;}
+.rm-song p{margin:0;font-size:13px;line-height:19px;}
+.rm-old{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 12px;border-radius:12px;background:#F2F4F7;color:#475467;font-size:14px;text-decoration:none;}
+.rm-note{margin:4px 0 0;color:#98A2B3;font-size:12px;line-height:18px;}

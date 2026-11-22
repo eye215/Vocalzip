@@ -69,7 +69,9 @@ VZ.practiceTips = (media, {songId = '', exclude = []} = {}) => {
     return {key:rule.key, name:rule.name, category:rule.category, metric:rule.metric, value:rule.show(v), basis:single ? '가장 최근 녹음' : '최근 ' + n + '개 중간값', frequency, reason:rule.reason(v, n) + (worse ? ' 예전 녹음보다 나빠졌어요.' : ''),
       goal:rule.goal, minutes:rule.minutes, steps:[...rule.steps], range, score:s + (worse ? 0.2 : 0)};
   }).filter(Boolean).sort((a, b) => b.score - a.score);
-  return {enough:true, count:takes.length, range, tips, skipped, version:newest};
+  // measured: the rules that had a value at all (a rule not in `tips` but measured is fine lately — 내 로드맵 says so).
+  const measured = RULES.filter(rule => pick(recent, rule) != null).map(rule => rule.key);
+  return {enough:true, count:takes.length, range, tips, skipped, measured, version:newest};
 };
 const doneToday = tip => VZ.db.practices.some(p => p.date === VZ.today() && String(p.memo || '').includes('[추천 연습] ' + tip.name));
 const card = (tip, songId) => '<div class="card tip" data-tip-key="' + esc(tip.key) + '"><div class="row between"><span class="tip-k">🎯 ' + (songId ? '이 곡 다음 연습' : '오늘의 다음 연습') + '</span><span class="badge accent">' + esc(tip.metric) + ' ' + esc(tip.value) + '</span></div>' +

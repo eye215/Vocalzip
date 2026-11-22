@@ -25,7 +25,9 @@ test('the order of the sources: 숙제 > 놓친 레슨 지적 > 기본기 > 측�
   const m = all({precision:{results:[]}});
   const tiers = m.items.map(x => N.TIER[x.source]);
   assert.deepEqual(tiers, tiers.slice().sort((a, b) => a - b));
-  assert.deepEqual([...new Set(m.items.map(x => x.source))], ['homework', 'lesson-point', 'skill', 'measure', 'precision', 'goal', 'plan', 'ai']);
+  // 측정 기반 tips are 내 로드맵's focus here (the same thing, one item under 기본기); precision and the rest follow.
+  assert.deepEqual([...new Set(m.items.map(x => x.source))], ['homework', 'lesson-point', 'skill', 'precision', 'goal', 'plan', 'ai']);
+  assert.deepEqual([...new Set(all({tips:null}).items.map(x => x.source))], ['homework', 'lesson-point', 'skill', 'measure', 'goal', 'plan', 'ai']);
   for (const x of m.items) {
     assert.ok(N.LABEL[x.source], x.source);
     assert.ok(x.sources.every(s => N.SOURCES.includes(s)));
@@ -47,10 +49,13 @@ test('the same thing from two places is one item with both chips: AI draft + 반
   assert.equal(lip.length, 1);
   assert.deepEqual(lip[0].sources, ['homework', 'goal', 'ai']);    // and the AI 월간 코치 said the same words
   assert.equal(m.items.some(x => x.id === 'goal:g-hw'), false);
-  // A measure from 전체 분석 and the same measure from 맞춤 연습 추천 (wob → stability): one item.
-  const stab = m.items.filter(x => x.action.metric === 'stability');
+  // A measure from 전체 분석, the same measure from 맞춤 연습 추천 (wob → stability) and 내 로드맵's 지속음: one item, under 기본기.
+  const stab = m.items.filter(x => x.sources.includes('measure') && x.action.area === 'sustain');
   assert.equal(stab.length, 1);
-  assert.equal(stab[0].title, '편안한 음에서 5초 지속음을 같은 조건으로 녹음하기');
+  assert.deepEqual([stab[0].source, stab[0].title, stab[0].action.exercise], ['skill', '기본기 · 허밍 롱톤', 'voice-hum']);
+  assert.equal(m.items.some(x => x.action.metric === 'stability'), false);
+  // Without the recordings' tips, 전체 분석's own words stay.
+  assert.equal(all({tips:null}).items.find(x => x.action.metric === 'stability').title, '편안한 음에서 5초 지속음을 같은 조건으로 녹음하기');
   // Titles compare without spaces, punctuation or a "(N분)" tail.
   assert.equal(N.norm(' 편안한 음에서  5초 지속음을 같은 조건으로 녹음하기 (8분) '), N.norm('편안한 음에서 5초 지속음을, 같은 조건으로 녹음하기.'));
   // A goal saved from 전체 분석 "목표 담기" ("practice (N분)") is the same as that measure.

@@ -136,8 +136,8 @@ test('오늘 › 연습하기: the 오늘의 연습 card shows today\'s steps as
   await expect(card(page).locator('[data-set-pick]')).toHaveAccessibleName('오늘의 연습 편집');
   await expect(card(page).locator('[data-set-pick]')).toContainText('편집');
   // One card, then the three rows; the old 연습 세트 row is not there a second time.
-  expect(await section(page).locator('[data-row]').evaluateAll(els => els.map(e => [e.dataset.row, e.tagName]))).toEqual([['practice-set', 'DIV'], ['voice-check', 'BUTTON'], ['practice-room', 'BUTTON'], ['training', 'BUTTON']]);
-  await expect(section(page).locator('.vz-practice-row strong')).toHaveText(['매일 보이스 체크', '노래 연습실', '보컬 트레이닝']);
+  expect(await section(page).locator('[data-row]').evaluateAll(els => els.map(e => [e.dataset.row, e.tagName]))).toEqual([['practice-set', 'DIV'], ['voice-check', 'BUTTON'], ['roadmap', 'BUTTON']]);
+  await expect(section(page).locator('.vz-practice-row strong')).toHaveText(['매일 보이스 체크', '내 로드맵']);
   expect(await page.evaluate(() => document.querySelector('.vz-student-home').shadowRoot.querySelector('main').innerText.split('연습 세트').length - 1)).toBe(0);
   expect((await goButton(page).boundingBox()).height).toBeGreaterThanOrEqual(56);
   await targets(card(page).locator('button'));

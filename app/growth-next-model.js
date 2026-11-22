@@ -48,7 +48,8 @@
     set:() => req('./practice-set-model.js', 'VzipPracticeSet'),
     routines:() => req('./goal-routines.js', 'VzipGoalRoutines'),
     precision:() => req('./precision-session-model.js', 'VzipPrecisionSession'),
-    daily:() => req('./daily-set-model.js', 'VzipDailySet')
+    daily:() => req('./daily-set-model.js', 'VzipDailySet'),
+    roadmap:() => req('./roadmap-model.js', 'VzipRoadmap')
   });
   if (node) module.exports = api; else root.VzipGrowthNext = api;
 })(typeof self !== 'undefined' ? self : globalThis, dep => {
@@ -179,13 +180,22 @@ function goalLinks(g, R) {
   return out;
 }
 /** Today's unfinished goals, in 홈's order (app/student-home-model.js build().goals). */
-/** 기본기: today's focus area and its exercise (the same one 오늘의 연습 puts first in its group). */
-function fromSkills(db, {today} = {}) {
-  const D = dep.daily(), f = D?.focusOf?.(db, today);
-  if (!f) return [];
-  const ex = D.exercise?.(f.exercise);
-  return [item('skill', {id:f.area, title:'기본기 · ' + (ex?.title || f.title), why:f.why + ' · ' + f.step + '단계: ' + f.say,
-    action:{kind:'skill', area:f.area, step:f.step, exercise:f.exercise, href:'#/practice-set'}, links:['skill:' + f.area]})];
+/** 기본기 · 내 로드맵: what the recordings show to fix (app/roadmap-model.js, with `tips`), else today's 기본기 focus —
+ *  the same exercises 오늘의 연습 puts first. One from the recordings is the same thing as its 측정 기반 tip (one item). */
+function fromSkills(db, {today, tips = null} = {}) {
+  const D = dep.daily(), R = dep.roadmap(), G = dep.metrics();
+  const byHelp = Object.fromEntries(list(G?.METRICS).filter(m => m.help).map(m => [m.help, m.id]));
+  let focus = [];
+  if (R?.build) {
+    const pf = D?.prefs?.(db) || {off:{}, groupsOff:{}};
+    try { focus = R.build({db, today, tips, isOn:id => { const e = D?.exercise?.(id); return !!e && !pf.off[id] && !pf.groupsOff[e.group]; }}).focus; } catch { focus = []; }
+  } else { const f = D?.focusOf?.(db, today); if (f) focus = [{...f, from:'skill', stepSay:f.say}]; }
+  return focus.map((f, i) => {
+    const ex = D?.exercise?.(f.exercise);
+    return item('skill', {id:f.area, title:'기본기 · ' + (ex?.title || f.title), why:f.why + (f.stepSay ? ' · ' + f.step + '단계: ' + f.stepSay : ''),
+      action:{kind:'skill', area:f.area, step:f.step, exercise:f.exercise, href:'#/practice-set'},
+      links:['skill:' + f.area, ...(f.tipKey ? ['metric:' + (byHelp[f.tipKey] || 'tip-' + f.tipKey) + ':'] : [])], order:i});
+  });
 }
 function fromGoals(db, {today} = {}) {
   const H = dep.home(), R = dep.routines();
@@ -293,7 +303,7 @@ function build({db = {}, today, overall = null, monthly = null, tips = null, tip
   return merge([
     ...fromHomework(db, {today}),
     ...fromLessonPoints(db, {today, days:pointDays}),
-    ...fromSkills(db, {today}),
+    ...fromSkills(db, {today, tips}),
     ...fromMeasures({overall, monthly, tips, songId:tipsSongId}),
     ...fromPrecision(precision || {}),
     ...fromGoals(db, {today}),

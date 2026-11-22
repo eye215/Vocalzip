@@ -93,16 +93,18 @@ test('ⓐ–ⓓ for 월별 (the default): what was done, what changed, what to p
   await expect(items.nth(2)).toContainText('기본기 · ');
   await expect(items.nth(2).locator('a.gm-act')).toHaveAttribute('href', '#/practice-set');
   await expect(items.nth(2).locator('a.gm-act')).toHaveText('오늘의 연습에서 하기');
-  await expect(items.nth(3).locator('[data-gm-chip]').first()).toHaveText('측정');
+  // 내 로드맵's focus from the recordings (one or two) comes as 기본기; then the measured ones.
+  const measured = items.filter({has:page.locator('[data-gm-chip]:first-child', {hasText:'측정'})}).first();
+  await expect(measured).toBeVisible();
   await expect(section(page, 'next').locator('[data-gm-more] summary')).toHaveText(/^더 보기 \(\d+\)$/);
   await section(page, 'next').locator('[data-gm-more] summary').click();
   await expect(section(page, 'next').locator('[data-gm-more] [data-gm-chip="계획"]').first()).toBeVisible();
   // 목표에 담기 (a measured item): today's goal, the same one 전체 분석's 목표 담기 makes; pressed twice, still one.
-  const add = items.nth(3).locator('[data-gm-goal]');
+  const add = measured.locator('[data-gm-goal]');
   await expect(add).toHaveText('목표에 담기');
   await add.click();
-  await expect(items.nth(3).locator('[data-gm-goal]')).toHaveText('담았어요');
-  await expect(items.nth(3).locator('[data-gm-goal]')).toBeDisabled();
+  await expect(measured.locator('[data-gm-goal]')).toHaveText('담았어요');
+  await expect(measured.locator('[data-gm-goal]')).toBeDisabled();
   const goals = await page.evaluate(() => VZ.db.dailyGoals.filter(g => g.date === VZ.today() && g.sourceId === 'overall-growth').map(g => g.id));
   expect(goals).toHaveLength(1);
   expect(goals[0]).toMatch(/^overall-growth:2026-11-13:/);
