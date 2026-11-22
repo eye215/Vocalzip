@@ -261,7 +261,7 @@ test('one name per thing: 다음 연습 · 녹음 분석 · 곡 분석 — the o
   await check('리포트 보관함', '.vl-reports');
   await to(page, '#/practice-review');
   await check('다음 연습 (AI)', '[data-review]');
-  await expect(page.locator('#top h1')).toHaveText('다음 연습 추천'); // the 2026-11-09 guide's name; 성장's own list keeps 다음 연습
+  await expect(page.locator('#top h1')).toHaveText('다음 연습'); // one name per thing (성장 개편 안 B 4단계, owner-approved)
   await to(page, '#/analysis/a6');
   await check('녹음 분석', '[data-ana]');
   await expect(page.locator('#top h1')).toHaveText('녹음 분석');

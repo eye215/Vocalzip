@@ -124,7 +124,8 @@ Each step is its own pull request. A step is "done" only after the automated che
 ## Change log
 
 - 2026-11-20: v5 draft added. v4 stays in force.
-- 2026-11-20: screen ownership rule built for 기존 자료 가져오기, 곡 확인, 전사 확인 (keep instead of ecord).
+- 2026-11-20: screen ownership rule built for 기존 자료 가져오기, 곡 확인, 전사 확인 (keep instead of 
+ecord).
 - 2026-11-20: 설정 regrouped into 연습 · 분석 · 파일·저장 · 공유·점검 (replaces 연습 목표 · 분석 · 관리). No setting, value or link removed.
 - 2026-11-20: shared empty box: dashed border removed, icon 20px `#98A2B3`. Text and buttons unchanged.
 - 2026-11-20: shared button 48px/R14/650 → 52px/R16/600; 다음 연습 row button 38px → 44px.
@@ -134,7 +135,7 @@ Each step is its own pull request. A step is "done" only after the automated che
 - 2026-11-22: list loading rows (VZ.loadingRows) on 전체 녹음 and the lesson list.
 - 2026-11-22: loading rows on more list screens; empty text split into title + helper; error box with 다시 시도; tap targets under 44px raised.
 - 2026-11-22: feature map; voice check minutes from its own clock; 오늘로 after 따라 하기; 숙제 in 기록 추가.
-- 2026-11-22: 다음 연습 추천 screen title.
+- 2026-11-22: 다음 연습 추천 screen title proposed, kept as 다음 연습 (성장 개편 안 B 4단계 name, pinned by tests) until the owner decides.
 - 2026-11-22: calendar day + is named 기록 추가.
 - 2026-11-22: 연습 기록 grouped by day; source label instead of memo tags; empty step rows left out of lists.
 - 2026-11-22: fallback rule for new VZ helpers; loading rows and the share-link error box get fallbacks.
