@@ -4,11 +4,15 @@ require('./legacy-session-mode.cjs')(test,{approvedHome:true});
 
 function sampleWav(){const rate=16000,frames=rate,bytes=44+frames*2,b=Buffer.alloc(bytes);b.write('RIFF',0);b.writeUInt32LE(bytes-8,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(rate,24);b.writeUInt32LE(rate*2,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(frames*2,40);for(let i=0;i<frames;i++)b.writeInt16LE(Math.round(7000*Math.sin(i*440*2*Math.PI/rate)),44+i*2);return b;}
 
-test('practice room opens from settings management while home has no shortcut',async({page})=>{
+// v5 (one door per job): 노래 연습실 opens from 오늘 › 연습하기 only; 설정 no longer repeats it.
+test('practice room opens from 오늘 › 연습하기, and 설정 no longer repeats it',async({page})=>{
  await fakeR2(page);await boot(page);
  await expect(page.locator('.vz-room-entry')).toHaveCount(0);
- await page.goto('/#/settings');
- const entry=page.locator('a.item[href="#/practice-room"]');
+ await page.evaluate(()=>{location.hash='#/settings';});
+ await expect(page.locator('[data-settings-group="practice"]')).toBeVisible();
+ await expect(page.locator('.vz-settings a[href="#/practice-room"]')).toHaveCount(0);
+ await page.evaluate(()=>{location.hash='#/home';});
+ const entry=page.locator('.vz-student-home [data-home-practice] [data-row="practice-room"]');
  await expect(entry).toBeVisible();
  await entry.click();
  await expect(page).toHaveURL(/#\/practice-room$/);
