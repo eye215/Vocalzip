@@ -513,3 +513,9 @@ body .score-ink-sheet.score-ink-compact .sheet-head [data-ink-other-scores]{flex
 .score-ink-ink-preview button[aria-expanded=true]{background:var(--vz-color-selected-bg,#ede1ff)}
 .score-ink-ink-preview [data-ink-width-quick] span{display:block;width:24px;min-height:2px;border-radius:99px;background:var(--vz-color-primary,#344054)}
 .score-ink-ink-preview [data-ink-color-quick] span{display:block;width:24px;height:24px;border-radius:50%;background:var(--sample-color,#101828);box-shadow:inset 0 0 0 1px #10182826,0 0 0 2px var(--vz-color-surface,#fff),0 0 0 3px var(--vz-color-border,#e8e4f0)}
+/* 그림 붙여넣기: the pasted picture fills its memo rect; a picture not here yet is a light frame. */
+.score-ink-page svg image.score-ink-note-image{pointer-events:none}
+.score-ink-page svg .score-ink-picture-wait{fill:#f2f4f7b3;stroke:#98a2b3;stroke-width:1px;stroke-dasharray:4 3}
+.score-ink-memo-bar [data-ink-memo-paste]{display:inline-flex;align-items:center;gap:6px;width:auto;min-height:44px;font-size:13px;padding:0 14px;border:1px solid #dfc7ff;border-radius:12px;background:#f5efff;color:var(--vz-color-accent,#7a32f5);font-weight:700;white-space:nowrap}
+.score-ink-memo-bar [data-ink-memo-paste] i{font-size:18px}
+.score-ink-memo-bar [data-ink-memo-paste][hidden]{display:none}

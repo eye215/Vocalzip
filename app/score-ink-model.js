@@ -12,6 +12,12 @@
  *          text (optional string, at most NOTE_TEXT_MAX; drawn wrapped inside the memo, NOTE_FONT of page width),
  *          note (optional): its link key. A memo without it is linked by its id; a moved/edited copy keeps the key.
  *          An importer writes {tool:'note', id, color, rect, mode:'pen'} and strokes carrying note:<that id>.
+ *          Picture (그림 붙여넣기, e.g. handwriting copied in GoodNotes): imageKey 'u/<ownerId>/scorepic-…/original.png' (the
+ *          PNG in R2, uploaded by the device that pasted it; that device keeps a copy and uploads it when it can),
+ *          imageW, imageH (its pixels, at most PICTURE_SIDE) and imageBytes (at most PICTURE_BYTES). No picture bytes
+ *          are ever in the record. It is drawn as the picture alone, filling its rect (whose sides keep the picture's
+ *          proportions); color (#ffffff) is unused and mode is 'pen'. Older clients show it as a plain white memo
+ *          and move or delete it like one (the fields are kept).
  * Mark     악보 표기 (숨표·반복·컷·시작점 and the user's own): an ordinary stroke whose points were laid out from the
  *          marker preset when it was placed (markStroke), so it keeps its own look whatever the preset becomes later.
  *          mark (optional): what it is — 'breath' | 'repeat' | 'cut' | 'start', or the id of a user preset. A mark is
@@ -116,8 +122,17 @@ function reach(s){
  if(!s.glyph)return [s.width/2,s.width/2];
  return [Math.max(s.width/2,s.size*Math.max(.5,glyphChars(s.glyph).length*.45)),Math.max(s.width/2,s.size*.55)];
 }
+const PICTURE_SIDE=1600,PICTURE_BYTES=4*1024*1024,PICTURE_KEY=/^u\/([^/]{1,200})\/(scorepic-[A-Za-z0-9_-]{1,80})\/original\.png$/;
+/** Where a pasted picture is kept in R2 (the R2 worker names an upload u/<owner>/<mediaId>/original.<ext>). */
+const pictureKey=(ownerId,mediaId)=>'u/'+ownerId+'/'+mediaId+'/original.png';
+function validPicture(s){
+ if(s.imageKey===undefined)return s.imageW===undefined&&s.imageH===undefined&&s.imageBytes===undefined;
+ const m=typeof s.imageKey==='string'&&s.imageKey.match(PICTURE_KEY);
+ return !!m&&m[1]===s.ownerId&&[s.imageW,s.imageH].every(n=>Number.isInteger(n)&&n>=1&&n<=PICTURE_SIDE)&&Number.isInteger(s.imageBytes)&&s.imageBytes>=1&&s.imageBytes<=PICTURE_BYTES;
+}
 function validNote(s){
  const r=s.rect;
+ if(!validPicture(s))return false;
  return Array.isArray(r)&&r.length===4&&r.every(Number.isFinite)&&r[0]>=0&&r[1]>=0&&r[2]>=NOTE_MIN&&r[3]>=NOTE_MIN&&r[0]+r[2]<=1.00001&&r[1]+r[3]<=1.00001&&
   ['text','pen'].includes(s.mode)&&(s.text===undefined||typeof s.text==='string'&&s.text.length<=NOTE_TEXT_MAX);
 }
@@ -132,7 +147,7 @@ function valid(s){
   Array.isArray(s.points)&&s.points.length>=1&&s.points.length<=MAX_POINTS&&s.points.every(p=>Array.isArray(p)&&p.length===3&&p.every(unit))&&
   (s.smooth===undefined||s.smooth===true)&&(s.pressure===undefined||s.pressure===true)&&(s.mark===undefined||validId(s.mark))&&(s.role===undefined||validRole(s.role))&&(s.measures===undefined||validMeasures(s.measures))&&(s.group===undefined||validId(s.group))&&(s.glyph===undefined?s.size===undefined:validGlyph(s)));
 }
-const FIELDS=['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt','note','rect','mode','text','mark','glyph','size','role','measures','group','smooth','pressure'];
+const FIELDS=['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt','note','rect','mode','text','mark','glyph','size','role','measures','group','smooth','pressure','imageKey','imageW','imageH','imageBytes'];
 const same=(a,b)=>JSON.stringify(FIELDS.map(k=>a[k]))===JSON.stringify(FIELDS.map(k=>b[k]));
 const opacity=s=>isNote(s)?1:s.opacity===undefined?(s.tool==='highlighter'?0.28:1):s.opacity;
 const round=n=>Math.round(n*100000)/100000;
@@ -493,5 +508,5 @@ function create({storage,identity,getData,change}){
 return {COLLECTION,valid,same,opacity,point,hit,path,smoothPath,outlinePath,strokeShape,simplifyStroke,pressureWidth,SIMPLIFY,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES,
  markStroke,glyphLayout,noteGoalLines,markRole,MARK_ROLES,MARK_BUILTIN_ROLES,validMeasures,grouped,freehand,
  simplifyLine,artFrom,validArt,artLines,markStamp,markShapes,markOpacity,markSize,MARK_SIZE_MIN,MARK_SIZE_MAX,ART_SCALES,ART_STROKES,ART_POINTS,ART_GRID,ART_SIZES,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
- isNote,noteKey,noteAt,linked,noteRect,noteLines,noteLayout,NOTE_TEXT_MAX,NOTE_MIN,NOTE_SIZE,NOTE_SMALLEST,NOTE_FONT,NOTE_LINE,NOTE_PAD,NOTE_RADIUS,NOTE_INK,NOTE_FAMILY,NOTE_COLORS};
+ isNote,pictureKey,PICTURE_SIDE,PICTURE_BYTES,noteKey,noteAt,linked,noteRect,noteLines,noteLayout,NOTE_TEXT_MAX,NOTE_MIN,NOTE_SIZE,NOTE_SMALLEST,NOTE_FONT,NOTE_LINE,NOTE_PAD,NOTE_RADIUS,NOTE_INK,NOTE_FAMILY,NOTE_COLORS};
 });

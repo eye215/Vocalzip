@@ -217,7 +217,7 @@ test('no step for volume: loudness is never a measure and no criterion reads it'
   assert.ok(!fields.some(f => /loud|volume|db|peak/i.test(f)), fields.join(','));
   // A loud breath reading does nothing for 호흡.
   const data = db([day(1), day(2), day(3)].map(d => set(d, [{area:'breath', value:99, unit:'dB'}])));
-  assert.equal(L.skill(data, 'breath', env()).state, 'soon');
+  assert.equal(L.skill(data, 'breath', env()).state, 'ready');
   // The table: 8 areas × 5 steps, every step with words and at least one condition.
   assert.deepEqual(L.SKILLS.map(a => a.id), ['breath', 'pitch', 'sustain', 'path', 'range', 'high', 'vibrato', 'rhythm']);
   assert.ok(L.SKILLS.every(a => a.steps.length === 5 && a.steps.every(s => s.say && s.conds.length)));
@@ -227,15 +227,15 @@ test('no step for volume: loudness is never a measure and no criterion reads it'
 
 test('areas without an exercise are 준비 중, and take measures later with no change to the model', () => {
   const none = L.skills(db(), env());
-  assert.deepEqual(none.map(a => [a.id, a.state]), [['breath', 'soon'], ['pitch', 'ready'], ['sustain', 'ready'], ['path', 'soon'], ['range', 'ready'], ['high', 'soon'], ['vibrato', 'soon'], ['rhythm', 'soon']]);
+  assert.deepEqual(none.map(a => [a.id, a.state]), [['breath', 'ready'], ['pitch', 'ready'], ['sustain', 'ready'], ['path', 'soon'], ['range', 'ready'], ['high', 'soon'], ['vibrato', 'ready'], ['rhythm', 'ready']]);
   assert.ok(none.filter(a => a.state === 'soon').every(a => a.soon && a.next.soon === a.soon && a.steps.every(s => s.soon)));
   // The day an exercise writes {area, value, unit, …}: the same rules apply — measured, calibrated, awarded.
   const future = [
-    ['breath', {area:'breath', kind:'s-length', value:16, unit:'초', even:2}, 2],
+    ['breath', {area:'breath', kind:'hiss', value:16, unit:'초', even:2}, 1],
     ['path', {area:'path', kind:'siren', value:12, unit:'반음', breaks:0, flips:1, both:1}, 3],
     ['high', {area:'high', kind:'top-hold', value:11, unit:'cent', fromTop:0, seconds:2, vowels:1}, 3],
-    ['vibrato', {area:'vibrato', kind:'longtone', value:3.4, unit:'초', rate:5.5, extent:22, regular:1}, 2],
-    ['rhythm', {area:'rhythm', kind:'ta', value:55, unit:'ms', level:2}, 3]
+    ['vibrato', {area:'vibrato', kind:'vibrato', value:3.4, unit:'초', rate:5.5, extent:22, regular:1, tail:1}, 2],
+    ['rhythm', {area:'rhythm', kind:'rhythm', value:55, unit:'ms', level:2, bpm:80, hit:90}, 2]
   ];
   for (const [id, m, steps] of future) {
     const data = db([day(1), day(2), day(3)].map(d => set(d, [m])));
@@ -303,7 +303,7 @@ test('선생님 지적 배지 and the 기준표 text', () => {
   assert.deepEqual(L.badges(data), [{id:'point:b', text:'턱 내리기', songId:'gone', song:'', date:'2026-11-18'}, {id:'point:a', text:'숨 미리 마시기', songId:'s1', song:'곡 하나', date:'2026-11-14'}]);
   L.award(data, env());
   const text = L.sheetText(data, env());
-  for (const part of ['큰 단계', 'Lv 2 · ' + L.LEVELS[1].name + ' · 120점', '하루 최대 60점', 'Lv10 4500', '[음정] 1단계 · 요즘도 유지 중', '[지속음] 2단계 · 요즘도 유지 중', '[호흡] 재는 연습을 준비 중',
+  for (const part of ['큰 단계', 'Lv 2 · ' + L.LEVELS[1].name + ' · 120점', '하루 최대 60점', 'Lv10 4500', '[음정] 1단계 · 요즘도 유지 중', '[지속음] 2단계 · 요즘도 유지 중', '[호흡] 아직 재지 않았어요',
     '[음역] 아직 재지 않았어요', '2단계: 들은 음 5개를 모두 ±25 cent 안에서 4초씩 유지해요', '다음 2단계: 3번 중 0번 했어요', '내 기록: 11.19 5개 중 4개 유지', '11.19 흔들림 13 cent · 6초', '서로 다른 3일', '선생님 지적 배지: 2개'])
     assert.ok(text.includes(part), part + '\n' + text);
   // Numbers only: no ids, song titles or badge words.

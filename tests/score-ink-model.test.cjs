@@ -317,3 +317,17 @@ test('a device full of duplicated strokes opens: duplicates are dropped first, t
  assert.ok(data.scoreAnnotations.some(s=>s.id==='late'));
  assert.deepEqual(JSON.parse(memory.get(store.key)||'{"records":[]}').records,[]);
 });
+test('붙여넣은 그림: a memo carries only the R2 key and size of its picture, never its bytes',()=>{
+ const memo={version:1,id:'pic',...binding,page:1,tool:'note',color:'#ffffff',rect:[.1,.1,.3,.1],mode:'pen',note:'pic',createdAt:1};
+ const pic={...memo,imageKey:Ink.pictureKey(owner,'scorepic-1'),imageW:400,imageH:200,imageBytes:5000};
+ assert.equal(pic.imageKey,'u/alice/scorepic-1/original.png');assert.equal(Ink.valid(pic),true);assert.equal(Ink.isNote(pic),true);
+ for(const bad of [{imageKey:'u/bob/scorepic-1/original.png'},{imageKey:'u/alice/score/original.pdf'},{imageKey:'u/alice/scorepic-1/original.jpg'},{imageKey:'data:image/png;base64,AAAA'},{imageW:Ink.PICTURE_SIDE+1},{imageH:0},{imageW:1.5},{imageBytes:Ink.PICTURE_BYTES+1},{imageBytes:undefined}])
+  assert.equal(Ink.valid({...pic,...bad}),false,JSON.stringify(bad));
+ assert.equal(Ink.valid({...memo,imageW:400}),false); // size without a picture
+ assert.equal(Ink.same(pic,{...pic,imageKey:Ink.pictureKey(owner,'scorepic-2')}),false);
+ // Moved or resized together with other rows it keeps its key, size and proportions.
+ const [moved]=Ink.transform([pic],{dx:.1,dy:.1,scale:1.5},4/3);
+ assert.equal(Ink.valid(moved),true);assert.equal(moved.imageKey,pic.imageKey);assert.ok(Math.abs(moved.rect[2]/moved.rect[3]-3)<1e-3);
+ // Bytes never fit in the record: the R2 worker allows a scorepic PNG of at most 8 MB, the app keeps it at 4 MB.
+ assert.ok(Ink.PICTURE_BYTES<=8*1024*1024);
+});

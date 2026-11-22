@@ -179,7 +179,8 @@ test('old addresses: #/vocal-training and #/vocal-growth/training land on 오늘
   await boot(page);
   const shown = async () => {
     await expect(page).toHaveURL(/#\/home$/);
-    await expect(section(page)).toBeInViewport({ratio:.9});
+    // The section can be taller than this short screen (the daily set grows as areas are added): its top is what counts.
+    await expect(section(page)).toBeInViewport();
     // Brought to the top of the screen (it starts below 지금 할 것), not merely somewhere on it.
     await expect.poll(() => section(page).evaluate(e => Math.round(e.getBoundingClientRect().top))).toBeLessThanOrEqual(40);
     expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
