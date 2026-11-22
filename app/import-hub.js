@@ -22,6 +22,8 @@ const SOURCES = {
 const KEY = 'vzip_import_hub_conditions_v1';
 const SOURCE_TYPE = {photos:'photos', drive:'icloud-drive', memo:'voice-memo', folder:'computer-folder'};
 let hub = fresh();
+/* A row's `occasion` is its 녹음 유형 choice in the review list (VZ.recordingType.importChoices: practice = 곡 녹음, lesson,
+ * training, room, performance = 곡 녹음 · 공연); importFields() turns it into the stored fields when the file is saved. */
 function fresh() { return {source:null, phase:'source', rows:[], filter:'all', group:false, autoPractice:true, progress:'', cond:null, occasion:'practice', limit:100}; }
 /* ---------- upload queue (kept across reloads) ----------
  * Only identifiers and states are stored (no file data). After Safari closes, the files must be picked again; files the
@@ -249,7 +251,7 @@ async function importRows(rows) {
     }
     try {
       const song = VZ.song(row.song);
-      const extra = {occasion:row.occasion, sourceType:SOURCE_TYPE[hub.source] || 'files', originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
+      const extra = {...VZ.recordingType.importFields(row.occasion), sourceType:SOURCE_TYPE[hub.source] || 'files', originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
       const saved = await M.importFile(row.file, {id:row.id, songId:song ? song.id : '', song:VZ.songLabel(song), date:row.dateSource === 'metadata' || row.dateSource === 'unconfirmed' ? '' : row.date, extra, direct, durationSeconds:row.duration},
         p => { row.msg = typeof p === 'number' ? '업로드 ' + p + '%' : String(p); drawRow(row); });
       row.busySince = 0; row.state = 'done'; row.doneAt = Date.now(); row.msg = saved.cloud ? '✓ 업로드 완료 (서버 확인)' : '✓ 이 기기에 저장 (로그인하면 업로드)'; row.saved = saved; row.file = null;
