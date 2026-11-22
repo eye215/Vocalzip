@@ -1,5 +1,5 @@
 /* 오늘의 연습 — what the three measuring exercises of 호흡 · 리듬 · 비브라토 read from the mic, as numbers for 기본기 단계
- * (pure model: no DOM, storage or network; also loaded by Node tests). The doing screen (app/daily-set-run.js) reads
+ * — and of 음정 · 음역 (스케일) and 소리 길 (사이렌) — (pure model: no DOM, storage or network; also loaded by Node tests). The doing screen (app/daily-set-run.js) reads
  * the mic live on the device and hands this model plain numbers; no audio is kept or sent anywhere. The step table
  * these numbers are compared with is app/levels-model.js (SKILLS · breath / rhythm / vibrato).
  *
@@ -19,6 +19,17 @@
  *   비브라토 (vibrato)     a pitch track {t, cents|null} of an 8-second long tone; 1-second windows are tested like the
  *                         sustained notes of 소리 길 흔적 (app/voice-path-model.js, its VIBRATO_* thresholds are read
  *                         from there and not copied): rate 4–8 Hz, extent ≥ 15 cent, regularity ≥ 0.4.
+ *   스케일 (scale)       the app plays a 5-note scale (도레미파솔파미레도), or once 음정 4단계 is earned the octave
+ *                         arpeggio (도미솔도'솔미도), then the person sings it back alone to the beat shown on screen.
+ *                         Each note is read in the middle of its beat (SCALE.skip of it left out: the voice is a little
+ *                         late); right = the middle reading within SCALE.tolerance cent (an octave apart counts).
+ *                         The top note lasts SCALE.top seconds: held steadily for RULES.comfortSeconds (2 s) it is a
+ *                         comfortable note for 음역. The key rises a semitone a round and stops where the top is no
+ *                         longer held comfortably (never pushed past the comfortable range for a high note).
+ *   사이렌 (siren)        a pitch track {t, midi|null} of one glide up and back down on “우~”: how far it went
+ *                         (semitones), the breaks (silence longer than SIREN.gap inside it) and the flips (a sudden
+ *                         jump of SIREN.flip semitones or more that stays — a register break; a one-reading spike of
+ *                         the pitch reader is smoothed away first), and whether it came back down.
  * EVERY number below is a first guess, to be checked on a real iPhone. */
 (function(root,factory){
   const node=typeof module==='object'&&module.exports;
@@ -314,15 +325,16 @@ function vibratoRound(samples,{hold=VIB.hold,cue=VIB.cue}={}){
   return {seconds:round1(seconds),rate:round1(median(rates)),extent:Math.round(median(amps)),regularity:round2(median(run.at.map(w=>w.reg))),
     regular:regular?1:0,tail:tail?1:0,straight:straight?1:0,cued:cued?1:0,voiced};
 }
-/** The 기본기 measure of the rounds of one exercise ([{midi, …vibratoRound}]): the best round, and how many different
- * pitches had a cued, regular vibrato of 3 s or more (`variants`). null when nothing was sung. */
+/** The 기본기 measure of the rounds of one exercise ([{midi, vowel?, …vibratoRound}]): the best round, and how many
+ * different pitches (`variants`) and vowels (`vowels`, once 4단계 is earned the rounds change vowel) had a cued,
+ * regular vibrato of 3 s or more. null when nothing was sung. */
 function vibratoMeasure(rounds){
   const rs=list(rounds).filter(r=>r&&r.voiced>0);
   if(!rs.length)return null;
   const score=r=>r.cued*8+r.regular*4+r.tail*2+r.seconds/10,best=rs.reduce((b,r)=>score(r)>score(b)?r:b);
-  const variants=new Set(rs.filter(r=>r.cued&&r.regular&&r.seconds>=3).map(r=>r.midi)).size;
+  const good=rs.filter(r=>r.cued&&r.regular&&r.seconds>=3),variants=new Set(good.map(r=>r.midi)).size,vowels=new Set(good.map(r=>r.vowel).filter(Boolean)).size;
   return {area:'vibrato',kind:'vibrato',value:best.seconds,unit:'초',...(fin(best.rate)?{rate:best.rate,extent:best.extent,regularity:best.regularity}:{}),
-    regular:best.regular,tail:best.tail,straight:best.straight,cued:best.cued,variants,of:list(rounds).length,hold:VIB.hold};
+    regular:best.regular,tail:best.tail,straight:best.straight,cued:best.cued,variants,...(vowels?{vowels}:{}),of:list(rounds).length,hold:VIB.hold};
 }
 /** The word shown first for a vibrato window going on now (null = no window yet). */
 function vibratoWord(w,{afterCue=false}={}){
@@ -332,14 +344,148 @@ function vibratoWord(w,{afterCue=false}={}){
   return {key:'go',text:'천천히 떨어 봐요'};
 }
 
+/* ====================================================================================================
+ * 음정 · 음역 · 스케일 (scale, arpeggio)
+ * ==================================================================================================== */
+const SCALE={
+  beat:.6,          // seconds per note (the top note: `top`)
+  top:2.8,          // the top note's length: room for a 2-second steady hold after a late start
+  skip:.3,          // the first part of a note left out of its reading (the voice arrives a little late)
+  tolerance:50,     // cent: a quick note within a quarter tone is right
+  topTolerance:35,  // cent: the top note's steady hold
+  topSd:25,         // cent: the most the top note may wobble and still count as comfortable
+  minVoiced:.4,     // a note needs a pitch in this share of its reading
+  rounds:10,        // the most keys in one go
+  below:3,          // the first key's top note: this many semitones under the top of the comfortable range
+  above:6           // the highest key's top: this many semitones over it (stops earlier at the first strained top)
+};
+const SCALE_PATTERNS={scale5:{offsets:[0,2,4,5,7,5,4,2,0],top:4,words:'5음 스케일'},arpeggio:{offsets:[0,4,7,12,7,4,0],top:3,words:'옥타브 아르페지오'}};
+/** Which pattern from the 음정 step reached: the arpeggio once 4단계 is earned (5단계 asks for it). */
+const scaleKind=(step=0)=>step>=4?'arpeggio':'scale5';
+/** One round's notes: [{at, dur, midi, top}] in seconds from the start of singing. */
+function scalePlan(kind,base){
+  const pat=SCALE_PATTERNS[kind]||SCALE_PATTERNS.scale5,out=[];let at=0;
+  pat.offsets.forEach((o,i)=>{const top=i===pat.top,dur=top?SCALE.top:SCALE.beat;out.push({at:round2(at),dur,midi:base+o,top});at+=dur;});
+  return out;
+}
+/** The keys to try (the 도 of each round), lowest first: from the top note `below` under the comfortable top to
+ *  `above` over it, never starting under the comfortable bottom. */
+function scaleKeys(kind,comfort){
+  const pat=SCALE_PATTERNS[kind]||SCALE_PATTERNS.scale5,span=pat.offsets[pat.top],c=comfort||{};
+  if(!Number.isInteger(c.low)||!Number.isInteger(c.high))return [];
+  const first=Math.max(c.low,c.high-SCALE.below-span),last=Math.max(first,c.high+SCALE.above-span),out=[];
+  for(let k=first;k<=last&&out.length<SCALE.rounds;k++)out.push(k);
+  return out;
+}
+const fold=c=>((c+600)%1200+1200)%1200-600;
+/** One round read from a pitch track [{t (s from the start of singing), midi (a float, null = no pitch)}]:
+ *  {notes:[{midi, ok, cents, voiced, top?, held?, sd?, sung?}], right, n, top:{midi, ok, held, sd, sung}|null}. */
+function scaleRound(samples,plan){
+  const pts=list(samples).filter(p=>p&&fin(p.t)),notes=[];let topNote=null;
+  for(const n of list(plan)){
+    if(n.top){
+      // The longest run inside topTolerance (a slip under 0.25 s forgiven) and the octave it was sung in.
+      const ins=pts.filter(p=>p.t>=n.at&&p.t<n.at+n.dur+.2);let best=null,cur=null,lastIn=null;
+      for(const p of ins){
+        const c=fin(p.midi)?(p.midi-n.midi)*100:null,inside=c!=null&&Math.abs(fold(c))<=SCALE.topTolerance;
+        if(inside){if(!cur||p.t-lastIn>.25)cur={from:p.t,to:p.t,cs:[],oct:[]};cur.to=p.t;cur.cs.push(fold(c));cur.oct.push(Math.round((p.midi-n.midi)/12));lastIn=p.t;
+          if(!best||cur.to-cur.from>best.to-best.from)best=cur;}
+      }
+      // The wobble of the whole run: every reading in it, the forgiven slips too (so a wide wobble is not hidden).
+      const inRun=best?ins.filter(p=>p.t>=best.from&&p.t<=best.to&&fin(p.midi)).map(p=>fold((p.midi-n.midi)*100)):[];
+      const held=best?round2(best.to-best.from):0,s=inRun.length>1?round1(sd(inRun)):null,oct=best?Math.round(median(best.oct)):0;
+      const ok=held>=2-1e-9&&s!=null&&s<=SCALE.topSd;
+      topNote={midi:n.midi,ok,held,sd:s,sung:n.midi+12*oct};
+      const voiced=ins.filter(p=>fin(p.midi)).length;
+      notes.push({midi:n.midi,top:true,ok:held>=.6,held,...(s!=null?{sd:s}:{}),cents:best?Math.round(median(best.cs)):null,voiced:ins.length?round2(voiced/ins.length):0});
+      continue;
+    }
+    const from=n.at+n.dur*SCALE.skip,to=n.at+n.dur,ins=pts.filter(p=>p.t>=from&&p.t<to),cs=ins.filter(p=>fin(p.midi)).map(p=>fold((p.midi-n.midi)*100));
+    const voiced=ins.length?cs.length/ins.length:0,mid=cs.length?median(cs):null;
+    notes.push({midi:n.midi,ok:voiced>=SCALE.minVoiced&&mid!=null&&Math.abs(mid)<=SCALE.tolerance,cents:mid==null?null:Math.round(mid),voiced:round2(voiced)});
+  }
+  return {notes,right:notes.filter(x=>x.ok).length,n:notes.length,top:topNote,sung:notes.some(x=>x.voiced>0)};
+}
+/** Whether to go on to the next key after these rounds: not after a top that was not held comfortably above the
+ *  comfortable range, nor after two such tops in a row. */
+function scaleGoOn(rounds,comfort){
+  const rs=list(rounds),last=rs.at(-1);if(!last)return true;
+  if(!last.top?.ok&&(last.top?.midi>=(comfort?.high??Infinity)))return false;
+  const prev=rs.at(-2);return !(prev&&!last.top?.ok&&!prev.top?.ok);
+}
+/** The 기본기 measures of the rounds of one exercise: 음정 (% of the notes sung right, kind scale5 | arpeggio) and
+ *  음역 (the top notes held comfortably — 2 s, steady, in the octave sung). [] when nothing was sung. */
+function scaleMeasures(rounds,kind){
+  const rs=list(rounds).filter(r=>r&&r.sung);if(!rs.length)return [];
+  const n=rs.reduce((a,r)=>a+r.n,0),right=rs.reduce((a,r)=>a+r.right,0),out=[];
+  out.push({area:'pitch',kind:kind==='arpeggio'?'arpeggio':'scale5',value:n?Math.round(right/n*100):0,unit:'%',right,of:n,rounds:rs.length});
+  const tops=rs.map(r=>r.top).filter(t=>t&&t.ok).map(t=>t.sung);
+  if(tops.length){const low=Math.min(...tops),high=Math.max(...tops);out.push({area:'range',kind:'comfortable',value:high-low,unit:'반음',low,high,seconds:2,count:new Set(tops).size,from:'scale'});}
+  return out;
+}
+
+/* ====================================================================================================
+ * 소리 길 · 사이렌
+ * ==================================================================================================== */
+const SIREN={
+  hold:10,      // seconds of one glide at most (from the first sound)
+  tries:3,
+  gap:.15,      // a silence longer than this inside the glide is a break
+  flip:4,       // semitones in one step that stay: a flip (a glide moves well under a semitone per reading)
+  stay:2,       // …stays: the next readings within this many semitones of the new pitch
+  end:.8,       // the glide is over after this much silence, once it has gone up
+  back:.7       // came back down: fell at least this share of the way it went up
+};
+/** A 3-point median of the voiced readings in a row (a single wrong reading of the pitch reader goes). */
+function smooth(pts){
+  return pts.map((p,i)=>{
+    if(!fin(p.midi))return p;
+    const a=pts[i-1],b=pts[i+1];
+    if(a&&b&&fin(a.midi)&&fin(b.midi)&&p.t-a.t<=.1&&b.t-p.t<=.1)return {t:p.t,midi:median([a.midi,p.midi,b.midi])};
+    return p;
+  });
+}
+/** One glide read from a pitch track [{t, midi|null}]: {value (semitones from its lowest to its highest), low, high,
+ *  breaks, flips, both (1 = went up and came back down), voiced (seconds with a pitch)}. */
+function sirenTry(samples){
+  const raw=list(samples).filter(p=>p&&fin(p.t)).sort((a,b)=>a.t-b.t),first=raw.findIndex(p=>fin(p.midi));
+  let last=-1;for(let i=raw.length-1;i>=0;i--)if(fin(raw[i].midi)){last=i;break;}
+  if(first<0)return {value:0,low:null,high:null,breaks:0,flips:0,both:0,voiced:0};
+  const pts=smooth(raw.slice(first,last+1)),v=pts.filter(p=>fin(p.midi));
+  let breaks=0,flips=0,voiced=0;
+  for(let i=1;i<v.length;i++){
+    const dt=v[i].t-v[i-1].t;
+    if(dt>SIREN.gap+1e-9){breaks++;continue;}
+    voiced+=dt;
+    const jump=v[i].midi-v[i-1].midi;
+    if(Math.abs(jump)>=SIREN.flip){
+      const after=v.slice(i,i+4);
+      if(after.length>=3&&after.every(p=>Math.abs(p.midi-v[i].midi)<=SIREN.stay))flips++;
+    }
+  }
+  const ms=v.map(p=>p.midi),low=Math.min(...ms),high=Math.max(...ms),peak=ms.indexOf(high),span=high-low;
+  const rose=high-Math.min(...ms.slice(0,peak+1)),fell=high-Math.min(...ms.slice(peak));
+  const both=span>=3&&rose>=span*SIREN.back&&fell>=span*SIREN.back?1:0;
+  return {value:round1(span),low:round1(low),high:round1(high),breaks,flips,both,voiced:round1(voiced)};
+}
+/** The 기본기 measure of the glides of one exercise: the best one (no break, then no flip, then up and down, then the
+ *  widest). null when nothing was sung. */
+function sirenMeasure(tries){
+  const ts=list(tries).filter(t=>t&&t.voiced>0);if(!ts.length)return null;
+  const score=t=>(t.breaks?0:4000)+(t.flips?0:2000)+(t.both?1000:0)+t.value,best=ts.reduce((b,t)=>score(t)>score(b)?t:b);
+  return {area:'path',kind:'siren',value:best.value,unit:'반음',breaks:best.breaks,flips:best.flips,both:best.both,low:best.low,high:best.high,tries:list(tries).length};
+}
+
 /* ---------- words for the set's summary (app/practice-set.js) ---------- */
 /** What a finished measuring step says on the next step and the summary ('' for any other step). */
 function resultWords(r){
-  if(!r||!['hiss','rhythm','vibrato'].includes(r.mode))return '';
+  if(!r||!['hiss','rhythm','vibrato','scale','siren'].includes(r.mode))return '';
   if(r.timer)return '타이머로 했어요';
   const ms=list(r.measures);
   if(r.mode==='hiss'){const m=ms.find(x=>x.area==='breath');return m?'가장 긴 스 '+m.value+'초':'“스~”가 들리지 않았어요';}
   if(r.mode==='rhythm'){const m=ms.filter(x=>x.area==='rhythm');return m.length?'박자와 '+m.map(x=>x.value).join(' · ')+' ms':'“타”가 잘 안 들렸어요';}
+  if(r.mode==='scale'){const m=ms.find(x=>x.area==='pitch');return m?(m.kind==='arpeggio'?'아르페지오':'스케일')+' '+m.value+'% 맞춤':'소리가 들리지 않았어요';}
+  if(r.mode==='siren'){const m=ms.find(x=>x.area==='path');return m?'사이렌 '+m.value+'반음'+(m.breaks?' · 끊김 '+m.breaks+'번':' · 끊김 없이'):'소리가 들리지 않았어요';}
   const m=ms.find(x=>x.area==='vibrato');
   return m?(m.value>0&&fin(m.rate)?'비브라토 '+m.value+'초 · 1초에 '+m.rate+'번':'비브라토가 아직 안 보였어요'):'소리가 들리지 않았어요';
 }
@@ -347,5 +493,7 @@ function resultWords(r){
 return {HISS,RHYTHM,PATTERNS,LEVEL_WORDS,VIBRATO,VIB,
   hissStart,hissFeed,hissNow,hissResult,hissMeasure,breathMeasure,
   rhythmPlan,roundTimeline,floorOf,onsets,echoOf,clickGuard,rhythmScore,rhythmRound,rhythmMeasures,
-  vibratoWindows,vibratoRound,vibratoMeasure,vibratoWord,resultWords,median};
+  vibratoWindows,vibratoRound,vibratoMeasure,vibratoWord,
+  SCALE,SCALE_PATTERNS,scaleKind,scalePlan,scaleKeys,scaleRound,scaleGoOn,scaleMeasures,
+  SIREN,sirenTry,sirenMeasure,resultWords,median};
 });

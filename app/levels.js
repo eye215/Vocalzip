@@ -161,7 +161,7 @@ function areaHtml(a){
     '<p class="lv-note">첫 초안이에요. 처음 두 주의 기록을 보고 숫자를 맞춰 가요.</p></section>';
   const names=exerciseNames(a);
   const how='<section class="lv-card" data-lv-exercise><h3>이 연습으로 재요</h3>'+(names.length?'<ul class="lv-ex">'+names.map(e=>'<li><i class="ph ph-microphone" aria-hidden="true"></i><span><strong>'+esc(e.title)+'</strong><small>'+esc(e.group)+' · 마이크를 켜고 할 때만 재요</small></span></li>').join('')+'</ul>'+
-      '<button type="button" class="btn secondary block" data-lv-pick><i class="ph ph-sliders-horizontal" aria-hidden="true"></i>오늘의 연습 고르기</button>':
+      '<button type="button" class="btn secondary block" data-lv-pick><i class="ph ph-pencil-simple" aria-hidden="true"></i>오늘의 연습 편집</button>':
       '<p class="lv-say">재는 연습을 준비 중이에요</p><p class="lv-note">'+esc(a.soon)+'</p>')+
     (a.how&&names.length?'<p class="lv-how-to" data-lv-how-to>'+esc(a.how)+'</p>':'')+
     (a.note?'<p class="lv-note" data-lv-guard>'+esc(a.note)+'</p>':'')+'</section>';

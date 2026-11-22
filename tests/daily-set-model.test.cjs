@@ -63,9 +63,10 @@ test('곡: the set ends with 곡에 적용하기 for the plan song or the latest
 test('the catalogue is data: every exercise has what the runner and later versions need',()=>{
   for(const e of D.CATALOG){
     assert.ok(D.groupOf(e.group),e.id);assert.ok(e.title&&e.why&&e.minutes>0,e.id);assert.equal(typeof e.mic,'boolean');
-    assert.ok(['timed','breath','follow','hold','hiss','rhythm','vibrato'].includes(e.mode),e.id);
+    assert.ok(['timed','breath','follow','hold','hiss','rhythm','vibrato','scale','siren'].includes(e.mode),e.id);
     // The measuring exercises listen (a timer without the mic) and say which 기본기 area they measure.
-    if(['hiss','rhythm','vibrato'].includes(e.mode))assert.ok(e.mic&&Array.isArray(e.measure)&&e.measure.length===1,e.id);
+    if(['hiss','rhythm','vibrato','siren'].includes(e.mode))assert.ok(e.mic&&Array.isArray(e.measure)&&e.measure.length===1,e.id);
+    if(e.mode==='scale')assert.ok(e.mic&&e.measure.join()==='pitch,range',e.id);
     if(e.mode==='timed'){assert.ok(e.steps.length>=2);assert.ok(Math.abs(e.steps.reduce((n,s)=>n+s.seconds,0)-e.minutes*60)<=30,e.id);}
     if(e.mode==='hold')assert.ok(e.hold>0&&e.tolerance===25&&e.mic,e.id);
   }
@@ -77,6 +78,11 @@ test('the catalogue is data: every exercise has what the runner and later versio
     [['breath','hiss','breath'],['rhythm','rhythm','rhythm'],['voice','vibrato','vibrato']]);
   const vib=D.exercise('voice-vibrato');assert.deepEqual([vib.hold,vib.cue],[8,4]);
   assert.deepEqual(D.notesFor(vib,{low:55,high:67},TODAY).map(n=>n-D.notesFor(vib,{low:55,high:67},TODAY)[0]),[0,4]); // two pitches
+  // 스케일 (음정 · 음역, in 음감), 사이렌 (소리 길, in 목 풀기), 맨 위 음 유지 (고음, in 발성): every 기본기 area has an exercise.
+  assert.deepEqual(['ear-scale','loosen-siren','voice-high'].map(id=>[D.exercise(id).group,D.exercise(id).mode,D.exercise(id).measure.join()]),
+    [['ear','scale','pitch,range'],['loosen','siren','path'],['voice','hold','high,range']]);
+  const high=D.exercise('voice-high');assert.deepEqual(D.notesFor(high,{low:55,high:67},TODAY),[64,66,67,67,67]);
+  assert.deepEqual([0,3,4].map(i=>D.noteTags(high,i)),[{fromTop:-3,vowel:'아'},{fromTop:0,vowel:'에'},{fromTop:0,vowel:'이'}]);
   const ear=D.exercise('ear-follow');assert.equal(ear.count,5);assert.equal(ear.hold,4);
 });
 
@@ -163,6 +169,7 @@ test('고르기: one exercise per group stays on, a whole group can rest, 처음
   assert.deepEqual([pf.off,pf.groupsOff,pf.recording],[{},{},false]);
   for(const e of D.exercisesOf('breath').slice(1))pf=D.setExercise(pf,e.id,false);
   assert.throws(()=>D.setExercise(pf,D.exercisesOf('breath')[0].id,false),/하나는 켜 두어야/);
+  for(const e of D.exercisesOf('ear').slice(1))pf=D.setExercise(pf,e.id,false);
   assert.throws(()=>D.setExercise(pf,D.exercisesOf('ear')[0].id,false),/하나는 켜 두어야/);
   pf=D.setGroup(pf,'ear',false);
   D.savePrefs(db,pf);D.savePrefs(db,pf);
@@ -198,7 +205,7 @@ test('연습 전후 30초 녹음 (off by default): a take before the first step 
 test('the timeline and the resume state follow the session',()=>{
   const b=D.build(four(),{today:TODAY});
   assert.deepEqual(D.timeline(b.steps).map(x=>x.state),['next','left','left','left']);
-  assert.deepEqual(D.timeline(b.steps).map(x=>x.label),['목 풀기','호흡','발성','음감']);
+  assert.deepEqual(D.timeline(b.steps).map(x=>x.label),['목 풀기','호흡 · 추천','발성','음감']); // today's 기본기 (호흡, not measured yet) is marked
   let now=1_000_000;
   const s=P.start(b.steps,{id:'run1',date:TODAY,now});
   assert.equal(s.running,false);
@@ -329,7 +336,7 @@ test('the comfortable range: measured first, then the 보이스 체크 notes, th
   const c={low:55,high:67};
   for(const e of D.CATALOG.filter(e=>e.mode==='hold')){
     const notes=D.notesFor(e,c,TODAY);
-    assert.equal(notes.length,e.count||e.offsets.length,e.id);
+    assert.equal(notes.length,e.count||(e.tops||e.offsets).length,e.id);
     assert.ok(notes.every(n=>Number.isInteger(n)&&n>=c.low&&n<=c.high),e.id+' '+notes);
     assert.deepEqual(D.notesFor(e,c,TODAY),notes,'the same day gives the same notes');
   }
@@ -337,4 +344,42 @@ test('the comfortable range: measured first, then the 보이스 체크 notes, th
   assert.notDeepEqual(D.notesFor(ear,c,day(0)),D.notesFor(ear,c,day(1)));
   assert.ok(D.notesFor(ear,c,TODAY).every((n,i,a)=>!i||n!==a[i-1]));
   assert.equal(D.noteName(60),'C4');assert.equal(D.noteName(57),'A3');
+});
+
+test('an exercise grows with its area: “멈” 롱톤 6 s → 8 s (지속음 2단계) → a high note (4단계); 비브라토 “오~” from 4단계',()=>{
+  const mum=D.exercise('voice-mum'),vib=D.exercise('voice-vibrato'),c={low:55,high:67},at=n=>()=>n;
+  assert.equal(D.adapt(mum,at(0)),mum,'unchanged before 2단계');assert.equal(D.adapt(mum,at(1)).hold,6);
+  const eight=D.adapt(mum,at(2));assert.deepEqual([eight.id,eight.hold,eight.highNote],['voice-mum',8,undefined]);assert.match(eight.text,/8초/);
+  const high=D.adapt(mum,at(4));assert.equal(high.hold,8);
+  const notes=D.notesFor(high,c,TODAY);assert.equal(notes.length,4);assert.equal(notes.at(-1),65);
+  assert.deepEqual(D.noteTags(high,3),{top:true});assert.deepEqual(D.noteTags(high,0),{});
+  assert.equal(D.adapt(vib,at(3)),vib);
+  const oh=D.adapt(vib,at(4));assert.deepEqual(oh.vowels,['아~','오~']);assert.equal(D.syllableOf(oh,1),'오~');assert.equal(D.syllableOf(vib,1),'아~');
+  assert.equal(mum.hold,6,'the catalogue itself never changes');
+});
+
+test('기본기 추천: today\'s focus exercise takes its group\'s place (said why); not when it is off, a group rests, or a 그룹 대신 step is tagged', () => {
+  const L = require('../app/levels-model.js');
+  const run = (date, measures, exercise) => ({id:'practice-set:' + date, date, created:Date.parse(date + 'T10:00:00Z'), dailySet:{v:1, items:[{exercise, state:'done', measures}]}});
+  const scale = {area:'pitch', kind:'scale5', value:85, unit:'%', right:40, of:47};
+  const held = {area:'pitch', kind:'hold', value:5, of:5, unit:'개', hold:4, tolerance:25};
+  // 음정 1·2단계 earned; 3단계 (5음 스케일 80%) met on two days: one more day makes it.
+  const db = {...empty(), practices:[day(-30), day(-29), day(-28)].map(d => run(d, [held], 'ear-follow')).concat([run(day(-3), [scale], 'ear-scale'), run(day(-2), [scale], 'ear-scale')]),
+    practicePlans:[1, 2].map(step => ({id:'skill-step:pitch:' + step, kind:'skill-step', v:1, area:'pitch', step, earned:day(-20), days:[], created:1}))};
+  {
+    const f = D.focusOf(db, TODAY);
+    assert.deepEqual([f.area, f.step, f.exercise, f.count], ['pitch', 3, 'ear-scale', 2]);
+    // On a day the ear rotation would give 음 따라 부르기, the set has the 스케일, with why.
+    const date = [0, 1, 2, 3].map(day).find(d => D.pick(D.prefs(db), 'ear', d).id === 'ear-follow');
+    const st = D.build(db, {today:date}).steps.find(s => s.group === 'ear');
+    assert.equal(st.exercise, 'ear-scale');
+    assert.deepEqual(st.focus, {area:'pitch', title:'음정', step:3, why:'음정 3단계까지 1일 남았어요 (3번 중 2번)'});
+    assert.equal(D.build(db, {today:date}).steps.filter(s => s.focus).length, 1, 'one focus a day');
+  }
+  // Turned off, or 음감 resting: the rotation as before.
+  const off = {...db, practicePlans:[...db.practicePlans, {id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'ear-scale':true}, groupsOff:{}, replace:{}}]};
+  assert.notEqual(D.focusOf(off, TODAY)?.exercise, 'ear-scale');
+  const rest = {...db, practicePlans:[...db.practicePlans, {id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{}, groupsOff:{ear:true}, replace:{}}]};
+  assert.equal(D.build(rest, {today:TODAY}).steps.some(s => s.group === 'ear'), false);
+  assert.equal(L.exerciseFor('pitch', 3), 'ear-scale');
 });

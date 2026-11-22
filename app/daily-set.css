@@ -81,6 +81,19 @@ body.vz-set-run .pset-host{max-width:none;padding-bottom:0;}
 .dset-run[data-bar=say] .dset-rhythm-bar{color:#fff;}
 .dset-vibbar{position:relative;overflow:visible;}
 .dset-cue{position:absolute;top:-5px;bottom:-5px;width:3px;margin-left:-1.5px;border-radius:99px;background:#e3d4ff;}
+/* 스케일: the notes of one round, the one to sing now lit; the top note wider (it is held). 사이렌: a tall lane from the
+ * bottom note to the top one with a dot at the pitch sung now. */
+.dset-scale{display:flex;justify-content:center;gap:4px;width:100%;margin:0;padding:0;list-style:none;}
+.dset-scale li{flex:1 1 0;min-width:0;max-width:40px;padding:6px 0;border-radius:10px;background:rgba(255,255,255,.07);color:#aaa3b7;font-size:13px;line-height:18px;font-weight:700;text-align:center;}
+.dset-scale li.is-top{flex-grow:2;max-width:76px;}
+.dset-scale li.is-done{color:#e3d4ff;}
+.dset-scale li.is-now{background:#7A32F5;color:#fff;box-shadow:0 0 12px rgba(174,122,255,.55);}
+.dset-siren{display:grid;justify-items:center;gap:8px;width:100%;}
+.dset-glide-end{color:#c9b2f7;font-size:13px;line-height:18px;font-weight:700;}
+.dset-glide{position:relative;box-sizing:border-box;width:72px;height:180px;margin:13px 0;border-radius:36px;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 2px rgba(174,122,255,.35);}
+.dset-glide-dot{position:absolute;left:50%;bottom:0;width:26px;height:26px;margin:0 0 -13px -13px;border-radius:50%;background:#fff;opacity:.25;transition:bottom .08s linear;}
+.dset-glide-dot[data-on="1"]{opacity:1;background:#d9c4ff;box-shadow:0 0 14px rgba(174,122,255,.7);}
+@media (prefers-reduced-motion:reduce){.dset-glide-dot{transition:none;}}
 .dset-result{display:grid;justify-items:center;gap:12px;width:100%;}
 .dset-result-big{color:#fff;font-size:64px;line-height:72px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
 .dset-result-big small{margin-left:4px;color:#c9b2f7;font-size:24px;line-height:32px;font-weight:700;}
