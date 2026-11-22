@@ -2030,6 +2030,24 @@ test('Settings shell: v5 shared buttons are 52px R16 weight 600 and small button
   expect(s, JSON.stringify(s)).toEqual({p:{h:52, r:'16px', w:'600'}, sec:{h:52, r:'16px', w:'600'}, sm:{h:44, r:'12px', w:'600'}});
 });
 
+// Named with 'Settings' so ui-checks.yml runs it. List screens load as their own row shape in #F2EFF7 blocks, not a text box.
+test('Settings shell: v5 loading rows are #F2EFF7 blocks in the list shape and still say 불러오는 중 to screen readers', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const wrap = document.createElement('div'); wrap.innerHTML = VZ.loadingRows(3);
+    document.getElementById('view').append(wrap);
+    const box = wrap.firstElementChild, blocks = [...box.querySelectorAll('.vz-skel')], row = box.querySelector('.item');
+    const out = {role:box.getAttribute('role'), said:box.querySelector('.sr-only')?.textContent, rows:box.querySelectorAll('.item').length,
+      bg:[...new Set(blocks.map(b => getComputedStyle(b).backgroundColor))], moving:blocks.some(b => getComputedStyle(b).animationName !== 'none'),
+      rowH:Math.round(row.getBoundingClientRect().height), hidden:row.getAttribute('aria-hidden')};
+    wrap.remove();
+    return out;
+  });
+  expect(s, JSON.stringify(s)).toEqual({role:'status', said:'불러오는 중…', rows:3, bg:['rgb(242, 239, 247)'], moving:false, rowH:60, hidden:'true'});
+});
+
 // Named with 'Settings' so ui-checks.yml runs it. A labelled field outside a sheet matches the sheet field (V4 Input/Textarea).
 test('Settings shell: v5 form fields are borderless #F2EFF7 R15 52px with a 2px #DCC4FF focus outline, screen rules still win', async ({page}) => {
   await boot(page);

@@ -327,6 +327,9 @@ VZ.confirmDiscard = () => {
   discardAsking = true;
   return VZ.confirm('작성 중인 내용이 있어요', '닫으면 입력한 내용이 저장되지 않아요. 닫을까요?', {ok:'닫기', cancel:'계속 작성', danger:true}).finally(() => { discardAsking = false; });
 };
+/** v5 loading (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): the list's own shape in #F2EFF7 blocks, no spinner.
+ * The words stay for screen readers (role=status). */
+VZ.loadingRows = (n = 3) => '<div class="list vz-loading" role="status" aria-live="polite"><span class="sr-only">불러오는 중…</span>' + '<div class="item" aria-hidden="true"><span class="vz-skel vz-skel-icon"></span><span class="item-main"><span class="vz-skel vz-skel-title"></span><span class="vz-skel vz-skel-sub"></span></span></div>'.repeat(n) + '</div>';
 VZ.empty = (icon, text, action = '') => '<div class="empty"><i class="ph ph-' + icon + '"></i><div>' + VZ.esc(text) + '</div>' + action + '</div>';
 
 /** Song <select> with "새 곡 추가" option; returns html. Use VZ.readSong(form, name) to resolve. */

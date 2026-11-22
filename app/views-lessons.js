@@ -248,7 +248,7 @@ VZ.route('lesson', {title:'레슨', back:true, tab:'calendar',
     const recs = l.recordings || [];
     main.querySelector('[data-link-media]').onclick = () => linkMediaSheet(l);
     if (!recs.length) { host.innerHTML = '<p class="small muted" style="margin:0 4px">연결된 녹음이 없어요.</p>'; return; }
-    host.innerHTML = '<div class="empty compact"><span class="muted">불러오는 중…</span></div>';
+    host.innerHTML = '' + VZ.loadingRows() + '';
     const media = await M.list().catch(() => []);
     if (!host.isConnected) return;
     const items = recs.map(x => media.find(m => m.id === x.id)).filter(Boolean);
