@@ -61,7 +61,7 @@ test('곡 목록: 분석한 곡만, 최근에 부른 순으로, 곡마다 한마
   expect(await overflow(page)).toBeLessThanOrEqual(0);
   // One analysed take: 녹음 하나. Recordings but no analysis: folded as 분석 전, still a way into the song.
   await setMedia(page, MEDIA.filter(m => !['c1', 'dv', 'dc'].includes(m.id)));
-  await go(page, '#/vocal-growth', '[data-gm-section="changes"]');
+  await go(page, '#/growth-changes', '[data-gm-section="changes"]');
   await go(page, '#/vocal-analysis', '[data-hub-song="s3"][data-hub-state="one"]');
   expect((await rows(page)).filter(r => ['s3', 's4'].includes(r[0]))).toEqual([['s3', 'one', '녹음 하나']]);
   await expect(page.locator('[data-hub-waiting] summary')).toHaveText('아직 분석 전인 곡 1');
@@ -97,7 +97,7 @@ test('곡 목록이 길면 제목으로 찾는다', async ({page}) => {
   await expect(page.locator('[data-hub-search-empty]')).toBeHidden();
   // Five songs: no field.
   await setMedia(page, MEDIA);
-  await go(page, '#/vocal-growth', '[data-gm-section="changes"]');
+  await go(page, '#/growth-changes', '[data-gm-section="changes"]');
   await go(page, '#/vocal-analysis', '[data-hub-song="s5"]');
   await expect(page.locator('[data-hub-songs] [data-hub-song]')).toHaveCount(5);
   await expect(page.locator('[data-hub-q]')).toHaveCount(0);
@@ -150,7 +150,7 @@ test('판정은 이번 달과 같다: 같은 곡의 처음·최근 줄과 지난
   await boot(page);
   // 이번 달 › 전체 › 곡별 Home: the 처음·최근 line.
   await page.evaluate(() => { localStorage.setItem('vzip:growth-period', 'all'); localStorage.setItem('vzip:monthly-growth-song', 's5'); });
-  await go(page, '#/vocal-growth', '[data-gm-section="changes"] [data-gc-song="s5"]');
+  await go(page, '#/growth-changes', '[data-gm-section="changes"] [data-gc-song="s5"]');
   const overall = await line(page, '[data-gm-section="changes"]', 's5');
   expect(overall.basis).toBe('같은 곡 Home · 녹음 그대로 잰 녹음 4개 중 처음·최근 · 10월 → 11월');
   // 월별: 지난달과 비교.
@@ -170,9 +170,9 @@ test('판정은 이번 달과 같다: 같은 곡의 처음·최근 줄과 지난
   await expect(page.locator('[data-song-month] strong')).toHaveText('지난달 대비');
   await expect(page.locator('[data-song-month] span')).toHaveText('좋아진 방향 · ' + moved.join(' · '));
   await expect(page.locator('[data-song-month] small')).toHaveText(month.basis);
-  // 뒤로 returns to 이번 달.
+  // 뒤로 returns to 달라진 것 자세히, where it was opened from.
   await page.locator('[data-back]').click();
-  await expect(page).toHaveURL(/#\/vocal-growth$/);
+  await expect(page).toHaveURL(/#\/growth-changes$/);
   // Every analysed song: the word of the list is the word of its screen; a song 이번 달 leaves out is 판정 보류 here too.
   await go(page, '#/vocal-analysis', '[data-hub-song]');
   const list = await rows(page);
@@ -203,7 +203,7 @@ test('연습 녹음 포함은 설정 하나: 이번 달에서 켜면 여기도 �
   await expect(page.locator('[data-song-practice-effect]')).toHaveText(expected.effect);
   await expect(page.locator('[data-song-section="changes"] [data-gc-song="s5"]')).toHaveCount(0);
   // Flip it in 이번 달…
-  await go(page, '#/vocal-growth', '[data-gm-practice]');
+  await go(page, '#/growth-changes', '[data-gm-practice]');
   await page.locator('[data-gm-practice]').check();
   await expect(page.locator('[data-gm-practice-note]')).toContainText('노래 연습실·트레이닝 연습 녹음도 넣어 견줘요');
   // …and it is on here: the 연습 takes are counted, the word moved, and the line says so.
@@ -223,7 +223,7 @@ test('연습 녹음 포함은 설정 하나: 이번 달에서 켜면 여기도 �
   await page.locator('[data-song-practice]').uncheck();
   await expect(page.locator('[data-song-verdict]')).toHaveText('녹음 하나');
   await expect(page.locator('[data-song-practice]')).toBeFocused();
-  await go(page, '#/vocal-growth', '[data-gm-practice]');
+  await go(page, '#/growth-changes', '[data-gm-practice]');
   await expect(page.locator('[data-gm-practice]')).not.toBeChecked();
   // A song the switch does not change says nothing about it.
   await song(page, 's2');
