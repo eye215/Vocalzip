@@ -639,6 +639,21 @@ window.vzipCloudMediaCached=async()=>{const owner=user?.id;if(!owner)return null
 /** Read-only rows with server times, for the upload check (설정 → 저장 공간 관리 → 업로드 상태 진단). */
 window.vzipCloudMediaRows=async()=>allRows('id,metadata,updated_at');
 window.vzipCloudUserId=()=>user?.id||'';
+/* A short message between this account's own devices (Supabase Realtime broadcast; nothing is stored, no table):
+ * 아이패드 → 아이폰 녹음 (app/record-handoff.js). One channel per account; false when it cannot be sent. */
+let deviceChannel=null;const deviceListeners=new Set();
+function devices(){
+ if(!client||!user)return null;
+ if(deviceChannel&&deviceChannel.__owner===user.id)return deviceChannel;
+ try{deviceChannel?.unsubscribe?.();}catch{}
+ try{deviceChannel=client.channel('vzip-devices-'+user.id,{config:{broadcast:{self:false}}});deviceChannel.__owner=user.id;
+  deviceChannel.on('broadcast',{event:'handoff'},msg=>{for(const fn of deviceListeners){try{fn(msg.payload);}catch{}}});deviceChannel.subscribe();}
+ catch{deviceChannel=null;}
+ return deviceChannel;
+}
+window.vzipCloudDeviceSend=async payload=>{const ch=devices();if(!ch)return false;try{return (await ch.send({type:'broadcast',event:'handoff',payload}))==='ok';}catch{return false;}};
+window.vzipCloudDeviceListen=fn=>{deviceListeners.add(fn);devices();return ()=>deviceListeners.delete(fn);};
+window.addEventListener('vzip:auth-changed',()=>{if(deviceListeners.size)setTimeout(devices,500);});
 window.vzipCloudMediaUrl=async item=>{
  if(!user)throw Error('로그인이 필요해요.');
  const owner=user.id;

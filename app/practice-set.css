@@ -175,3 +175,13 @@ body:not(.vz-record-mode):has(.pset-mini:not([hidden])) .toast{bottom:calc(max(1
 @media(max-width:355px){.pset-clock strong{font-size:48px;line-height:56px;}.pset-step-title{font-size:23px!important;line-height:30px!important;}}
 @media(prefers-reduced-motion:reduce){.pset-meter i{transition:none;}}
 @media(prefers-reduced-transparency:reduce),(prefers-contrast:more){.pset-mini{background:#fff;border-color:#E4E7EC;-webkit-backdrop-filter:none;backdrop-filter:none;}}
+/* 아이폰으로 녹음 (app/record-handoff.js): the phone's one line at the top, above everything but sheets. */
+.rh-bar{position:fixed;z-index:calc(var(--vz-z-floating,41) + 5);top:max(8px,env(safe-area-inset-top));left:12px;right:12px;display:flex;align-items:center;gap:6px;padding:6px;border-radius:20px;background:#1f1530;box-shadow:0 10px 30px rgba(16,24,40,.28);}
+.rh-go{flex:1;min-width:0;display:flex;align-items:center;gap:10px;min-height:52px;padding:4px 8px;border-radius:14px;color:#fff;text-decoration:none;}
+.rh-go>i{display:grid;place-items:center;flex:none;width:40px;height:40px;border-radius:50%;background:#7A32F5;font-size:20px;}
+.rh-go span{flex:1;min-width:0;display:flex;flex-direction:column;}
+.rh-go small{color:#c9b2f7;font-size:12px;line-height:16px;}
+.rh-go strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;line-height:21px;}
+.rh-go b{flex:none;padding:0 12px;border-radius:99px;background:#fff;color:#1f1530;font-size:14px;line-height:34px;}
+.rh-x{flex:none;display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:12px;background:transparent;color:#c9b2f7;font-size:18px;}
+.rh-sheet p{margin:0 0 10px;line-height:1.55;}

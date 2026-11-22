@@ -104,7 +104,7 @@ function ledger(db={},{today='',recordingDates=[]}={}){
     }
     if(p.practiceSetId&&runs.has(String(p.practiceSetId)))continue; // a step row of a set counted above (an older 연습 세트 without a run row is a record)
     if(isObj(p.voiceCheck)||p.practiceTimeSource==='voice-check'){at(p.date).voice=true;continue;}
-    if(p.practiceTimeSource==='unconfirmed')continue;     // made by an import, not entered by the person
+    if(p.practiceTimeSource==='unconfirmed'||p.practiceTimeSource==='recording')continue; // made by an import or from recordings, not entered by the person
     if((Number(p.manualMinutes??p.minutes)||0)>0)at(p.date).record=true;
   }
   for(const r of live(db,'scoreAnnotations')){
