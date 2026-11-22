@@ -355,7 +355,7 @@ VZ.route('home', {title:'홈', render() {
     '<div data-tip style="margin-top:16px"></div>' +
     (VZ.overdueLessons?.().length ? '<div style="margin-top:16px">' + VZ.overdueCard() + '</div>' : '') +
     '<h2 class="sec">다음 레슨 <a href="#/calendar">캘린더</a></h2>' + nextHtml + taskHtml +
-    '<h2 class="sec">최근 연습한 곡 <a href="#/songs">내 곡</a></h2><div data-recent>' + VZ.loadingRows() + '</div>';
+    '<h2 class="sec">최근 연습한 곡 <a href="#/songs">내 곡</a></h2><div data-recent>' + (VZ.loadingRows?.() ?? '<p class="muted" role="status">불러오는 중…</p>') + '</div>';
 }, async mount(main) {
   main.querySelectorAll('[data-add-lesson]').forEach(b => b.onclick = () => VZ.lessonSheet());
   main.querySelector('[data-log]').onclick = () => VZ.practiceSheet();

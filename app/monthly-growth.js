@@ -425,7 +425,7 @@ V.monthlyGrowthDetail=(items,{month,songId='',practice=false}={})=>{
 V.route('growth-flow',{title:'지난 흐름',back:true,tab:'growth',noAutoRefresh:true,
  render:r=>r?.query?.get('period')==='week'&&V.weeklySummary?
   '<p class="growth-flow-note" data-flow-week-ai><i class="ph ph-info" aria-hidden="true"></i><span>주간 AI 코치는 아직 없어요. AI 코치는 월별·전체에서 쓸 수 있어요.</span></p><div class="ws-page" data-weekly-summary></div>':
-  '<div data-growth class="growth-page">' + window.VZ.loadingRows() + '</div>',
+  '<div data-growth class="growth-page">' + (window.VZ.loadingRows?.() ?? '<p class="muted" role="status">불러오는 중…</p>') + '</div>',
  mount(main,r){
   const period=r?.query?.get('period');
   const weekly=main.querySelector('[data-weekly-summary]');

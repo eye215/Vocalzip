@@ -124,7 +124,7 @@ async function mountAnalysis(host) {
     // 소리 길 흔적 (시험판, app/voice-path.js): two takes of a song side by side.
     (window.VzipVoicePath ? row('#/voice-path', 'path', '소리 길 흔적 · 시험판', '두 녹음에서 들리는 흔적을 나란히 봐요', ' data-hub-voice-path') : '') + '</div>';
   if (!songs.length) { host.innerHTML = V.empty('music-notes', '먼저 곡을 추가해 주세요.', '<a class="btn" href="#/songs">내 곡으로 가기</a>') + foot; return; }
-  if (!M.cached().length) host.innerHTML = window.VZ.loadingRows();
+  if (!M.cached().length) host.innerHTML = (window.VZ.loadingRows?.() ?? '<p class="muted" role="status">불러오는 중…</p>');
   let items, failed = false;
   try { items = await M.list(); } catch { items = M.cached(); failed = true; }
   if (my !== request || !host.isConnected) return;

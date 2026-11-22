@@ -75,12 +75,12 @@ VZ.shareSheet = (item, {title:named = ''} = {}) => {
 
 /* 공유 중인 링크 (settings → 관리): every link of this account, with copy and stop. */
 VZ.route('shares', {title:'공유 중인 링크', back:true, tab:'keep', render() {
-  return '<div class="share-list-page" data-shares>' + VZ.loadingRows(2) + '</div>';
+  return '<div class="share-list-page" data-shares>' + (VZ.loadingRows?.(2) ?? '<p class="muted" role="status">불러오는 중…</p>') + '</div>';
 }, async mount(main) {
   const host = main.querySelector('[data-shares]');
   const draw = async () => {
     if (!ready()) { host.innerHTML = VZ.empty('link', '로그인하면 공유한 링크를 볼 수 있어요.'); return; }
-    let list; try { list = await window.VzipR2.shares.list(); } catch (e) { console.error(e); host.innerHTML = VZ.errorBox('공유 링크 목록을 불러오지 못했어요.', 'data-retry-shares'); host.querySelector('[data-retry-shares]').onclick = () => { host.innerHTML = VZ.loadingRows(2); draw(); }; return; }
+    let list; try { list = await window.VzipR2.shares.list(); } catch (e) { console.error(e); host.innerHTML = VZ.errorBox ? VZ.errorBox('공유 링크 목록을 불러오지 못했어요.', 'data-retry-shares') : VZ.empty('warning', '공유 링크 목록을 불러오지 못했어요.'); const retry = host.querySelector('[data-retry-shares]'); if (retry) retry.onclick = () => { host.innerHTML = (VZ.loadingRows?.(2) ?? '<p class="muted" role="status">불러오는 중…</p>'); draw(); }; return; }
     if (!host.isConnected) return;
     if (!list.length) { host.innerHTML = VZ.empty('link', '공유 중인 링크가 없어요. 녹음 재생 화면의 "공유 링크"에서 만들 수 있어요.'); return; }
     host.innerHTML = '<p class="share-note">링크를 끊으면 받은 사람은 바로 재생·다운로드할 수 없어요. 이미 내려받은 파일은 회수되지 않아요.</p><div class="list">' +
