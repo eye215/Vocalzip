@@ -33,7 +33,9 @@
  * Item: {id, title, why, source, sources, songId?, measures?, due?, action:{kind, …}}. `source` is the chip of the
  * place it ranks by; `sources` every place that suggested it (the same thing from two places is ONE item — same
  * normalised title and song, or linked by id: a goal made from a homework, plan or AI draft).
- * Rank: 숙제 (due soonest first) > 놓친 레슨 지적 > 측정 기반 (then 정밀 측정) > 계획·목표 > AI 초안.
+ *   skill         fromSkills(db, {today})       기본기: the ONE area of today's focus (app/daily-set-model.js focusOf →
+ *                                               app/levels-model.js focus), with the exercise 오늘의 연습 does for it
+ * Rank: 숙제 (due soonest first) > 놓친 레슨 지적 > 기본기 > 측정 기반 (then 정밀 측정) > 계획·목표 > AI 초안.
  * Words: what to practise and why, never a verdict on the voice. */
 (function (root, factory) {
   const node = typeof module === 'object' && module.exports;
@@ -45,16 +47,17 @@
     home:() => req('./student-home-model.js', 'VzipStudentHomeModel'),
     set:() => req('./practice-set-model.js', 'VzipPracticeSet'),
     routines:() => req('./goal-routines.js', 'VzipGoalRoutines'),
-    precision:() => req('./precision-session-model.js', 'VzipPrecisionSession')
+    precision:() => req('./precision-session-model.js', 'VzipPrecisionSession'),
+    daily:() => req('./daily-set-model.js', 'VzipDailySet')
   });
   if (node) module.exports = api; else root.VzipGrowthNext = api;
 })(typeof self !== 'undefined' ? self : globalThis, dep => {
 'use strict';
-const SOURCES = ['homework', 'lesson-point', 'measure', 'precision', 'goal', 'plan', 'ai'];
+const SOURCES = ['homework', 'lesson-point', 'skill', 'measure', 'precision', 'goal', 'plan', 'ai'];
 /** Chip words for each source. */
-const LABEL = {homework:'숙제', 'lesson-point':'레슨 지적', measure:'측정 기반', precision:'정밀 측정', goal:'오늘 목표', plan:'연습 계획', ai:'AI 초안'};
+const LABEL = {homework:'숙제', 'lesson-point':'레슨 지적', skill:'기본기', measure:'측정 기반', precision:'정밀 측정', goal:'오늘 목표', plan:'연습 계획', ai:'AI 초안'};
 /** Rank of each source: lower first. 정밀 측정 goes with 측정 기반, after it; 목표 and 계획 share a place. */
-const TIER = {homework:0, 'lesson-point':1, measure:2, precision:2.5, goal:3, plan:3, ai:4};
+const TIER = {homework:0, 'lesson-point':1, skill:1.5, measure:2, precision:2.5, goal:3, plan:3, ai:4};
 const LIMIT = 5, AI_DAYS = 30, POINT_DAYS = 30;
 const list = v => Array.isArray(v) ? v : [];
 const isDay = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
@@ -176,6 +179,14 @@ function goalLinks(g, R) {
   return out;
 }
 /** Today's unfinished goals, in 홈's order (app/student-home-model.js build().goals). */
+/** 기본기: today's focus area and its exercise (the same one 오늘의 연습 puts first in its group). */
+function fromSkills(db, {today} = {}) {
+  const D = dep.daily(), f = D?.focusOf?.(db, today);
+  if (!f) return [];
+  const ex = D.exercise?.(f.exercise);
+  return [item('skill', {id:f.area, title:'기본기 · ' + (ex?.title || f.title), why:f.why + ' · ' + f.step + '단계: ' + f.say,
+    action:{kind:'skill', area:f.area, step:f.step, exercise:f.exercise, href:'#/practice-set'}, links:['skill:' + f.area]})];
+}
 function fromGoals(db, {today} = {}) {
   const H = dep.home(), R = dep.routines();
   if (!H || !isDay(today)) return [];
@@ -282,6 +293,7 @@ function build({db = {}, today, overall = null, monthly = null, tips = null, tip
   return merge([
     ...fromHomework(db, {today}),
     ...fromLessonPoints(db, {today, days:pointDays}),
+    ...fromSkills(db, {today}),
     ...fromMeasures({overall, monthly, tips, songId:tipsSongId}),
     ...fromPrecision(precision || {}),
     ...fromGoals(db, {today}),
@@ -289,6 +301,6 @@ function build({db = {}, today, overall = null, monthly = null, tips = null, tip
     ...fromAi(db, {today, days:aiDays})
   ], {limit});
 }
-return {SOURCES, LABEL, TIER, LIMIT, AI_DAYS, POINT_DAYS, norm, daysBetween, noteNext, dueText,
+return {SOURCES, LABEL, TIER, LIMIT, AI_DAYS, POINT_DAYS, norm, daysBetween, noteNext, dueText, fromSkills,
   fromHomework, fromLessonPoints, fromMeasures, fromPrecision, fromGoals, fromPlans, fromAi, merge, build};
 });

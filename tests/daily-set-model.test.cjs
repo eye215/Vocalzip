@@ -357,3 +357,29 @@ test('an exercise grows with its area: “멈” 롱톤 6 s → 8 s (지속음 2
   const oh=D.adapt(vib,at(4));assert.deepEqual(oh.vowels,['아~','오~']);assert.equal(D.syllableOf(oh,1),'오~');assert.equal(D.syllableOf(vib,1),'아~');
   assert.equal(mum.hold,6,'the catalogue itself never changes');
 });
+
+test('기본기 추천: today\'s focus exercise takes its group\'s place (said why); not when it is off, a group rests, or a 그룹 대신 step is tagged', () => {
+  const L = require('../app/levels-model.js');
+  const run = (date, measures, exercise) => ({id:'practice-set:' + date, date, created:Date.parse(date + 'T10:00:00Z'), dailySet:{v:1, items:[{exercise, state:'done', measures}]}});
+  const scale = {area:'pitch', kind:'scale5', value:85, unit:'%', right:40, of:47};
+  const held = {area:'pitch', kind:'hold', value:5, of:5, unit:'개', hold:4, tolerance:25};
+  // 음정 1·2단계 earned; 3단계 (5음 스케일 80%) met on two days: one more day makes it.
+  const db = {...empty(), practices:[day(-30), day(-29), day(-28)].map(d => run(d, [held], 'ear-follow')).concat([run(day(-3), [scale], 'ear-scale'), run(day(-2), [scale], 'ear-scale')]),
+    practicePlans:[1, 2].map(step => ({id:'skill-step:pitch:' + step, kind:'skill-step', v:1, area:'pitch', step, earned:day(-20), days:[], created:1}))};
+  {
+    const f = D.focusOf(db, TODAY);
+    assert.deepEqual([f.area, f.step, f.exercise, f.count], ['pitch', 3, 'ear-scale', 2]);
+    // On a day the ear rotation would give 음 따라 부르기, the set has the 스케일, with why.
+    const date = [0, 1, 2, 3].map(day).find(d => D.pick(D.prefs(db), 'ear', d).id === 'ear-follow');
+    const st = D.build(db, {today:date}).steps.find(s => s.group === 'ear');
+    assert.equal(st.exercise, 'ear-scale');
+    assert.deepEqual(st.focus, {area:'pitch', title:'음정', step:3, why:'음정 3단계까지 1일 남았어요 (3번 중 2번)'});
+    assert.equal(D.build(db, {today:date}).steps.filter(s => s.focus).length, 1, 'one focus a day');
+  }
+  // Turned off, or 음감 resting: the rotation as before.
+  const off = {...db, practicePlans:[...db.practicePlans, {id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'ear-scale':true}, groupsOff:{}, replace:{}}]};
+  assert.notEqual(D.focusOf(off, TODAY)?.exercise, 'ear-scale');
+  const rest = {...db, practicePlans:[...db.practicePlans, {id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{}, groupsOff:{ear:true}, replace:{}}]};
+  assert.equal(D.build(rest, {today:TODAY}).steps.some(s => s.group === 'ear'), false);
+  assert.equal(L.exerciseFor('pitch', 3), 'ear-scale');
+});

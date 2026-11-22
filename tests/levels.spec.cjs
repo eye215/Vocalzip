@@ -180,11 +180,10 @@ test('an area: the next step in plain words, "3번 중 n번 했어요", recent v
   await expect(host(page).locator('[data-lv-exercise] li')).toHaveText(['음 따라 부르기음감 · 마이크를 켜고 할 때만 재요', '스케일 따라 부르기음감 · 마이크를 켜고 할 때만 재요']);
   for (const [width, height] of SIZES) { await page.setViewportSize({width, height}); await targets(host(page).locator('button')); await noOverflow(page); }
   await page.setViewportSize({width:390, height:844});
-  await host(page).getByRole('button', {name:'오늘의 연습 고르기'}).click();
-  const pick = page.getByRole('dialog', {name:'오늘의 연습 고르기'});
-  await expect(pick).toBeVisible();
-  await expect(pick).toContainText('음 따라 부르기');
-  await pick.locator('[data-close]').click(); await expect(pick).toHaveCount(0);
+  // 오늘의 연습 편집: today's list, where the set is changed.
+  await host(page).getByRole('button', {name:'오늘의 연습 편집'}).click();
+  await expect(page).toHaveURL(/#\/practice-set$/);
+  await expect(page.locator('.pset-plan')).toContainText('음감');
   // 기준 맞추는 중: the day, the draft level, and that no step is given yet.
   await to(page, '#/levels/sustain');
   const cal = host(page).locator('[data-lv-area="sustain"]');

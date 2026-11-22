@@ -141,18 +141,19 @@ test('오늘의 연습: the measuring exercises are in the set when 호흡 · �
   // On the card: 호흡 with only “스~” 길게 on, and 리듬.
   await boot(page, seed({practicePlans:[{id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'breath-s':true, 'breath-pulse':true}, groupsOff:{song:true}, replace:{}}]}));
   const names = card(page).locator('[data-set-line] li .vz-set-item span'), labels = card(page).locator('[data-set-line] li .vz-set-item b');
-  await expect(labels).toHaveText(['목 풀기', '호흡', '발성', '음감', '리듬']);
+  await expect(labels).toHaveText(['목 풀기', '호흡 · 추천', '발성', '음감', '리듬']);
   await expect(names.nth(1)).toHaveText('“스~” 길게');
   await expect(names.nth(4)).toHaveText('“타” 따라 하기');
-  // 고르기 lists them under their group; resting 리듬 takes it out of the set.
+  // 편집 opens today's list; the 리듬 row's sheet lists its exercises, and 리듬 쉬기 takes it out of the set.
   await card(page).locator('[data-set-pick]').click();
-  const sheet = page.locator('[data-dset-pick]');
-  await expect(sheet.locator('[data-group="rhythm"] legend strong')).toHaveText('리듬');
-  await expect(sheet.locator('[data-group="rhythm"] .dset-opt')).toContainText('“타” 따라 하기');
-  await expect(sheet.locator('[data-group="voice"] .dset-opt').filter({hasText:'롱톤 비브라토'})).toHaveCount(1);
-  await sheet.locator('[data-group="rhythm"] .dset-switch').click();
-  await page.getByRole('button', {name:'저장'}).click();
-  await expect(labels).toHaveText(['목 풀기', '호흡', '발성', '음감']);
+  await expect(page.locator('.pset-plan')).toBeVisible();
+  await page.locator('.pset-row[data-step="ex-rhythm-ta"] [data-edit]').click();
+  const sheet = page.locator('[data-group-sheet="rhythm"]');
+  await expect(sheet.locator('.dset-opt')).toContainText('“타” 따라 하기');
+  await sheet.locator('[data-rest]').click();
+  await expect(page.locator('.pset-row[data-step="ex-rhythm-ta"]')).toHaveCount(0);
+  await to(page, '#/home');
+  await expect(labels).toHaveText(['목 풀기', '호흡 · 추천', '발성', '음감']);
 });
 
 test('“스~” 길게: the mic times one continuous hiss (a 0.1 s dip does not end it), the result screen says it, the run row keeps it, 단계 starts counting', async ({page}) => {

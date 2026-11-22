@@ -367,7 +367,7 @@ export async function createFloatingHome(opts={}){
   if(!card){
    card=el("div",null,"vz-set-card");card.dataset.row=row.key;card.setAttribute("role","group");
    const head=el("div",null,"vz-set-head"),pick=el("button",null,"vz-set-pick");pick.type="button";pick.dataset.setPick="";
-   pick.append(glyphOf("\ue434"),el("span","고르기"));
+   pick.append(glyphOf("\ue3b4"),el("span","편집"));
    head.append(el("strong"),el("small"),pick);
    const line=el("ol",null,"vz-set-line");line.dataset.setLine="";
    const go=el("button",null,"vz-set-go");go.type="button";go.dataset.setGo="";go.append(glyphOf("\ue3d0"),el("span"));
@@ -377,7 +377,7 @@ export async function createFloatingHome(opts={}){
   card.dataset.state=row.state||"";card.setAttribute("aria-label",row.title);
   if(name.textContent!==row.title)name.textContent=row.title;
   if(state.textContent!==(row.line||""))state.textContent=row.line||"";
-  pick.setAttribute("aria-label","오늘의 연습 고르기");pick.onclick=()=>row.onPick?.();
+  pick.setAttribute("aria-label","오늘의 연습 편집");pick.onclick=()=>row.onPick?.();
   const items=Array.isArray(row.items)?row.items:[],sign=JSON.stringify(items.map(x=>[x.title,x.label,x.minutes,x.mic,x.state]));
   if(line.dataset.sign!==sign){
    line.dataset.sign=sign;

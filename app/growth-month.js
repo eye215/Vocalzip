@@ -113,7 +113,7 @@ function paintChanges(v) {
 }
 
 /* ---------- ⓒ 다음 연습 ---------- */
-const CHIP = {homework:'숙제', 'lesson-point':'레슨 지적', measure:'측정', precision:'측정', goal:'계획', plan:'계획', ai:'AI'};
+const CHIP = {homework:'숙제', 'lesson-point':'레슨 지적', skill:'기본기', measure:'측정', precision:'측정', goal:'계획', plan:'계획', ai:'AI'};
 const SHOWN = 5;
 const norm = s => window.VzipGrowthNext?.norm?.(s) ?? String(s || '').replace(/\s+/g, '');
 const todayGoals = () => (V.db.dailyGoals || []).filter(g => g?.date === V.today() && !(V.db.deleted?.dailyGoals || []).includes(g.id));
@@ -145,6 +145,7 @@ function actionHtml(it, i) {
     case 'route': return link(a.href, '열기');
     case 'goal': case 'routine': return link('#/home', '오늘 목표에서 하기');
     case 'plan': return link('#/practice-set', '오늘의 연습으로');
+    case 'skill': return link('#/practice-set', '오늘의 연습에서 하기');
     case 'ai-draft': {
       const ref = a.ref?.kind;
       if (ref === 'overall-ai') return link('#/growth-flow?period=all', 'AI 코치 보기');
@@ -167,7 +168,7 @@ function nextHtml(v) {
     : '<ol class="gm-next">' + items.slice(0, SHOWN).map(itemHtml).join('') + '</ol>' + (items.length > SHOWN ? '<details class="gm-more" data-gm-more><summary>더 보기 (' + (items.length - SHOWN) + ')</summary><ol class="gm-next">' +
       items.slice(SHOWN).map((it, k) => itemHtml(it, SHOWN + k)).join('') + '</ol></details>' : '');
   return '<section class="gm-section gm-next-box" data-gm-section="next" aria-labelledby="gm-next-title"><header class="gm-head"><h2 id="gm-next-title">다음 연습</h2>' +
-    '<p class="gm-basis" data-gm-basis="next">오늘 기준 · 숙제를 먼저, 그다음 레슨 지적·측정·계획·AI 초안 순서 · 겹치는 것은 하나로</p></header>' + body +
+    '<p class="gm-basis" data-gm-basis="next">오늘 기준 · 숙제를 먼저, 그다음 레슨 지적·기본기·측정·계획·AI 초안 순서 · 겹치는 것은 하나로</p></header>' + body +
     // The screens you practise on (연습 세트 · 보이스 체크 · 노래 연습실 · 보컬 트레이닝) live on 오늘 › 연습하기.
     '<a class="gm-more-link gm-today-link" href="#/home" data-home-practice data-gm-today><span>연습은 오늘 탭에서 해요</span><i class="ph ph-arrow-right" aria-hidden="true"></i></a></section>';
 }

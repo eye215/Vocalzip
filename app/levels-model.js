@@ -405,6 +405,39 @@ function areaOf(c,a){
 /** All eight areas, in the table's order. */
 function skills(db={},env={}){const c=context(db,env);return SKILLS.map(a=>areaOf(c,a));}
 function skill(db={},id,env={}){const a=skillOfId(id);return a?areaOf(context(db,env),a):null;}
+
+/* ---------- 기본기 추천 (오늘의 연습 picks it first; 다음 연습 lists it) ---------- */
+/** The exercise that measures step n of an area (the step's own kind: 음정 3–5 are the 스케일, 음역 2–5 its rising key). */
+const STEP_EXERCISE={breath:['breath-hiss'],pitch:['ear-follow','ear-follow','ear-scale','ear-scale','ear-scale'],
+  sustain:['voice-hum','voice-mum','voice-mum','voice-mum','voice-mum'],path:['loosen-siren'],
+  range:['voice-hum','ear-scale','ear-scale','ear-scale','ear-scale'],high:['voice-high'],vibrato:['voice-vibrato'],rhythm:['rhythm-ta']};
+const exerciseFor=(area,step)=>{const l=STEP_EXERCISE[area]||[];return l[Math.max(1,Math.min(step,l.length))-1]||'';};
+/** 을/를 after a word (its last syllable has a final consonant or not). */
+const objectJosa=w=>{const c=String(w).trim().slice(-1).charCodeAt(0);return c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28?'을':'를';};
+/**
+ * The ONE 기본기 area to work on today, with the exercise that measures its next step:
+ *   1. a step half-way — met on 1 or 2 different days, so one more day earns it (the most days first);
+ *   2. an area not measured yet (in the table's order);
+ *   3. the area measured longest ago.
+ * Passed over: an area measured today already, an area whose next step is due (it is given at the next finished set),
+ * all five steps earned, and an exercise the person turned off (options.isOn(exerciseId) false).
+ * → {area, title, step, say, count, need, exercise, last (date), why} | null. Pure; reads only the records.
+ */
+function focus(db={},env={},{isOn=()=>true}={}){
+  const c=context(db,env),out=[];
+  SKILLS.forEach((a,order)=>{
+    const s=areaOf(c,a);if(!s.next||s.next.due)return;
+    const ex=exerciseFor(a.id,s.next.step);if(!ex||!isOn(ex))return;
+    const ms=c.byArea.get(a.id)||[],last=ms.length?ms.at(-1).date:'';if(last===c.today)return;
+    const half=s.next.count>0&&s.next.count<s.next.need?s.next.count:0;
+    const why=half?a.title+' '+s.next.step+'단계까지 '+(s.next.need-half)+'일 남았어요 ('+s.next.need+'번 중 '+half+'번)':
+      !last?a.title+objectJosa(a.title)+' 아직 재지 않았어요':a.title+objectJosa(a.title)+' '+(dayNumber(c.today)-dayNumber(last))+'일 동안 재지 않았어요';
+    out.push({area:a.id,title:a.title,step:s.next.step,say:s.next.say,count:s.next.count,need:s.next.need,exercise:ex,last,why,rank:[half?0:last?2:1,-half,last,order]});
+  });
+  out.sort((x,y)=>x.rank[0]-y.rank[0]||x.rank[1]-y.rank[1]||x.rank[2].localeCompare(y.rank[2])||x.rank[3]-y.rank[3]);
+  if(!out.length)return null;
+  const {rank,...best}=out[0];return best;
+}
 /**
  * The steps that can be awarded now: [{area, title, step, earned, days}]. None while an area is in 기준 맞추는 중; a
  * step only after the one under it. Days measured during 기준 맞추는 중 count, so awarding starts by itself when the
@@ -504,6 +537,6 @@ function sheetText(db={},env={}){
 
 return {POINTS,LEVELS,HOW,PART_WORDS,RULES,SKILLS,STEPS,VIB,FAST_BPM,STATE_ID,STATE_KIND,STEP_KIND,STEP_PREFIX,
   levelStart,levelOf,ledger,dayPoints,level,stateRow,nextState,keep,
-  tableIsSafe,cleanMeasure,fromHold,measurements,skills,skill,awardable,award,valueText,
+  tableIsSafe,cleanMeasure,fromHold,measurements,skills,skill,awardable,award,valueText,STEP_EXERCISE,exerciseFor,focus,
   badges,sheetText,noteName,shift,dayNumber};
 });

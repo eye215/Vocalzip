@@ -78,7 +78,7 @@ test('ⓐ–ⓓ for 월별 (the default): what was done, what changed, what to p
   await expect(s2.locator('[data-gc-play]')).toHaveCount(2);                          // listen to both
   await expect(s2.locator('[data-listen-open]')).toHaveText('들어 보고 평가');
   await expect(s2.locator('[data-gc-between] summary')).toContainText('그 사이에 한 것');
-  // ⓒ 다음 연습: homework first, then the missed lesson point, the measured ones and the plans; top five and 더 보기.
+  // ⓒ 다음 연습: homework first, then the missed lesson point, 기본기, the measured ones and the plans; top five and 더 보기.
   await expect(page.locator('[data-gm-basis="next"]')).toContainText('오늘 기준');
   const items = section(page, 'next').locator(':scope > .gm-next > .gm-next-item');
   await expect(items).toHaveCount(5);
@@ -88,16 +88,21 @@ test('ⓐ–ⓓ for 월별 (the default): what was done, what changed, what to p
   await expect(items.nth(1).locator('[data-gm-chip]').first()).toHaveText('레슨 지적');
   await expect(items.nth(1)).toContainText('12–13마디 · 첫 음 미리 준비');
   await expect(items.nth(1).locator('a.gm-act')).toHaveAttribute('href', '#/song/s2');
-  await expect(items.nth(2).locator('[data-gm-chip]').first()).toHaveText('측정');
+  // 기본기: today's focus area, done in 오늘의 연습.
+  await expect(items.nth(2).locator('[data-gm-chip]').first()).toHaveText('기본기');
+  await expect(items.nth(2)).toContainText('기본기 · ');
+  await expect(items.nth(2).locator('a.gm-act')).toHaveAttribute('href', '#/practice-set');
+  await expect(items.nth(2).locator('a.gm-act')).toHaveText('오늘의 연습에서 하기');
+  await expect(items.nth(3).locator('[data-gm-chip]').first()).toHaveText('측정');
   await expect(section(page, 'next').locator('[data-gm-more] summary')).toHaveText(/^더 보기 \(\d+\)$/);
   await section(page, 'next').locator('[data-gm-more] summary').click();
   await expect(section(page, 'next').locator('[data-gm-more] [data-gm-chip="계획"]').first()).toBeVisible();
   // 목표에 담기 (a measured item): today's goal, the same one 전체 분석's 목표 담기 makes; pressed twice, still one.
-  const add = items.nth(2).locator('[data-gm-goal]');
+  const add = items.nth(3).locator('[data-gm-goal]');
   await expect(add).toHaveText('목표에 담기');
   await add.click();
-  await expect(items.nth(2).locator('[data-gm-goal]')).toHaveText('담았어요');
-  await expect(items.nth(2).locator('[data-gm-goal]')).toBeDisabled();
+  await expect(items.nth(3).locator('[data-gm-goal]')).toHaveText('담았어요');
+  await expect(items.nth(3).locator('[data-gm-goal]')).toBeDisabled();
   const goals = await page.evaluate(() => VZ.db.dailyGoals.filter(g => g.date === VZ.today() && g.sourceId === 'overall-growth').map(g => g.id));
   expect(goals).toHaveLength(1);
   expect(goals[0]).toMatch(/^overall-growth:2026-11-13:/);

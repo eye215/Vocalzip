@@ -8,6 +8,9 @@
  *   2. One exercise from each built-in group the person keeps on, in GROUPS order (목 풀기 → 호흡 → 발성 → 음감 → 리듬; a
  *      group is added by adding it to GROUPS and its exercises to CATALOG). Inside a group the exercises left ON
  *      rotate by the date: the same day always gives the same one, and none repeats until the list is through.
+ *      기본기 추천: the exercise of today's 기본기 focus (app/levels-model.js focus — the area one more day from its
+ *      next step, else one not measured yet, else the one measured longest ago) takes its group's place today
+ *      (step.focus says why), when it is on.
  *   3. The person's own steps from 오늘 연습 세트 (today's goals and 반복 목표, what a saved 요일/기본 세트 holds). One
  *      tagged for a group (prefs.replace) takes that group's place instead.
  *   4. 곡 (the group SONG, on unless turned off in 고르기), as 오늘 연습 세트 always ended: ONE automatic step
@@ -30,7 +33,7 @@
   const node=typeof module==='object'&&module.exports;
   const req=(path,name)=>node?require(path):root[name];
   const api=factory({set:()=>req('./practice-set-model.js','VzipPracticeSet'),next:()=>req('./growth-next-model.js','VzipGrowthNext'),
-    routines:()=>req('./goal-routines.js','VzipGoalRoutines')});
+    routines:()=>req('./goal-routines.js','VzipGoalRoutines'),levels:()=>req('./levels-model.js','VzipLevels')});
   if(node)module.exports=api;else root.VzipDailySet=api;
 })(typeof self!=='undefined'?self:globalThis,dep=>{
 'use strict';
@@ -166,6 +169,11 @@ function ownKey(db,step){
   return '';
 }
 const exerciseStep=e=>({kind:'exercise',id:'ex-'+e.id,exercise:e.id,group:e.group,title:e.title,why:e.why,minutes:e.minutes,mic:!!e.mic});
+/** Today's 기본기 focus (app/levels-model.js focus), among the exercises the person keeps on. null without one. */
+function focusOf(db,today,pf=prefs(db)){
+  const L=dep.levels();if(!L?.focus)return null;
+  try{return L.focus(db,{today},{isOn:id=>{const e=exercise(id);return !!e&&!pf.off[id]&&!pf.groupsOff[e.group];}});}catch{return null;}
+}
 /** 숙제 and 놓친 레슨 지적 for today: one of each first, then more of either, NEXT_MAX in all. */
 function nextItems(db,today){
   const N=dep.next();if(!N)return [];
@@ -218,11 +226,12 @@ function build(db={},options={}){
     const songs=new Set([...lead,...own.filter(s=>s.kind!=='record')].map(s=>s.songId).filter(Boolean));
     own=own.filter(s=>s.kind!=='record'||songs.has(s.songId));
   }
-  const groups=[];
+  const groups=[],f=focusOf(db,today,pf);
   for(const g of GROUPS){
     if(pf.groupsOff[g.id])continue;
     const tagged=own.filter(s=>pf.replace[ownKey(db,s)]===g.id);
     if(tagged.length){own=own.filter(s=>!tagged.includes(s));groups.push(...tagged.map(s=>({...s,group:g.id,replaces:g.id})));continue;}
+    if(f&&exercise(f.exercise)?.group===g.id){groups.push({...exerciseStep(exercise(f.exercise)),focus:{area:f.area,title:f.title,step:f.step,why:f.why}});continue;}
     const e=pick(pf,g.id,today);
     if(e)groups.push(exerciseStep(e));
   }
@@ -257,7 +266,7 @@ const shortTitle=s=>{const k=KIND[s.kind];return k&&String(s.title).startsWith(k
  */
 function timeline(steps,session=null){
   const run=!!session&&session.phase!=='summary';
-  return list(steps).map((s,i)=>({id:s.id,title:shortTitle(s),label:labelOf(s),minutes:Number(s.minutes)||0,mic:!!s.mic,optional:!!s.optional,
+  return list(steps).map((s,i)=>({id:s.id,title:shortTitle(s),label:labelOf(s)+(s.focus?' · 추천':''),minutes:Number(s.minutes)||0,mic:!!s.mic,optional:!!s.optional,
     state:!session?(i===0?'next':'left'):s.skipped?'skipped':s.done?'done':run&&i===session.index?'next':'left'}));
 }
 const progress=session=>{const n=session.steps.filter(s=>s.done||s.skipped).length;return {done:n,total:session.steps.length};};
@@ -437,7 +446,7 @@ const runsOn=(db,date)=>live(db,'practices').filter(p=>p.dailySet&&p.date===date
 
 return {GROUPS,SONG,CATALOG,NEXT_MAX,NEXT_MINUTES,TAKE_SECONDS,MAX_STEPS,PREFS_ID,PREFS_KIND,groupOf,exercise,exercisesOf,
   prefs,cleanPrefs,setExercise,setGroup,savePrefs,resetPrefs,rotation,pick,dayNumber,
-  ownKey,nextItems,ownSteps,build,isOwn,totalMinutes,modeOf,labelOf,shortTitle,timeline,progress,finishItem,stop,
+  ownKey,nextItems,focusOf,ownSteps,build,isOwn,totalMinutes,modeOf,labelOf,shortTitle,timeline,progress,finishItem,stop,
   word,holdStart,holdTick,holdResult,comfort,baseNote,notesFor,noteTags,syllableOf,adapt,noteName,
   rowId,measuresOf,summary,save,runsOn};
 });
