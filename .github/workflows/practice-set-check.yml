@@ -6,6 +6,8 @@ on:
       - 'app/daily-set*'
       - 'app/daily-measure*'
       - 'app/levels*'
+      - 'app/roadmap*'
+      - 'app/practice-tips.js'
       - 'app/growth-next-model.js'
       - 'app/guided-practice.js'
       - 'app/voice-path-model.js'
@@ -20,6 +22,7 @@ on:
       - 'tests/daily-set*'
       - 'tests/daily-measure*'
       - 'tests/levels*'
+      - 'tests/roadmap*'
       - 'tests/helpers/levels-fixture.cjs'
       - '.github/workflows/practice-set-check.yml'
 permissions:
@@ -35,7 +38,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/practice-set-model.test.cjs tests/daily-set-model.test.cjs tests/daily-measure-model.test.cjs tests/levels-model.test.cjs tests/goal-routines.test.cjs tests/practice-time.test.cjs
+      - run: node --test tests/practice-set-model.test.cjs tests/daily-set-model.test.cjs tests/daily-measure-model.test.cjs tests/levels-model.test.cjs tests/roadmap-model.test.cjs tests/goal-routines.test.cjs tests/practice-time.test.cjs
       - run: npx playwright install --with-deps chromium webkit
       # 오늘의 연습: the set list and the person's own steps (practice-set), the card, the doing screen, 고르기 and the takes (daily-set).
       # 단계: the line on 오늘, the 단계 page, the step a finished set earns, the kept rows through a sync (levels).

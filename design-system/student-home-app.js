@@ -47,10 +47,10 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   if(homework)return {kind:'homework',title:homework.title,badge:'숙제',line:'오늘 해 볼 숙제예요',label:'숙제 '+homework.title+' 보기',action:()=>nav('#/homework')};
   if(songs[0])return {kind:'practice',title:'이어서 연습하기',badge:'',line:songs[0].title,label:songs[0].title+' 이어서 연습하기',action:()=>nav('#/record?song='+encodeURIComponent(songs[0].id))};
   if(l)return lessonCard('');
-  // Nothing scheduled or practised: suggest one practice in 노래 연습실 instead of a second "오늘의 목표 정하기" (the
+  // Nothing scheduled or practised: suggest one practice (done in 오늘의 연습) instead of a second "오늘의 목표 정하기" (the
   // empty goal list below already offers that). A suggestion already in today's goals is not repeated; then simply record.
   const rec=s.recommendationCandidates.find(c=>c.source==='recommendation'&&!(s.goals||[]).some(g=>g.source===c.source&&g.sourceId===c.sourceId));
-  if(rec)return {kind:'recommend',title:rec.title,badge:'추천',line:'연습실에서 시작해요',label:'다음 연습 '+rec.title,action:()=>nav('#/practice-room')};
+  if(rec)return {kind:'recommend',title:rec.title,badge:'추천',line:'오늘의 연습에서 해요',label:'다음 연습 '+rec.title,action:()=>nav('#/practice-set')};
   return {kind:'record',title:'지금 녹음하기',badge:'',line:'짧게라도 한 번 불러 봐요',label:'지금 녹음하기',action:()=>nav('#/record')};
  }
  /* Home summary rows: next lesson (unless it is already the 지금 할 것 card), next stage, and a needs-attention row
@@ -72,9 +72,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   return [...new Set(ids)].filter(id=>V.song(id)).slice(0,3).map(id=>({id,title:V.song(id).title}));
  }
  /* 연습하기 (성장 개편 안 B, phase 4): the things you do. First the 오늘의 연습 card (it was the 오늘 연습 세트 row), then
-  * one row each with its state: 매일 보이스 체크 · 노래 연습실 · 보컬 트레이닝. Read-only. */
- const roomRows=()=>(V.db.practices||[]).filter(p=>p?.practiceRoom&&!p.practiceRoom.demo&&!(V.db.deleted?.practices||[]).includes(p.id));
- const guidedToday=()=>(V.db.practices||[]).filter(p=>p?.guidedExerciseKey&&p.date===today()&&!(V.db.deleted?.practices||[]).includes(p.id)).length;
+  * one row each with its state: 매일 보이스 체크 · 내 로드맵. Read-only. */
  function practiceRows(){
   const rows=[],set=V.practiceSetEntry?.(),check=V.voiceCheck?.status?.();
   // 오늘의 연습: a card (timeline · progress · one button), not a row. Its button starts or carries on today's set.
@@ -83,30 +81,13 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   // Not done yet: straight into the 30-second check, as the home card did. Done: the page with today's result and the last 30 days.
   if(check)rows.push({key:'voice-check',icon:'\ue802',title:'매일 보이스 체크',state:check.line,tone:check.done?'done':'',
    label:'매일 보이스 체크, '+check.line+(check.done?', 결과 보기':', 30초 체크 시작하기'),action:()=>V.voiceCheck.status().done?nav('#/voice-check'):V.voiceCheck.open()});
-  const rooms=roomRows(),roomToday=rooms.filter(p=>p.date===today()).length;
-  rows.push({key:'practice-room',icon:'\ue75c',title:'노래 연습실',tone:roomToday?'done':'',
-   state:(roomToday?'오늘 '+roomToday+'개 제출':'오늘 아직')+' · '+(rooms.length?'모두 '+rooms.length+'개 제출':'9단계 과제'),action:()=>nav('#/practice-room')});
-  if(V.guidedRecommendations){const done=guidedToday();rows.push({key:'training',icon:'\ueca8',title:'보컬 트레이닝',tone:done?'done':'',
-   state:(done?'오늘 '+done+'번':'오늘 아직')+' · 따라 하는 발성 연습',action:trainingSheet});}
+  // 내 로드맵 (it replaces 노래 연습실's fixed 9 steps and 보컬 트레이닝): what to fix lately, from the recordings.
+  const road=V.roadmap?.();
+  if(road)rows.push({key:'roadmap',icon:'\ue31a',title:'내 로드맵',state:V.roadmapSummary?.(road)||'',label:'내 로드맵, '+(V.roadmapSummary?.(road)||''),action:()=>nav('#/roadmap')});
   return rows;
  }
- /* 보컬 트레이닝: the exercises to follow along (app/guided-practice.js) — 숙제 · 연습 결과 · 측정으로 고른 것, at most
-  * three; with none yet, the plain 롱톤 exercise. Each opens 연습 따라 하기. */
  /** 큰 단계 next to the streak (app/levels.js): "Lv 3 · 이름" and how far to the next level. Read-only. */
  const levelLine=()=>V.levels?.home?.()||null;
- function trainingSheet(){
-  V.sheet({title:'보컬 트레이닝',
-   body:'<div class="vz-training-sheet" data-training-sheet><p class="vz-plan-intro">따라 하면서 하는 발성 연습이에요. 아프거나 목이 쉬었으면 쉬어 주세요.</p><div data-training-list><p class="muted" role="status">연습을 고르는 중…</p></div></div>',
-   foot:'<a class="btn secondary block" href="#/practices">연습 기록 보기</a>',
-   onMount:el=>{
-    const list=el.querySelector('[data-training-list]');
-    const basic='<div class="gp-recommendations"><h3>기본 연습</h3><div class="gp-rec" data-guided-key="analysis:maintain"><div class="gp-rec-copy"><strong>롱톤 유지 연습</strong><small>편안한 음역에서 일정한 소리 유지 · 약 5분 · 타이머 안내</small></div>'+
-     '<a href="#/guided-practice/'+encodeURIComponent('analysis:maintain')+'" aria-label="롱톤 유지 연습 따라 하기">따라 하기 <i class="ph ph-arrow-up-right"></i></a></div></div>'+
-     '<p class="vz-plan-help">숙제가 생기거나 분석한 녹음이 쌓이면 내게 맞는 연습을 여기에 골라 드려요.</p>';
-    V.guidedRecommendations({date:today()}).then(rows=>{if(list.isConnected)list.innerHTML=rows.length?V.guidedRecommendationCards(rows,{showStart:true}):basic;})
-     .catch(()=>{if(list.isConnected)list.innerHTML=basic;});
-   }});
- }
  function notices(){
   const s=state(),tasks=s.recommendationCandidates.filter(t=>t.source==='homework');
   const content=(s.lesson?'<a class="item" href="#/lesson/'+esc(s.lesson.id)+'"><span>'+esc(dayLabel(s.lesson.date))+' · 다음 레슨</span></a>':'')+

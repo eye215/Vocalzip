@@ -4,17 +4,20 @@ require('./legacy-session-mode.cjs')(test,{approvedHome:true});
 
 function sampleWav(){const rate=16000,frames=rate,bytes=44+frames*2,b=Buffer.alloc(bytes);b.write('RIFF',0);b.writeUInt32LE(bytes-8,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(rate,24);b.writeUInt32LE(rate*2,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(frames*2,40);for(let i=0;i<frames;i++)b.writeInt16LE(Math.round(7000*Math.sin(i*440*2*Math.PI/rate)),44+i*2);return b;}
 
-// v5 (one door per job): 노래 연습실 opens from 오늘 › 연습하기 only; 설정 no longer repeats it.
-test('practice room opens from 오늘 › 연습하기, and 설정 no longer repeats it',async({page})=>{
+// 내 로드맵 took the place of 노래 연습실 on 오늘 › 연습하기 (its fixed 9 steps are gone); the room's submissions stay and open
+// from 내 로드맵; 설정 does not repeat it.
+test('노래 연습실: no row on 오늘 any more — its submissions open from 내 로드맵, and 설정 does not repeat it',async({page})=>{
  await fakeR2(page);await boot(page);
  await expect(page.locator('.vz-room-entry')).toHaveCount(0);
  await page.evaluate(()=>{location.hash='#/settings';});
  await expect(page.locator('[data-settings-group="practice"]')).toBeVisible();
  await expect(page.locator('.vz-settings a[href="#/practice-room"]')).toHaveCount(0);
  await page.evaluate(()=>{location.hash='#/home';});
- const entry=page.locator('.vz-student-home [data-home-practice] [data-row="practice-room"]');
- await expect(entry).toBeVisible();
- await entry.click();
+ await expect(page.locator('.vz-student-home [data-home-practice] [data-row="roadmap"]')).toBeVisible();
+ await expect(page.locator('.vz-student-home [data-home-practice] [data-row="practice-room"]')).toHaveCount(0);
+ await page.evaluate(()=>VZ.change(d=>{d.practices.push({id:'practice-room:r1',date:'2026-11-01',minutes:5,practiceMode:'training',categoryLabel:'노래 연습실',practiceRoom:{task:'melody',chapterId:'pitch-rhythm'},created:1});},{silent:true}));
+ await page.evaluate(()=>{location.hash='#/roadmap';});
+ await page.locator('[data-rm-room]').click();
  await expect(page).toHaveURL(/#\/practice-room$/);
  await expect(page.locator('iframe.vzip-practice-room-frame')).toBeVisible();
 });
