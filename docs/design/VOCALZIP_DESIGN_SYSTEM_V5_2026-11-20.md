@@ -77,6 +77,25 @@ Below the rows: primary 전체 녹음 보기, secondary 다른 자료 가져오�
 
 **Import review (확인 화면 before 가져오기)** (built 2026-11-22): in sight stay the status filters (전체 · 조건 충족 · 중복 의심 …), 전체 선택 · 선택 해제, the file rows and the sticky `선택한 N개 가져오기`. The tools that act on many files at once (중복 제외 · 추천곡 일괄 승인 · 레슨 연결 일괄 승인 · 곡별 묶어 보기, both "한 번에 지정" selects and the 연습 기록 checkbox) sit behind one fold `한 번에 정하기`, drawn as the V4 List filter row (`#F3ECFF`, R16, 48px, 0 14px, 13/18/600 `#475467`). The closed fold says what its tools would act on in accent 13/600 (e.g. `추천곡 3개 · 같은 날 레슨 2개`; with nothing to suggest, `유형 · 곡 · 연습 기록`). It stays as the person left it when the list redraws. Before, all of these were two rows of 12 chips and two selects above the files. Defaults (연습 기록 on, per-file type and song) are unchanged.
 **After a new recording** (`#/record`, dark recorder): checked, no change. The steps are already short: 녹음 → 미리 듣기 → 저장, then 새 녹음 · 연습 기록 (or 레슨으로 / 오늘로) · 곡 보기.
+## Feature map (checked 2026-11-22)
+
+Read from the code, tab by tab. "Built" says what changed on 2026-11-22; everything else is a finding for a later step.
+
+**오늘 · 연습**
+- 오늘의 연습 (`#/practice-set`), 매일 보이스 체크 (`#/voice-check`), 노래 연습실 (`#/practice-room`), 따라 하기 (`#/guided-practice`), 단계 (`#/levels`), 연습 제안 (`#/practice-review`) all start from 오늘 › 연습하기; 연습 시간 (`#/practice-stats`) opens from 성장 › 이번 달.
+- Built: 매일 보이스 체크 now counts its practice minutes from its own guided clock (30 seconds), never from the saved recording's length (product rule 4). The number stays 0.5 minutes for a full check.
+- Built: 따라 하기's finish screen has `오늘로` next to `연습 기록 보기`, as 오늘의 연습's finish screen already had.
+- Later: three things are called "다음 연습" (the `#/practice-review` title, the 지금 할 것 suggestion that opens 노래 연습실, the 지난 흐름 section). The same exercise is called 보컬 트레이닝, 연습 따라 하기 and 따라 하기. Renames wait, because tests and the owner's habit use these words.
+
+**내 곡**
+- 곡별 (`#/songs`), 곡 상세 (`#/song/<id>`), 전체 녹음 (`#/library`), 녹음 재생 (`#/recording/<id>`), 가져오기 (`#/import-hub`), 곡 확인 (`#/song-suggest`), 처리 내역 (`#/processing-log`), 나의 공연 (`#/performances`, `#/show/<id>`).
+- The old 보관함 word still appears only in scripts loaded by `legacy.html` (not the app); no change.
+- Later: the 전체 녹음 page title reads 내 곡; the old `VZ.importSheet` has no caller in the app (tests still open it, so it stays).
+
+**기록**
+- 달력 (`#/calendar`), 레슨 (`#/lessons`, `#/lesson/<id>`), 숙제 (`#/homework`), 연습 기록 (`#/practices`), AI 숙제 후보 (`#/lesson-ai/<id>`).
+- Built: 달력 › 날짜 › + (`기록 추가`) offers 숙제 next to 나의 공연 · 레슨 일정 · 연습 기록; before, homework could only be added from 숙제 or a lesson page.
+- Later: the add actions use several words (레슨 일정 추가 / 일정 추가, 연습 기록 / 연습 기록 추가); the lesson page has two feedback buttons (tests still use both).
 ## Component rules added in v5
 
 - **One definition per component.** Cards, chips, tab bars, list rows and buttons are defined once in `design-system/components.css`. Screen CSS may position them but may not restyle colour, radius or type.
@@ -111,3 +130,4 @@ Each step is its own pull request. A step is "done" only after the automated che
 - 2026-11-22: import review: bulk tools behind one 한 번에 정하기 fold.
 - 2026-11-22: list loading rows (VZ.loadingRows) on 전체 녹음 and the lesson list.
 - 2026-11-22: loading rows on more list screens; empty text split into title + helper; error box with 다시 시도; tap targets under 44px raised.
+- 2026-11-22: feature map; voice check minutes from its own clock; 오늘로 after 따라 하기; 숙제 in 기록 추가.

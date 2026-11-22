@@ -146,6 +146,18 @@ test('Import hub takes you to the next steps after an upload: choose songs, then
   await expect(result.getByRole('button', {name:'다른 자료 가져오기'})).toBeVisible();
 });
 
+// v5 flows: 기록 › 날짜 › + offers every record kind of that tab, homework too (it was only on 숙제 and the lesson page).
+test('Calendar add menu offers 숙제 next to 레슨 일정 and 연습 기록 and opens the homework sheet', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/calendar');
+  await page.locator('.vz-calendar-day-head [data-add]').click();
+  const kinds = await page.locator('[data-calendar-add]').evaluateAll(b => b.map(x => x.dataset.calendarAdd));
+  expect(kinds, JSON.stringify(kinds)).toEqual(['stage', 'lesson', 'practice', 'homework']);
+  await page.locator('[data-calendar-add="homework"]').click();
+  await expect(sheet(page)).toBeVisible();
+  await expect(sheet(page)).toContainText('숙제');
+});
+
 test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 
 test('Vocal lab stays a standalone screen and uses selected recordings for reports', async ({page}) => {
