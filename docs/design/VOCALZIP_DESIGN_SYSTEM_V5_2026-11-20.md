@@ -85,12 +85,12 @@ Read from the code, tab by tab. "Built" says what changed on 2026-11-22; everyth
 - 오늘의 연습 (`#/practice-set`), 매일 보이스 체크 (`#/voice-check`), 노래 연습실 (`#/practice-room`), 따라 하기 (`#/guided-practice`), 단계 (`#/levels`), 연습 제안 (`#/practice-review`) all start from 오늘 › 연습하기; 연습 시간 (`#/practice-stats`) opens from 성장 › 이번 달.
 - Built: 매일 보이스 체크 now counts its practice minutes from its own guided clock (30 seconds), never from the saved recording's length (product rule 4). The number stays 0.5 minutes for a full check.
 - Built: 따라 하기's finish screen has `오늘로` next to `연습 기록 보기`, as 오늘의 연습's finish screen already had.
-- Later: three things are called "다음 연습" (the `#/practice-review` title, the 지금 할 것 suggestion that opens 노래 연습실, the 지난 흐름 section). The same exercise is called 보컬 트레이닝, 연습 따라 하기 and 따라 하기. Renames wait, because tests and the owner's habit use these words.
+- Built: the `#/practice-review` screen title is `다음 연습 추천`, its name in the 2026-11-09 guide (보컬 트레이닝 list); it read `다음 연습`, the same as 성장's own 다음 연습 list. Kept on purpose: 보컬 트레이닝 is the group of practice doors and `연습 따라 하기` is the screen inside it (approved in the 2026-11-09 guide), and `따라 하기` is the button verb.
 
 **내 곡**
 - 곡별 (`#/songs`), 곡 상세 (`#/song/<id>`), 전체 녹음 (`#/library`), 녹음 재생 (`#/recording/<id>`), 가져오기 (`#/import-hub`), 곡 확인 (`#/song-suggest`), 처리 내역 (`#/processing-log`), 나의 공연 (`#/performances`, `#/show/<id>`).
 - The old 보관함 word still appears only in scripts loaded by `legacy.html` (not the app); no change.
-- Later: the 전체 녹음 page title reads 내 곡; the old `VZ.importSheet` has no caller in the app (tests still open it, so it stays).
+- Kept on purpose: the 전체 녹음 page title reads 내 곡 (v4 IA: the heading is the tab, the `곡별 | 전체 녹음` switch names the view; pinned by tests). The old `VZ.importSheet` has no caller in the app; tests still open it, so it stays.
 
 **기록**
 - 달력 (`#/calendar`), 레슨 (`#/lessons`, `#/lesson/<id>`), 숙제 (`#/homework`), 연습 기록 (`#/practices`), AI 숙제 후보 (`#/lesson-ai/<id>`).
@@ -131,3 +131,4 @@ Each step is its own pull request. A step is "done" only after the automated che
 - 2026-11-22: list loading rows (VZ.loadingRows) on 전체 녹음 and the lesson list.
 - 2026-11-22: loading rows on more list screens; empty text split into title + helper; error box with 다시 시도; tap targets under 44px raised.
 - 2026-11-22: feature map; voice check minutes from its own clock; 오늘로 after 따라 하기; 숙제 in 기록 추가.
+- 2026-11-22: 다음 연습 추천 screen title.
