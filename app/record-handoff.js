@@ -5,6 +5,8 @@
  *     (window.vzipCloudDeviceSend / vzipCloudDeviceListen in cloud-sync.js — Realtime broadcast, nothing stored);
  *   · or when the app is opened on the phone within HANDOFF_MINUTES: the request is kept as ONE practicePlans row
  *     {id:'record-handoff', kind:'record-handoff', songId, at, from, fromName} that syncs like other plans.
+ * The phone opens the recorder with the song at once (2026-11-23), unless it is on the recorder already or has a sheet
+ * open: then the line waits at the top.
  * A device never offers its own request back to itself; once used or closed it is not offered again on that device. */
 (()=>{
 'use strict';
@@ -40,9 +42,24 @@ document.addEventListener('click',e=>{const b=e.target.closest?.('[data-record-h
 /* ---------- the phone: one line at the top ---------- */
 let shown=null;
 function hide(){shown?.remove();shown=null;}
+/** Is it safe to take the person straight to the recorder? Not while they are already on it (a take may be running)
+ * nor while a sheet is open, a form is half typed or the app is busy (the same signs core.js waits on): then the line at the top waits for a tap instead. */
+const canOpen=()=>{
+  if(/^#\/record/.test(location.hash)||document.querySelector('.sheet-back')||V.isBusy?.())return false;
+  const main=document.getElementById('view'),el=document.activeElement;
+  return !main?.dataset.dirty&&!(el&&el.matches?.('input,textarea,select'));
+};
 function offer(r){
   if(!fresh(r)||(shown&&shown.dataset.at===String(r.at)))return;
   hide();
+  // Owner, 2026-11-23: "녹음이라도 띄우게" — open the recorder with the song at once. The mic still takes one tap
+  // there: iOS does not let a web app start recording by itself.
+  if(canOpen()){
+    markSeen(r.at);
+    V.nav('#/record?song='+encodeURIComponent(r.songId));
+    V.toast?.((r.fromName||'다른 기기')+'에서 고른 곡이에요. 마이크를 누르면 녹음돼요.');
+    return;
+  }
   const el=document.createElement('div');el.className='rh-bar';el.dataset.recordHandoffBar='';el.dataset.at=String(r.at);el.setAttribute('role','status');
   el.innerHTML='<a class="rh-go" href="#/record?song='+encodeURIComponent(r.songId)+'" data-rh-go><i class="ph-fill ph-microphone" aria-hidden="true"></i><span><small>'+esc(r.fromName||'다른 기기')+'에서 고른 곡</small><strong>'+esc(V.song(r.songId).title)+'</strong></span><b>녹음 시작</b></a>'+
     '<button type="button" class="rh-x" data-rh-close aria-label="닫기"><i class="ph ph-x" aria-hidden="true"></i></button>';
