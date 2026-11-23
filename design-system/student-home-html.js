@@ -142,7 +142,7 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-event-heading h2{min-width:0;}
 #vocalzip-refined-preview .vz-listen{min-width:0;white-space:normal;}
 #vocalzip-refined-preview .vz-event-content,#vocalzip-refined-preview .vz-event-heading,#vocalzip-refined-preview .vz-title,#vocalzip-refined-preview .vz-shortcut>span{min-width:0;}
-#vocalzip-refined-preview .vz-event h2{overflow-wrap:anywhere;line-height:1.33333333;}
+#vocalzip-refined-preview .vz-event h2{word-break:keep-all;overflow-wrap:anywhere;line-height:1.33333333;}
 #vocalzip-refined-preview .vz-card h2{line-height:1.44444444;}
 #vocalzip-refined-preview .vz-song{aspect-ratio:auto;}
 #vocalzip-refined-preview .vz-song h3{line-height:1.27777778;}

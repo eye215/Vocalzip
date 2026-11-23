@@ -211,7 +211,7 @@ function card(host, songId) {
   const paint = () => {
     if (!host.isConnected || !VZ.song(songId)) { window.removeEventListener('vzip:data-changed', paint); window.removeEventListener('vzip:score-points', paint); return; }
     const on = P.active(pointsOf(songId)), runs = runsOf(songId), last = runs.at(-1);
-    const sub = on.length ? '지적 ' + on.length + '개' + (last ? ' · 마지막 체크 ' + VZ.dateLabel(last.date) : ' · 아직 체크 전') : '레슨에서 들은 지적을 마디별로 적어 두고, 부를 때마다 지켰는지 체크해요.';
+    const sub = on.length ? '지적 ' + on.length + '개' + (last ? ' · 마지막 체크 ' + VZ.dateLabel(last.date) : ' · 아직 체크 전') : '마디에 적어 두고 부를 때 체크해요';
     host.innerHTML = '<section class="vz-pts-card" data-pts-card aria-label="레슨 지적 체크">' +
       '<button type="button" class="vz-pts-card-head" data-pts-manage aria-label="레슨 지적 체크 · ' + esc(sub) + '"><span class="vz-pts-card-icon"><i class="ph ph-chat-circle-text" aria-hidden="true"></i></span>' +
       '<span class="vz-pts-card-main"><strong>레슨 지적 체크</strong><small data-pts-card-sub>' + esc(sub) + '</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +

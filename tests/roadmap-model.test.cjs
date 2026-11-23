@@ -32,7 +32,7 @@ test('too few recordings, or nothing past its line: the 기본기 focus (an area
   const none = R.build({db:db(), today:TODAY, tips:{enough:false, count:2, tips:[]}});
   assert.deepEqual(none.focus.map(f => [f.area, f.from, f.exercise]), [['breath', 'skill', 'breath-hiss']]);
   assert.equal(none.focus[0].why, '호흡을 아직 재지 않았어요');
-  assert.match(none.areas.find(a => a.id === 'pitch').line, /^녹음이 3개 넘게 분석되면 알 수 있어요/);
+  assert.match(none.areas.find(a => a.id === 'pitch').line, /^녹음에서 재요 · /);
   assert.equal(R.summary(none), '기본기 · 호흡');
   const fine = R.build({db:db(), today:TODAY, tips:{enough:true, count:8, measured:['into', 'wob', 'vib', 'phr'], tips:[]}});
   assert.equal(fine.focus[0].from, 'skill');
