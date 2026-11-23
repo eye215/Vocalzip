@@ -112,7 +112,7 @@ let hubQuery = '';
 function filterSongs(host) {
   const q = hubQuery.trim().toLowerCase(), rows = [...host.querySelectorAll('[data-hub-songs] [data-hub-song]')];
   let shown = 0;
-  for (const a of rows) { const hit = !q || (a.dataset.hubTitle || '').toLowerCase().includes(q); a.hidden = !hit; if (hit) shown++; }
+  for (const a of rows) { const hit = !q || (a.dataset.hubTitle || '').toLowerCase().includes(q); (a.closest('[data-hub-card]') || a).hidden = !hit; if (hit) shown++; }
   const none = host.querySelector('[data-hub-search-empty]');
   if (none) none.hidden = shown > 0;
 }
@@ -159,7 +159,12 @@ async function mountAnalysis(host) {
     const part = (inside ? ' (' + inside + ' 포함)' : '') + (!practice && t.practiceAnalysed ? ' · 연습 ' + t.practiceAnalysed + '개는 빼고 봐요' : '');
     // Recordings of the song still to analyse are said, never counted as takes of the verdict.
     const sub = '분석한 녹음 ' + counted + '개' + part + (t.count > t.analysed ? ' · 분석 전 ' + (t.count - t.analysed) + '개' : '') + (t.latestAnalysed ? ' · 최근 ' + shortDate(t.latestAnalysed) : '');
-    return row('#/vocal-lab/' + encodeURIComponent(s.id), 'waveform', s.title, sub, ' data-hub-song="' + e(s.id) + '" data-hub-state="' + state + '" data-hub-title="' + e(s.title) + '"', chip(state, v?.word || STATE_HOLD));
+    // 성장 v2 곡 카드: the word, ONE line of what changed, the first and the latest take to play, the count and the day.
+    const line = v?.text ? '<span class="gs-line" data-hub-line>' + e(v.text) + '</span>' : '';
+    const play = (id, label, date) => id ? '<button type="button" class="gs-play" data-hub-play="' + e(id) + '" aria-label="' + e(s.title + ' ' + label + ' 녹음 듣기') + '"><i class="ph-fill ph-play" aria-hidden="true"></i><span>' + label + (date ? ' · ' + e(shortDate(date)) : '') + '</span></button>' : '';
+    const plays = v?.firstId && v?.lastId ? '<div class="gs-plays">' + play(v.firstId, '처음', v.item?.firstDate) + play(v.lastId, '최근', v.item?.lastDate) + '</div><div class="gs-player" data-hub-player></div>' : '';
+    return '<div class="gs-card" data-hub-card data-state="' + state + '"><a class="item gs-main" href="#/vocal-lab/' + encodeURIComponent(s.id) + '" data-hub-song="' + e(s.id) + '" data-hub-state="' + state + '" data-hub-title="' + e(s.title) + '">' +
+      '<span class="item-main"><span class="growth-hub-title"><span class="item-title">' + e(s.title) + '</span>' + chip(state, v?.word || STATE_HOLD) + '</span>' + line + '<span class="item-sub">' + e(sub) + '</span></span>' + chev + '</a>' + plays + '</div>';
   };
   const waitingRow = s => {
     const t = bySong.get(s.id), part = [t.practice ? '연습 ' + t.practice + '개' : '', t.video ? '영상 ' + t.video + '개' : ''].filter(Boolean).join(' · ');
@@ -175,7 +180,7 @@ async function mountAnalysis(host) {
     (practised ? '<label class="gm-switch growth-hub-switch"><input type="checkbox" role="switch" data-hub-practice' + (practice ? ' checked' : '') + '><span>연습 녹음 포함</span></label>' : '');
   const main = '<h2 class="sec">곡별 변화 <span class="small muted" style="font-weight:500">분석한 곡 ' + analysed.length + '</span></h2>' +
     (analysed.length ? (tools ? '<div class="growth-hub-tools">' + tools + '</div>' : '') +
-        '<div class="list icons growth-hub-list" data-hub-songs>' + analysed.map(songRow).join('') + '</div>' +
+        '<div class="gs-cards" data-hub-songs>' + analysed.map(songRow).join('') + '</div>' +
         '<p class="growth-hub-note" data-hub-search-empty hidden>그 제목의 곡이 없어요.</p>' +
         '<p class="small muted growth-hub-caption" data-hub-rule-note>한마디는 그 곡의 처음과 최근 녹음을 같은 방법으로 잰 것끼리 견준 결과예요. 이번 달과 같은 기준이에요.' +
         (practised ? (practice ? ' 노래 연습실·트레이닝 연습 녹음도 넣어 견줘요.' : ' 노래 연습실·트레이닝 연습 녹음은 빼고 견줘요.') : '') + '</p>'
@@ -191,6 +196,15 @@ async function mountAnalysis(host) {
     '<p class="small muted growth-disclaimer">수치는 음성 측정에 기반한 참고 정보예요. 분석하지 않은 녹음에는 결과를 만들어 넣지 않아요.</p>';
   const q = host.querySelector('[data-hub-q]');
   if (q) { q.oninput = () => { hubQuery = q.value; filterSongs(host); }; filterSongs(host); }
+  // ▶ 처음 · 최근: the take plays under its card (one at a time).
+  let player = null;
+  host.querySelectorAll('[data-hub-play]').forEach(b => b.onclick = () => {
+    const item = items.find(x => x.id === b.dataset.hubPlay);
+    if (!item) { V.toast('녹음을 찾을 수 없어요. 지워졌거나 다른 기기에만 있어요.', 'error'); return; }
+    player?.destroy?.(); host.querySelectorAll('[data-hub-player]').forEach(h => h.replaceChildren());
+    player = M.player(b.closest('[data-hub-card]').querySelector('[data-hub-player]'), item, {});
+    player.play?.();
+  });
   const sw = host.querySelector('[data-hub-practice]');
   if (sw) sw.onchange = async () => { V.growthSong.setPractice(sw.checked); await mountAnalysis(host); host.querySelector('[data-hub-practice]')?.focus({preventScroll:true}); };
 }

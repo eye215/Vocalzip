@@ -28,6 +28,9 @@
 // 성장 개편 안 B, phase 2 (2026-11-19) moved screens only, no text: 전체 · 월별 분석 and 주간 요약 are the sub-page 지난
 // 흐름 (#/growth-flow?period=all|month|week) under the new 이번 달 tab, 보컬 트레이닝 is part of 연구소 (#/growth-lab). This
 // spec reads them at their new addresses; the snapshot file is byte-for-byte what it was.
+// 성장 v2 B (2026-11-23): the 곡 tab rows became cards; only analysisTab moved, and only by added lines: under each song's
+// word, one line of what changed ("좋아진 지표: …", "처음과 최근이 비슷해요", or why it is not compared) and, when the song has
+// a first and a latest analysed take, their two play buttons ("처음 · 9월 20일", "최근 · 11월 11일"). No number moved.
 // 성장 개편 안 B, phase 4 (2026-11-19): no number or verdict moved. What changed in the snapshot, all of it:
 //  - labels renamed to ONE name, "다음 연습": 전체 분석 "다음에 연습할 것" → "다음 연습"; 월별 분석 (each month) "추천 연습" →
 //    "다음 연습", its jump "추천·계획" → "다음 연습", and "실측 변화에 기반한 규칙형 추천입니다. …" → "실측 변화에 기반해

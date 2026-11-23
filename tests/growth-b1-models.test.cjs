@@ -51,7 +51,7 @@ test('the snapshot of every 결과 리포트 number is byte-for-byte what it was
     tips:[['음정 안정성 (롱톤) 연습', '지속음 흔들림 ±11 cent · 최근 8개 중간값 · 권장 8분'], ['음정 정확도 연습', '음정 오차 ±14.5 cent · 최근 8개 중간값 · 권장 10분']],
     roomSubmissions:1, voiceChecks:3, practiceSet:'7개 · 약 28분', trainingTakes:['vc3', 'vc2', 'vc1', 't1', 'et', 'ex', 't2']});
   for (const zone of Object.keys(parsed)) assert.equal(JSON.stringify(parsed[zone]).includes('보컬 연구소'), false);
-  assert.equal(crypto.createHash('sha256').update(file).digest('hex'), '493381158365fd547a225324c2535bb8327497d4f936b842ceb79cec15168b34');
+  assert.equal(crypto.createHash('sha256').update(file).digest('hex'), '05328cc01791ef264935239e12865f86273069750b1267942990cd3b9f99e49e');
 });
 
 test('"늘었나" take filter: switch off = 결과 리포트 rule verdict; on = 연습실 · 트레이닝 연습 takes too', () => {

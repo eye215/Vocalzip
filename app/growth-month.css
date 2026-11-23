@@ -98,3 +98,15 @@
 .gme-line .gm-act{margin-top:8px;}
 @media (max-width:359px){.gme-tiles{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media (min-width:760px){.gme-me{grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:start;}.gme-lv{min-height:100%;}}
+/* 성장 v2 · 곡 카드 (app/growth-hub.js): a card per analysed song — word, one line, ▶ 처음 · 최근, count and day. */
+.gs-cards{display:grid;gap:10px;}
+.gs-card{border-radius:18px;background:#fff;box-shadow:0 0 0 1px #EFE9F8;overflow:hidden;}
+.gs-card[hidden]{display:none;}
+.gs-main{border:0!important;background:transparent!important;}
+.gs-line{display:block;margin:2px 0;color:#101828;font-size:14px;line-height:20px;font-weight:600;word-break:keep-all;}
+.gs-card[data-state=better] .gs-line{color:#5B21C7;}
+.gs-plays{display:flex;gap:8px;padding:0 12px 12px;}
+.gs-play{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 10px;border:0;border-radius:12px;background:#F3ECFF;color:#5B21C7;font:inherit;font-size:13px;font-weight:600;cursor:pointer;}
+.gs-play i{font-size:14px;}
+.gs-player:not(:empty){padding:0 12px 12px;}
+@media (min-width:760px){.gs-cards{grid-template-columns:repeat(2,minmax(0,1fr));}}
