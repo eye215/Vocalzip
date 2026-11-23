@@ -89,6 +89,31 @@ test('the lesson preparation memo is kept the same way', async ({page}) => {
   await expect(page.locator('#lesson-form [data-field-draft-restored]')).toBeVisible();
 });
 
+test('a NEW lesson’s 준비 메모 stays when the sheet is closed without saving, and goes once the lesson is added', async ({page}) => {
+  // Owner, 2026-11-23: "새 레슨 메모를 쓰다가 창을 닫아도 남아 있게".
+  await boot(page);
+  await page.goto('/#/calendar');
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await page.evaluate(() => VZ.lessonSheet({date:'2026-11-30'}));
+  await page.locator('#lesson-form [name=prep]').fill('질문: 2절 고음 호흡 자리');
+  await page.locator('.sheet-back [data-close]').first().click();
+  // 닫기 asks — and says the memo stays.
+  await expect(page.locator('.sheet-alert')).toContainText('준비 메모는 이 기기에 남아서');
+  await page.locator('.sheet-alert [data-ok]').click();
+  await expect(page.locator('#lesson-form')).toHaveCount(0);
+  await page.evaluate(() => VZ.lessonSheet({date:'2026-11-30'}));
+  await expect(page.locator('#lesson-form [name=prep]')).toHaveValue('질문: 2절 고음 호흡 자리');
+  await expect(page.locator('#lesson-form [data-field-draft-restored]')).toBeVisible();
+  // Added: the draft goes, and the next new lesson starts empty.
+  await page.locator('#lesson-form [name=start]').fill('19:00');
+  await page.locator('#lesson-form').evaluate(f => f.requestSubmit());
+  await expect.poll(() => page.evaluate(k => JSON.parse(localStorage.getItem(k)).lessons.some(l => l.prepMemo === '질문: 2절 고음 호흡 자리'), KEY)).toBe(true);
+  await page.evaluate(() => { location.hash = '#/calendar'; });
+  await page.evaluate(() => VZ.lessonSheet({date:'2026-12-01'}));
+  await expect(page.locator('#lesson-form [name=prep]')).toHaveValue('');
+  await expect(page.locator('#lesson-form [data-field-draft-restored]')).toHaveCount(0);
+});
+
 test('a practice memo being written is kept the same way and cleared once the practice is saved', async ({page}) => {
   await boot(page);
   await page.goto('/#/home');

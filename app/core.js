@@ -221,7 +221,7 @@ if (vv) {
 /** Full-page workflow by default; short action menus and confirmations are explicit variants. */
 /** A page sheet with a form and a save button asks before X / backdrop / Escape / back throws away edits
  * (confirmClose:false, or setting VZ.setGuard while mounting, for sheets that ask themselves; dirtyState() adds state kept outside form fields). */
-VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', anchor, confirmClose = true, dirtyState}) => {
+VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', anchor, confirmClose = true, dirtyState, closeNote}) => {
   const previous = document.activeElement;
   const back = document.createElement('div');
   back.className = 'sheet-back sheet-' + variant;
@@ -251,9 +251,10 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
   const dismiss = () => {
     if (closed) return;
     if (!dirty()) { close(); if (variant === 'page') VZ.toast('취소했어요.'); return; }
-    if (!discardAsking) VZ.confirmDiscard().then(ok => { if (ok) { close(); VZ.toast('취소했어요.'); } });
+    if (!discardAsking) VZ.confirmDiscard(note()).then(ok => { if (ok) { close(); VZ.toast('취소했어요.'); } });
   };
-  const api = {el, close, dirty};
+  const note = () => { try { return (typeof closeNote === 'function' ? closeNote() : closeNote) || ''; } catch { return ''; } };
+  const api = {el, close, dirty, closeNote:note};
   back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) dismiss(); });
   back.addEventListener('keydown', e => {
     if (e.key === 'Escape') { e.preventDefault(); dismiss(); }
@@ -323,9 +324,10 @@ VZ.confirm = (title, message, {ok = '확인', cancel = '취소', danger} = {}) =
 });
 /** One question for every "close with unsaved edits" case. */
 let discardAsking = false;
-VZ.confirmDiscard = () => {
+VZ.confirmDiscard = (note = '') => {
   discardAsking = true;
-  return VZ.confirm('작성 중인 내용이 있어요', '닫으면 입력한 내용이 저장되지 않아요. 닫을까요?', {ok:'닫기', cancel:'계속 작성', danger:true}).finally(() => { discardAsking = false; });
+  // note: a sheet that keeps part of its text (e.g. a new lesson's 준비 메모) says so instead of "nothing is kept".
+  return VZ.confirm('작성 중인 내용이 있어요', note || '닫으면 입력한 내용이 저장되지 않아요. 닫을까요?', {ok:'닫기', cancel:'계속 작성', danger:true}).finally(() => { discardAsking = false; });
 };
 /** v5 loading (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): the list's own shape in #F2EFF7 blocks, no spinner.
  * The words stay for screen readers (role=status). */
@@ -413,7 +415,7 @@ window.addEventListener('hashchange', () => {
     const target = location.hash, index = navIndex(), delta = index !== null && lastIndex !== null ? lastIndex - index : 0;
     if (delta) { restoring = true; clearTimeout(restoreTimer); restoreTimer = setTimeout(() => { restoring = false; }, 1500); history.go(delta); }
     else history.replaceState(null, '', lastHash || '#/home');
-    if (!discardAsking) VZ.confirmDiscard().then(ok => {
+    if (!discardAsking) VZ.confirmDiscard(sheets.find(s => s.dirty())?.closeNote?.()).then(ok => {
       if (!ok) return;
       VZ.closeSheets(); restoring = false; clearTimeout(restoreTimer);
       if (delta) history.go(-delta); else location.hash = target;

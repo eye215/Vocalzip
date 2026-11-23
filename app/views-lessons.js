@@ -103,7 +103,10 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
   let status = st;
   // Picked songs and the status buttons are not form fields: count them as edits when closing.
   let draft = null;
-  VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', onClose:() => draft?.discard(), dirtyState:() => [...selected].join(',') + '|' + status, body:'<form id="lesson-form">' +
+  // A NEW lesson's 준비 메모 stays when the sheet is closed without saving (owner, 2026-11-23): it is offered again the next
+  // time 레슨 일정 추가 opens (with 저장된 내용으로 되돌리기 to drop it). An existing lesson's draft goes on close, as before.
+  VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', onClose:() => { if (l) draft?.discard(); },
+    closeNote:() => !l && document.querySelector('#lesson-form [name=prep]')?.value.trim() ? '날짜·시간 같은 입력은 저장되지 않아요. 준비 메모는 이 기기에 남아서 다음에 레슨을 추가할 때 다시 보여 드려요. 닫을까요?' : '', dirtyState:() => [...selected].join(',') + '|' + status, body:'<form id="lesson-form">' +
     '<label class="field"><span>레슨 날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(l?.date || date || VZ.today()) + '"></label>' +
     '<div class="two"><label class="field"><span>시작 시간' + (l ? '' : ' <span class="req">*</span>') + '</span><input type="time" name="start" ' + (l ? '' : 'required') + ' value="' + esc(l?.startTime || '') + '"></label><label class="field"><span>종료 시간</span><input type="time" name="end" value="' + esc(l?.endTime || '') + '"></label></div>' +
     '<div class="two"><label class="field"><span>장소</span><input type="text" name="place" maxlength="100" value="' + esc(l ? l.place || '' : last?.place || '') + '"></label><label class="field"><span>선생님</span><input type="text" name="teacher" maxlength="60" value="' + esc(l ? l.teacher || '' : last?.teacher || '') + '"></label></div>' +
@@ -113,7 +116,7 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
     foot:'<button type="submit" form="lesson-form" class="btn block">' + (l ? '저장' : '일정 추가') + '</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form'), songsHost = el.querySelector('[data-songs]');
-      draft = l ? VZ.fieldDraft?.wire(form, 'lesson:' + l.id + ':prep', [{name:'prep', saved:l.prepMemo || ''}]) : null;
+      draft = VZ.fieldDraft?.wire(form, l ? 'lesson:' + l.id + ':prep' : 'lesson:new:prep', [{name:'prep', saved:l?.prepMemo || ''}]) || null;
       const drawSongs = () => {
         songsHost.innerHTML = '<select aria-label="레슨 곡 추가" data-lesson-song data-pick="song"><option value="">곡을 선택해 추가하세요</option>' +
           VZ.songsNewest().filter(s => !selected.has(s.id)).map(s => '<option value="' + esc(s.id) + '">' + esc(VZ.songLabel(s)) + '</option>').join('') +
