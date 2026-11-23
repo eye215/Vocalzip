@@ -43,9 +43,10 @@ body[data-vz-route="song"] .vz-song-detail-hero{position:relative;display:flex;f
 .vz-song-months div{min-width:0}
 .vz-song-months span{display:block;font-size:10px;color:var(--vz-color-ink-muted)}
 .vz-song-months strong{display:block;font-size:10px;white-space:nowrap;color:var(--vz-color-primary)}
-body[data-vz-route="song"] .song-tabs{position:sticky;top:0;z-index:6;display:flex;gap:3px;overflow-x:auto;margin:12px 0 8px;padding:7px 0;background:var(--vz-color-canvas);border:0;box-shadow:none;backdrop-filter:none;scrollbar-width:none}
-body[data-vz-route="song"] .song-tabs button{flex:1;min-width:max-content;min-height:44px;padding:0 14px;border:0;border-radius:99px;background:transparent;color:var(--vz-color-ink-secondary);font-size:14px;font-weight:600}
-body[data-vz-route="song"] .song-tabs button[aria-selected="true"]{background:var(--vz-color-selected-bg);color:var(--vz-color-accent)}
+/* UI 정리 3차: the song's content tabs are underline tabs — the pill look is kept for "which view" switches. */
+body[data-vz-route="song"] .song-tabs{position:sticky;top:0;z-index:6;display:flex;gap:0;overflow-x:auto;margin:12px 0 8px;padding:0;background:var(--vz-color-canvas);border:0;border-bottom:1px solid #E9E3F3;box-shadow:none;backdrop-filter:none;scrollbar-width:none}
+body[data-vz-route="song"] .song-tabs button{flex:1;min-width:max-content;min-height:46px;padding:0 12px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--vz-color-ink-secondary);font-size:15px;font-weight:600;margin-bottom:-1px}
+body[data-vz-route="song"] .song-tabs button[aria-selected="true"]{background:transparent;color:var(--vz-color-ink,#101828);border-bottom-color:var(--vz-color-accent,#7A32F5);font-weight:700}
 .vz-song-select-row{display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:4px 16px;margin:0 0 12px;border-radius:16px;background:var(--vz-color-accent-soft);color:var(--vz-color-primary);font-size:13px;font-weight:600}
 .vz-song-select-row label{display:flex;align-items:center;gap:8px;min-height:44px}
 .vz-song-select-row input{width:20px;height:20px;margin:0;accent-color:var(--vz-color-accent)}
