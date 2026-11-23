@@ -653,6 +653,19 @@ function devices(){
 }
 window.vzipCloudDeviceSend=async payload=>{const ch=devices();if(!ch)return false;try{return (await ch.send({type:'broadcast',event:'handoff',payload}))==='ok';}catch{return false;}};
 window.vzipCloudDeviceListen=fn=>{deviceListeners.add(fn);devices();return ()=>deviceListeners.delete(fn);};
+/* 휴대폰으로 녹음 알림 (Web Push, app/push-handoff.js): this device's push endpoint is kept for the signed-in account
+ * (supabase/migrations/20261123_push_subscriptions.sql), and a 휴대폰으로 녹음 asks the edge function vzip-push-handoff
+ * to notify the account's other devices. status() is {available:false} until the function and its keys are set up. */
+const pushFn=url+'/functions/v1/vzip-push-handoff';
+const pushCall=async(method,body)=>{const access=await window.vzipCloudAccessToken?.();if(!access)throw Error('로그인이 필요해요.');
+ const res=await fetch(pushFn,{method,headers:{apikey:key,authorization:'Bearer '+access,...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});
+ let data={};try{data=await res.json();}catch{}if(!res.ok)throw Error(data.error||'알림 서버 오류 ('+res.status+')');return data;};
+window.vzipCloudPush={
+ async status(){if(!window.vzipCloudSignedIn?.())return {available:false,why:'signed-out'};try{const d=await pushCall('GET');return {available:!!d.available&&!!d.publicKey,publicKey:d.publicKey||''};}catch{return {available:false};}},
+ async register(json,deviceId,deviceName){if(!client||!user)throw Error('로그인이 필요해요.');const {error}=await client.rpc('vzip_push_register',{p_endpoint:json.endpoint,p_p256dh:json.keys?.p256dh,p_auth:json.keys?.auth,p_device_id:deviceId,p_device_name:deviceName||''});if(error)throw Error(error.message||'알림 등록에 실패했어요.');return true;},
+ async unregister(endpoint){if(!client||!user)return false;const {data,error}=await client.rpc('vzip_push_unregister',{p_endpoint:endpoint});return !error&&data===true;},
+ async send(payload){try{return await pushCall('POST',payload);}catch{return null;}}
+};
 window.addEventListener('vzip:auth-changed',()=>{if(deviceListeners.size)setTimeout(devices,500);});
 window.vzipCloudMediaUrl=async item=>{
  if(!user)throw Error('로그인이 필요해요.');

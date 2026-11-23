@@ -113,3 +113,23 @@ self.addEventListener('fetch',event=>{
   else if(STATIC.test(u.pathname))event.respondWith(networkFirst(event.request,u.searchParams.has('v')?u.href:u.origin+u.pathname));
  }
 });
+/* 휴대폰으로 녹음 알림 (app/push-handoff.js, supabase/functions/vzip-push-handoff): a request from the person's other
+ * device shows as a notification — also with the app closed, and on a paired watch. Tapping it opens the recorder with
+ * that song (an open app window is used when there is one). Only messages of this kind are shown. */
+self.addEventListener('push',event=>{
+ let d={};try{d=event.data?event.data.json():{}}catch{d={}}
+ if(d.type!=='record-handoff'||!d.songId)return;
+ const title=String(d.title||'곡').slice(0,120),from=String(d.fromName||'다른 기기').slice(0,20);
+ const url=new URL('./#/record?song='+encodeURIComponent(d.songId),self.registration.scope).href;
+ event.waitUntil(self.registration.showNotification('녹음 시작 · '+title,{body:from+'에서 고른 곡이에요. 눌러서 녹음을 시작해요.',tag:'record-handoff',renotify:true,data:{url,at:Number(d.at)||Date.now()},icon:new URL('./apple-touch-icon.png',self.registration.scope).href}));
+});
+self.addEventListener('notificationclick',event=>{
+ event.notification.close();
+ const url=event.notification.data?.url;if(!url)return;
+ event.waitUntil((async()=>{
+  const wins=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+  const scope=self.registration.scope,win=wins.find(w=>w.url.startsWith(scope));
+  if(win){await win.focus().catch(()=>{});return win.navigate?win.navigate(url).catch(()=>win.postMessage({type:'vzip-open',url})):win.postMessage({type:'vzip-open',url});}
+  return self.clients.openWindow(url);
+ })());
+});

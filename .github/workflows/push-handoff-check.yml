@@ -1,0 +1,53 @@
+name: Push handoff checks
+# 휴대폰으로 녹음 알림: the push table and its two functions on a disposable PostgreSQL, the worker's notification, and
+# the 설정 switch / 휴대폰으로 녹음 with a fake server. No real key, endpoint or notification.
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/20261123_push_subscriptions.sql'
+      - 'supabase/functions/vzip-push-handoff/**'
+      - 'app/push-handoff.js'
+      - 'app/record-handoff.js'
+      - 'share-worker.js'
+      - 'cloud-sync.js'
+      - 'tests/push-*'
+      - '.github/workflows/push-handoff-check.yml'
+permissions:
+  contents: read
+concurrency:
+  group: push-handoff-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  database:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: push_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Push table and functions (own rows only, takeover, limits)
+        env:
+          VZ_PUSH_TEST_DB: postgres://postgres:push_ci_only@localhost:5432/postgres
+        run: node --test tests/push-subscriptions.test.mjs
+      - run: node --test tests/push-worker.test.cjs
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright test tests/push-handoff.spec.cjs tests/record-handoff.spec.cjs --project=chromium-mobile --project=chromium-desktop --project=webkit-mobile --workers=2
