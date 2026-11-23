@@ -255,8 +255,10 @@ window.addEventListener('hashchange', bar);
 
 V.route('listen', {title:'듣고 고르기', back:true, tab:'growth', noAutoRefresh:true,
   render:() => '<div class="ls" data-listen>' + (V.loadingRows?.(3) ?? '<p class="muted" role="status">불러오는 중…</p>') + '</div>',
-  async mount(main) {
+  async mount(main, r) {
     host = main.querySelector('[data-listen]');
+    // #/listen?song=<id> (성장 › 곡 하나 › 듣고 고르기): that song is chosen.
+    const pre = r?.query?.get?.('song'); if (pre && V.song(pre)) setup.songId = pre;
     if (!session) { cached = await takes(); if (!host.isConnected) return; }
     paint();
   }});

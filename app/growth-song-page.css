@@ -1,0 +1,43 @@
+/* 성장 › 곡 하나 (app/growth-song-page.js): light, short; the same card language as 성장 › 나. */
+.gsp{display:grid;gap:12px;padding-bottom:24px}
+.gsp-hero{display:grid;gap:8px;padding:18px 16px;border-radius:22px;background:linear-gradient(135deg,#9B5CFF,#6E2BEA);color:#fff}
+.gsp-hero h2{margin:0;font-size:24px;line-height:31px;letter-spacing:-.02em}
+.gsp-kicker{margin:0;font-size:12px;font-weight:600;opacity:.8}
+.gsp-word{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:0;font-size:14px;line-height:20px}
+.gsp-hero .gsp-chip{background:rgba(255,255,255,.22);color:#fff}
+.gsp-sub{margin:0;font-size:12px;opacity:.85}
+.gsp-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.gsp-play{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:0;border-radius:99px;background:#fff;color:#5B21D6;font:inherit;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer}
+.gsp-play.is-soft{background:rgba(255,255,255,.18);color:#fff}
+.gsp-player:not(:empty){margin-top:6px;padding:8px;border-radius:14px;background:#fff;color:#101828}
+.gsp-card{display:grid;gap:10px;padding:16px;border-radius:20px;background:#fff;box-shadow:0 0 0 1px #EFE9F8}
+.gsp-card h3{display:flex;align-items:baseline;gap:6px;margin:0;font-size:17px;line-height:24px}
+.gsp-card h3 small{color:#667085;font-size:12px;font-weight:600}
+.gsp-empty{margin:0;color:#667085;font-size:14px;line-height:21px}
+.gsp-note,.gsp-disclaimer{margin:0;color:#98A2B3;font-size:12px;line-height:18px}
+.gsp-chip{display:inline-flex;align-items:center;padding:0 8px;border-radius:99px;background:#F2F4F7;color:#475467;font-size:12px;line-height:20px;font-weight:700;white-space:nowrap}
+.gsp-chip[data-state=better]{background:#ECFDF3;color:#067647}
+.gsp-chip[data-state=worse]{background:#FEF3F2;color:#B42318}
+.gsp-chip[data-state=mixed]{background:#FFFAEB;color:#B54708}
+.gsp-timeline{display:flex;gap:6px;overflow-x:auto;padding:4px 2px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.gsp-timeline::-webkit-scrollbar{display:none}
+.gsp-dot{flex:none;display:grid;justify-items:center;gap:4px;min-width:48px;min-height:64px;padding:6px 4px;border:0;border-radius:14px;background:none;color:#475467;font:inherit;cursor:pointer}
+.gsp-dot i{width:14px;height:14px;border-radius:50%;border:2px solid #C4B5FD;background:#fff}
+.gsp-dot[data-analysed] i{background:#7A32F5;border-color:#7A32F5}
+.gsp-dot span{font-size:12px;font-variant-numeric:tabular-nums}
+.gsp-dot b{font-size:11px;color:#6E3FD1}
+.gsp-dot[data-active]{background:#F3ECFF}
+.gsp-rows,.gsp-heard,.gsp-tips{display:grid;gap:0;margin:0;padding:0;list-style:none}
+.gsp-rows li,.gsp-tips li{display:grid;gap:2px;padding:10px 0;border-top:1px solid #F2EFF7}
+.gsp-rows li:first-child,.gsp-tips li:first-child{border-top:0;padding-top:0}
+.gsp-rows li div{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.gsp-rows strong,.gsp-tips strong{font-size:15px}
+.gsp-rows p{margin:0;color:#344054;font-size:14px;line-height:20px}
+.gsp-rows small,.gsp-tips small{color:#98A2B3;font-size:12px;line-height:17px}
+.gsp-heard li{padding:8px 0;border-top:1px solid #F2EFF7;color:#344054;font-size:14px;line-height:20px}
+.gsp-heard li:first-child{border-top:0;padding-top:0}
+.gsp-link{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;color:#6E3FD1;font-size:14px;font-weight:600;text-decoration:none}
+.gsp-all{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-radius:18px;background:#F2F4F7;color:#101828;text-decoration:none}
+.gsp-all span{display:grid;gap:2px}
+.gsp-all small{color:#667085;font-size:12px}
+.gsp-points .vz-pts-card{margin:0}

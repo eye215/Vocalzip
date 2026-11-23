@@ -164,12 +164,16 @@ test('뒤로 from the screens a tab opens returns to that tab, with 성장 lit o
   await dock(page).click();
   await tabs(page).nth(1).click();
   const back = async url => { await page.locator('[data-back]').click(); await expect(page).toHaveURL(url); };
-  // 곡 → 곡 하나 (the former 보컬 연구소: dark, as before) → 뒤로
+  // 곡 → 곡 하나 (성장 v2 R4) → 모든 분석 도구 (the former 보컬 연구소: dark, as before) → 뒤로 twice
   await page.locator('[data-hub-song="s1"]').click();
+  await expect(page).toHaveURL(/#\/growth-song\/s1$/);
+  await expect(dock(page)).toHaveAttribute('aria-current', 'page');
+  await page.locator('[data-gsp-all]').click();
   await expect(page).toHaveURL(/#\/vocal-lab\/s1$/);
   await expect(page.locator('#top h1')).toHaveText('곡 분석');
   await expect(dock(page)).toHaveAttribute('aria-current', 'page');
   expect(await page.evaluate(() => getComputedStyle(document.body).colorScheme)).toContain('dark');
+  await back(/#\/growth-song\/s1$/);
   await back(/#\/vocal-analysis$/);
   await expect(current(page)).toHaveText('곡');
   // → one analysed recording → 뒤로
@@ -357,7 +361,7 @@ test('곡: songs with their one word from the shared verdict (one list read, one
   await expect(rows.nth(3).locator('.growth-hub-chip')).toHaveText('분석 전');   // said, never scored
   await expect(rows.nth(3).locator('.item-sub')).toHaveText(/^녹음 2개 · 최근 /);
   await expect(page.locator('[data-hub-waiting] summary')).toHaveText('아직 분석 전인 곡 1');
-  await expect(rows.nth(0)).toHaveAttribute('href', '#/vocal-lab/s1');
+  await expect(rows.nth(0)).toHaveAttribute('href', '#/growth-song/s1');
   // 최근 분석한 녹음: the five newest recordings that have an analysis.
   const takes = page.locator('[data-hub-take]');
   expect(await takes.evaluateAll(els => els.map(e => [e.dataset.hubTake, e.getAttribute('href')]))).toEqual(

@@ -163,7 +163,7 @@ async function mountAnalysis(host) {
     const line = v?.text ? '<span class="gs-line" data-hub-line>' + e(v.text) + '</span>' : '';
     const play = (id, label, date) => id ? '<button type="button" class="gs-play" data-hub-play="' + e(id) + '" aria-label="' + e(s.title + ' ' + label + ' 녹음 듣기') + '"><i class="ph-fill ph-play" aria-hidden="true"></i><span>' + label + (date ? ' · ' + e(shortDate(date)) : '') + '</span></button>' : '';
     const plays = v?.firstId && v?.lastId ? '<div class="gs-plays">' + play(v.firstId, '처음', v.item?.firstDate) + play(v.lastId, '최근', v.item?.lastDate) + '</div><div class="gs-player" data-hub-player></div>' : '';
-    return '<div class="gs-card" data-hub-card data-state="' + state + '"><a class="item gs-main" href="#/vocal-lab/' + encodeURIComponent(s.id) + '" data-hub-song="' + e(s.id) + '" data-hub-state="' + state + '" data-hub-title="' + e(s.title) + '">' +
+    return '<div class="gs-card" data-hub-card data-state="' + state + '"><a class="item gs-main" href="#/growth-song/' + encodeURIComponent(s.id) + '" data-hub-song="' + e(s.id) + '" data-hub-state="' + state + '" data-hub-title="' + e(s.title) + '">' +
       '<span class="item-main"><span class="growth-hub-title"><span class="item-title">' + e(s.title) + '</span>' + chip(state, v?.word || STATE_HOLD) + '</span>' + line + '<span class="item-sub">' + e(sub) + '</span></span>' + chev + '</a>' + plays + '</div>';
   };
   const waitingRow = s => {

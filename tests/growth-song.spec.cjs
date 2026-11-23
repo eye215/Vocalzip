@@ -50,7 +50,7 @@ test('곡 목록: 분석한 곡만, 최근에 부른 순으로, 곡마다 한마
   expect(await rows(page)).toEqual([['s1', 'hold', '판정 보류'], ['s2', 'worse', '아쉬운 방향'], ['s5', 'better', '좋아진 방향'], ['s4', 'similar', '비슷함'], ['s3', 'better', '좋아진 방향']]);
   await expect(page.locator('[data-hub-song="s5"] .item-title')).toHaveText('Home');
   await expect(page.locator('[data-hub-song="s5"] .item-sub')).toHaveText('분석한 녹음 4개 · 연습 2개는 빼고 봐요 · 최근 11월 9일');
-  await expect(page.locator('[data-hub-song="s5"]')).toHaveAttribute('href', '#/vocal-lab/s5');
+  await expect(page.locator('[data-hub-song="s5"]')).toHaveAttribute('href', '#/growth-song/s5');   // 곡 하나 (성장 v2 R4)
   await expect(page.locator('[data-hub-rule-note]')).toContainText('이번 달과 같은 기준이에요');
   // The word is the model's, from the takes of the "늘었나" rule (switch off = 결과 리포트's takes).
   const words = await page.evaluate(async () => { const items = await VZ.media.list(), U = window.VzipGrowthChangesUI, S = window.VzipGrowthSong;
