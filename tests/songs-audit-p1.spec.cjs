@@ -372,7 +372,7 @@ test('A song with 1,223 recordings draws 50 rows once, adds 50 at a time and kee
   await expect(count).toHaveText('선택 0개');
 });
 
-test('곡별 목록: 최근 연습곡 opens the song, an unset status is quiet, no emoji, and the sort is kept on return', async ({page}) => {
+test('곡별 목록: 최근 연습곡 opens the song, an unset status shows nothing, no emoji, and the sort is kept on return', async ({page}) => {
   await open(page);
   await page.setViewportSize({width:375, height:812});
   await page.goto('/#/songs');
@@ -381,9 +381,7 @@ test('곡별 목록: 최근 연습곡 opens the song, an unset status is quiet, 
   await expect(page.locator('.vz-recent-song')).toContainText('연습 중 · 숙련도 3.5/5');
   const status = id => page.locator('.vz-song-list a[href="#/song/' + id + '"] .vz-song-status');
   await expect(status('s1')).toHaveText('연습 중'); // words only
-  await expect(status('s2')).toHaveText('상태 미지정');
-  await expect(status('s2')).toHaveClass(/is-empty/);
-  expect(await status('s2').evaluate(el => getComputedStyle(el).color)).not.toBe(await status('s1').evaluate(el => getComputedStyle(el).color));
+  await expect(status('s2')).toHaveCount(0); // no status: no line at all (UI 정리 2026-11-23, was a grey "상태 미지정")
   // Sort by name, open a song, come back: still by name.
   await page.locator('[data-song-filter]').click();
   await page.locator('[data-filter-sort]').click();

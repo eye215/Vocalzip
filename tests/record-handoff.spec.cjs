@@ -39,9 +39,9 @@ test('아이폰으로 녹음 keeps one request and sends it; the same device is 
   await boot(page, seed(), {device:'ipad-1'});
   await page.evaluate(() => { location.hash = '#/song/s1'; });
   const button = page.locator('#top [data-record-handoff="s1"]');
-  await expect(button).toHaveAttribute('aria-label', '아이폰으로 녹음');
+  await expect(button).toHaveAttribute('aria-label', '휴대폰으로 녹음');
   await button.click();
-  await expect(page.locator('[data-rh-sheet]')).toContainText('아이폰에 앱이 열려 있으면 지금 ‘녹음 시작’이 떠요.');
+  await expect(page.locator('[data-rh-sheet]')).toContainText('휴대폰에 앱이 열려 있으면 지금 ‘녹음 시작’이 떠요.');
   const row = await page.evaluate(() => VZ.db.practicePlans.filter(p => p.kind === 'record-handoff'));
   expect(row).toEqual([expect.objectContaining({id:'record-handoff', songId:'s1', from:'ipad-1', fromName:'아이패드'})]);
   expect(await page.evaluate(() => window.__sent)).toEqual([{songId:'s1', at:row[0].at, from:'ipad-1', fromName:'아이패드'}]);
@@ -75,6 +75,17 @@ test('the request shows 녹음 시작 at once (message) or when opened (kept row
   // Older than 10 minutes: not offered.
   await page.evaluate(() => window.__deliver({songId:'s1', at:Date.now() + 1 - 11 * 60000, from:'ipad-1', fromName:'아이패드'}));
   await expect(bar(page)).toHaveCount(0);
+  await page.evaluate(() => { location.hash = '#/song/s1'; });
+  await expect(page.locator('#top [data-record-handoff]')).toHaveCount(0);
+});
+});
+
+test.describe('갤럭시', () => {
+test.use({userAgent:'Mozilla/5.0 (Linux; Android 14; SM-S921N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36', viewport:{width:384, height:832}});
+test('an Android phone receives too (here from a 태블릿), with no send button of its own', async ({page}) => {
+  await boot(page, seed({practicePlans:[{id:'record-handoff', kind:'record-handoff', v:1, songId:'s1', at:'AT_MINUTE_AGO', from:'tab-1', fromName:'태블릿'}]}), {device:'galaxy-1'});
+  await expect(bar(page)).toBeVisible();
+  await expect(bar(page)).toContainText('태블릿에서 고른 곡');
   await page.evaluate(() => { location.hash = '#/song/s1'; });
   await expect(page.locator('#top [data-record-handoff]')).toHaveCount(0);
 });

@@ -118,7 +118,7 @@ test.afterEach(async({page})=>expect(page.__errors||[]).toEqual([]));
 
 test('지적: add, edit, 이제 됐어요 and delete from the song page; the card follows; no overflow at 390 and 820',async({page})=>{
  await setup(page);await page.goto('/#/song/s1');
- await expect(card(page).locator('[data-pts-card-sub]')).toHaveText('레슨에서 들은 지적을 마디별로 적어 두고, 부를 때마다 지켰는지 체크해요.');
+ await expect(card(page).locator('[data-pts-card-sub]')).toHaveText('마디에 적어 두고 부를 때 체크해요');
  await card(page).getByRole('button',{name:'지적 추가'}).click();
  let sheet=editorSheet(page,'지적 추가');await expect(sheet).toBeVisible();
  // The latest lesson that took place is chosen to begin with.
@@ -233,7 +233,7 @@ test('points and runs follow the account: added on one device, edited on the oth
  const u=info.project.use,context=await browser.newContext({viewport:u.viewport,isMobile:u.isMobile,hasTouch:u.hasTouch,deviceScaleFactor:u.deviceScaleFactor,userAgent:u.userAgent,baseURL:new URL(page.url()).origin});
  await context.addInitScript(()=>{window.VZIP_DEVICE_SESSIONS_ENABLED=false;window.VZIP_APPROVED_HOME_ENABLED=false;});
  const phone=await context.newPage();await setup(phone);await phone.goto('/#/song/s1');
- await expect(card(phone).locator('[data-pts-card-sub]')).toHaveText(/^레슨에서 들은/);
+ await expect(card(phone).locator('[data-pts-card-sub]')).toHaveText(/^마디에 적어 두고/);
  await sync(phone,await record(page));
  await expect(card(phone).locator('[data-pts-card-sub]')).toHaveText('지적 1개 · 아직 체크 전');
  // The phone adds one and checks a run; the iPad gets both.

@@ -58,7 +58,7 @@ function build({db={},today='',tips=null,isOn=()=>true}={}){
     const tip=AREA_TIP[a.id];
     if(tip&&enough&&measured.has(tip))return {id:a.id,title:a.title,state:'ok',line:'최근 녹음에서 괜찮아요 · '+stepLine};
     if(s&&(s.step||s.measured))return {id:a.id,title:a.title,state:'skill',line:stepLine};
-    return {id:a.id,title:a.title,state:'unknown',line:tip?'녹음이 '+(enough?'이 부분을 재지 못했어요':'3개 넘게 분석되면 알 수 있어요')+' · '+stepLine:'오늘의 연습에서 재요'};
+    return {id:a.id,title:a.title,state:'unknown',line:tip?(enough?'녹음이 이 부분을 재지 못했어요':'녹음에서 재요')+' · '+stepLine:'오늘의 연습에서 재요'};
   });
   return {basis:{enough,count:Number(tips?.count)||0,range:String(tips?.range||'')},focus,areas};
 }
