@@ -109,6 +109,13 @@ test('그냥 이어 듣기 · 앞 1분: every take newest first, on by itself; a
   await expect(page.locator('[data-ls-done]')).toContainText('녹음 3개');
 });
 
+test('#/listen?song=<id> opens with that song chosen', async ({page}) => {
+  await boot(page);
+  await page.evaluate(() => { location.hash = '#/listen?song=home'; });
+  await expect(page.locator('[data-ls-song]')).toHaveValue('home');
+  await expect(page.locator('[data-ls-count]')).toHaveText('비교 1개');
+});
+
 test('320px: the setup and the player fit, every control at least 44px', async ({page}) => {
   await page.setViewportSize({width:320, height:640});
   await boot(page);

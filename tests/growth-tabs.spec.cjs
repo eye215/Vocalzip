@@ -119,11 +119,16 @@ test('곡: songs with an analysed take and their real counts (the rest folded as
   await expect(page.locator('[data-hub-reports]')).toContainText('저장한 리포트 1개');
   await expect(page.locator('[data-hub-reports]')).toHaveAttribute('href', '#/lab-reports');
   expect(await overflow(page)).toEqual({wide:false, over:0});
+  // 곡 하나 (성장 v2 R4, app/growth-song-page.js), and from it every tool of the full 곡 분석 screen.
   await rows.nth(0).click();
+  await expect(page).toHaveURL(/#\/growth-song\/s1$/);
+  await expect(page.locator('[data-gsp-hero]')).toContainText('Defying Gravity');
+  await page.locator('[data-gsp-all]').click();
   await expect(page).toHaveURL(/#\/vocal-lab\/s1$/);
-  await expect(page.locator('[data-lab] .vl-song, [data-lab] .vl-player, [data-lab]').first()).toBeVisible();
   await expect(page.locator('#top h1')).toHaveText('곡 분석');
   await expect(page.locator('[data-song-section="changes"]')).toBeVisible();
+  await page.locator('[data-back]').click();
+  await expect(page).toHaveURL(/#\/growth-song\/s1$/);
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/vocal-analysis$/);
   await expect(rows).toHaveCount(5);

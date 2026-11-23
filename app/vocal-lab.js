@@ -915,6 +915,9 @@ V.route('vocal-lab',{title:'곡 분석',back:true,tab:'growth',noAutoRefresh:tru
     screen(current);
     // 비교 메모·보관함 links (?compare=1) open at 두 녹음 비교.
     if(current.compareOpen)host.querySelector('[data-song-section="compare"]')?.scrollIntoView({block:'start'});
+    // ?jump=<section> (성장 › 곡 하나 › 구간별로 보기): open at that part of the screen.
+    // The parts above it are painted by then (their slots fill in after the frame), so the place does not move after.
+    const jump=r.query.get('jump');if(jump)setTimeout(()=>{if(live()===current)host.querySelector('[data-song-section="'+jump+'"]')?.scrollIntoView({block:'start'});},400);
   },leave:clean
 });
 /** The screen that is open now (not left, not replaced). */
