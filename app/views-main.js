@@ -670,7 +670,9 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     const asked = r.query?.get('tab');
     if (asked && tabs.some(([k]) => k === asked)) songTab = asked;
     // The page header already says 곡 상세: the card shows the title, 작품 / 아티스트 and the totals.
-    return '<div class="song-head vz-song-detail-hero"><strong class="vz-song-detail-title">' + esc(s.title) + '</strong><span class="vz-song-detail-sub" data-song-show' + (s.show ? '' : ' hidden') + '>' + esc(s.show || '') + '</span><span class="vz-song-detail-summary" data-summary></span></div>' +
+    return '<div class="song-head vz-song-detail-hero"><strong class="vz-song-detail-title">' + esc(s.title) + '</strong><span class="vz-song-detail-sub" data-song-show' + (s.show ? '' : ' hidden') + '>' + esc(s.show || '') + '</span><span class="vz-song-detail-summary" data-summary></span>' +
+      // UI 정리 3차: how the song is going (성장 › 곡 하나), one tap from the song — in the card's corner, so the tabs stay high.
+      '<a class="vz-song-hero-btn" href="#/growth-song/' + encodeURIComponent(s.id) + '" data-song-hero-growth><i class="ph ph-chart-line-up" aria-hidden="true"></i>성장 보기</a></div>' +
       '<div data-repertoire></div><div data-score-points></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
   },
   async mount(main, r) {

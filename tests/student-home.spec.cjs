@@ -229,9 +229,9 @@ test('empty state removes all sample data and connects songs and goal setup',asy
  const value={categories:[],songs:[],lessons:[],assignments:[],practices:[],performances:[],comparisonReports:[]};await boot(page,value);
  await noSample(page);
  await expect(goals(page)).toHaveCount(0);await expect(page.locator('.vz-count')).toHaveText('0 / 0 완료');
- // Nothing scheduled or practised: 지금 할 것 suggests one practice (the empty goal list below offers goal setup, so
+ // No song yet: 지금 할 것 is adding the first song (UI 정리 3차; the empty goal list below offers goal setup, so
  // "오늘의 목표 정하기" is not shown twice); the summary only has this week, no recent songs.
- await expect(page.locator('.vz-event')).toHaveAttribute('data-kind','recommend');await expect(page.locator('.vz-event h2')).toHaveText('호흡과 발성 연습하기');
+ await expect(page.locator('.vz-event')).toHaveAttribute('data-kind','first-song');await expect(page.locator('.vz-event h2')).toHaveText('첫 곡 추가하기');
  await expect(page.locator('.vz-summary-row')).toHaveCount(1);await expect(weekRow(page).locator('.vz-summary-copy')).toHaveText('오늘 0분 / 30분 · 이번 주 0분 / 목표 3시간 30분');
  await expect(page.locator('.vz-recent')).toBeHidden();await expect(page.locator('.vz-recent-pill')).toHaveCount(0);await expect(page.locator('.vz-today-streak')).toHaveCount(0);
  await page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true}).click();await expect(page).toHaveURL(/#\/songs$/);
@@ -239,7 +239,8 @@ test('empty state removes all sample data and connects songs and goal setup',asy
  const setup=page.getByRole('button',{name:'오늘의 목표 정하기',exact:true});
  await page.goto('/#/home');await ready(page);await expect(setup).toHaveCount(1);await setup.click();
  const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(sheet).toBeVisible();await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();await expect(sheet).toHaveCount(0);
- await page.getByRole('button',{name:'다음 연습 호흡과 발성 연습하기',exact:true}).click();await expect(page).toHaveURL(/#\/practice-set$/);await expect(page.locator('#top h1')).toHaveText('오늘의 연습');
+ // 첫 곡 추가하기 opens the song sheet; closing it adds nothing.
+ await page.getByRole('button',{name:'첫 곡 추가하기',exact:true}).click();await expect(page.locator('.sheet-back input').first()).toBeVisible();await page.locator('.sheet-back [data-close]').first().click();
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances'])expect(after[key]).toEqual([]);
  expect(after.dailyGoals||[]).toEqual([]);expect(after.practicePlans||[]).toEqual([]);
 });
