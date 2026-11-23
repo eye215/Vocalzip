@@ -19,6 +19,18 @@ test('rank metric switches, top five is stable, and sub-minute durations are vis
 test('calendar time uses actual minutes and keeps file counts without treating length as performed time',()=>{
  const db={practices:[{id:'p',date:'2026-11-09',minutes:30,manualMinutes:25,songId:'a'},
  {id:'pending',date:'2026-11-09',minutes:80,manualMinutes:80,practiceTimeSource:'unconfirmed',songId:'a'}]};
- const summary=summarize(db,[{id:'file',songId:'a',durationSeconds:36000},{id:'stage',occasion:'performance',durationSeconds:36000}],'2026-11',()=> '2026-11-09');
+ const summary=summarize(db,[{id:'file',songId:'b',durationSeconds:36000},{id:'stage',occasion:'performance',durationSeconds:36000}],'2026-11',()=> '2026-11-09');
  assert.equal(summary.minutes,25);assert.equal(summary.count,3);assert.equal(summary.unknown,2);
+});
+
+test('a take of a song on a day with a record of that song belongs to that record: no extra 회 (2026-11-23)',()=>{
+ // Time typed for The River that day wins (app/recording-time-model.js), so its takes have no record of their own; the
+ // calendar shows them under The River's record, and the month counts that record once.
+ const db={practices:[{id:'river',date:'2026-11-13',songId:'river',minutes:40,manualMinutes:40,practiceTimeSource:'manual',mediaIds:['t1']},
+  {id:'scale',date:'2026-11-13',practiceMode:'training',songId:'other',minutes:10}]};
+ const media=[{id:'t1',songId:'river'},{id:'take1',songId:'river'},{id:'take2',songId:'river'},{id:'take3',songId:'other'},{id:'take4'}];
+ const s=summarize(db,media,'2026-11',()=> '2026-11-13');
+ // river record 1 · take3 (only a training record of that song) 1 · take4 (no song) 1
+ assert.equal(s.count,3);assert.equal(s.minutes,40);
+ assert.deepEqual(s.rows.map(r=>[r.id,r.count]).sort(),[['',1],['other',1],['river',1]]);
 });

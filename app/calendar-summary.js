@@ -9,6 +9,8 @@ const positive=n=>Number.isFinite(Number(n))&&Number(n)>0?Number(n):0;
 function summarize(db,media,month,dateOf){
  const practices=Time.records(db.practices),rows=new Map(),seen=new Set(),linked=new Set(practices.flatMap(p=>p.mediaIds||[]));
  const lessonFiles=new Set((db.lessons||[]).flatMap(l=>(l.recordings||[]).map(r=>r.id)));
+ // (not an empty 오늘의 연습 row: the calendar hides those, VZ.practiceHidden)
+ const songDays=new Set(practices.filter(p=>p.practiceMode!=='training'&&p.songId&&!(p.practiceSetId&&!(Time.actualMinutes(p)>0)&&!(p.mediaIds||[]).length)).map(p=>p.date+'|'+p.songId));
  let minutes=0,count=0,unknown=0;
  const add=(key,date,songId,value)=>{
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||date.slice(0,7)!==month||seen.has(key))return;
@@ -20,6 +22,8 @@ function summarize(db,media,month,dateOf){
  for(const p of practices)if(p.practiceMode!=='training')add('p:'+p.id,p.date,p.songId,Time.actualMinutes(p));
  for(const m of media||[]){
   if(linked.has(m.id)||lessonFiles.has(m.id)||m.source==='lesson'||m.occasion==='lesson'||m.occasion==='performance')continue;
+  // A song's take on a day that has a record of that song belongs to it (the calendar shows it there): no extra 회.
+  if(m.songId&&songDays.has(dateOf(m)+'|'+m.songId))continue;
   add('m:'+m.id,dateOf(m),m.songId,0);
  }
  return {minutes,count,unknown,rows:[...rows.values()]};

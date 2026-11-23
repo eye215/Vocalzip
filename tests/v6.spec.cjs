@@ -1029,8 +1029,12 @@ test('One-touch recording: record, preview, save with song; failure keeps origin
   expect(items[0].durationSeconds).toBeGreaterThan(1.5);
   expect(items[0].review).toBe('브릿지 숨 부족');
   expect(items[0].waveform.length).toBeGreaterThan(0);
-  // Recording alone does not create a practice session (no double-count).
-  expect((await data(page)).practices).toHaveLength(1);
+  // Recording alone makes no practice session of its own beyond the take's length for the song that day (곡 녹음 → 연습
+  // 시간, app/recording-time.js), shown at once on the saved card (2026-11-23): one automatic row, no double count.
+  await expect(page.locator('[data-rec-practice]')).toContainText('녹음 길이로 넣었어요');
+  const practices = (await data(page)).practices;
+  expect(practices).toHaveLength(2);
+  expect(practices.filter(p => p.practiceTimeSource === 'recording')).toEqual([expect.objectContaining({id:expect.stringMatching(/^rec-time:/), songId:'s2', mediaIds:[items[0].id]})]);
   await page.getByRole('link', {name:'On My Own 곡 보기'}).click();
   await expect(page.getByRole('tab', {name:'녹음'})).toHaveAttribute('aria-selected','true');
   await expect(page.locator('[data-media]')).toHaveCount(1);
@@ -1069,7 +1073,11 @@ test('New recording after save gets a fresh ID and preserves both takes after re
   expect(new Set(all.map(row => row.id)).size).toBe(2);
   expect(all.find(row => row.id === first[0].id)).toEqual(first[0]);
   expect(all.every(row => row.songId === 's2' && row.durationSeconds >= 0.8 && row.size > 0)).toBe(true);
-  for (const key of ['songs','lessons','practices','assignments']) expect((await data(page))[key]).toEqual(before[key]);
+  for (const key of ['songs','lessons','assignments']) expect((await data(page))[key]).toEqual(before[key]);
+  // Practice records: as before, plus the takes' length for the song that day (곡 녹음 → 연습 시간: one automatic row).
+  const after = (await data(page)).practices;
+  expect(after.filter(p => p.practiceTimeSource !== 'recording')).toEqual(before.practices);
+  expect(after.filter(p => p.practiceTimeSource === 'recording').map(p => p.mediaIds.slice().sort())).toEqual([all.map(row => row.id).sort()]);
   await page.reload();
   await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
   await page.evaluate(() => { window.vzipCloudSignedIn = () => false; });
@@ -1246,13 +1254,15 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   if (day(-1).slice(0, 7) !== day(0).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
   await expect(async () => { await page.locator('[data-d="' + day(-1) + '"]').click(); await expect(page.locator('[data-d="' + day(-1) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('25분');
-  // The practice shows its linked recording underneath; an unlinked recording appears as a practice recording.
+  // The practice shows its linked recording underneath — and the same song's recording with no record of its own goes
+  // there too (2026-11-23), not into a loose "기록에 연결되지 않은 연습 녹음" list.
   await expect(page.locator('[data-day] .cal-own').first().locator('[data-practice]')).toHaveCount(1);
   await expect(page.locator('[data-day] [data-media]')).toHaveCount(2);
+  await expect(page.locator('[data-day] .cal-own').first().locator('[data-media]')).toHaveCount(2);
   await page.locator('[data-day] .mini-row').first().click(); // a slim ▶ line opens the same player
   await expect(page.locator('[data-day] .media-open:not([hidden])')).toHaveCount(1);
   await page.locator('[data-day] .mini-row').first().click();
-  await expect(page.locator('[data-day]')).toContainText('기록에 연결되지 않은 연습 녹음');
+  await expect(page.locator('[data-day]')).not.toContainText('기록에 연결되지 않은 연습 녹음');
   if (day(-7).slice(0, 7) !== day(-1).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
   await expect(async () => { await page.locator('[data-d="' + day(-7) + '"]').click(); await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('완료');

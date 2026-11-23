@@ -25,7 +25,8 @@ test('one-line month totals and a clean song strip rotate the top five',async({p
  await page.evaluate(()=>VZ.recordingTime?.run());
  await expect.poll(()=>page.evaluate(()=>VZ.db.practices.filter(p=>p.practiceTimeSource==='recording').map(p=>[p.songId,p.minutes]))).toEqual([['d',1]]);
  await expect(card.locator('[data-month-minutes]')).toHaveText('46분');
- await expect(card.locator('[data-month-count]')).toHaveText('7회');
+ // 'free' (song A) belongs to A's record that day (2026-11-23): shown under it, no 회 of its own — 6, not 7.
+ await expect(card.locator('[data-month-count]')).toHaveText('6회');
  await expect(card.locator('.cs-heading')).toHaveCSS('flex-wrap','nowrap');
  await expect(card.locator('.cs-spotlight')).toHaveAttribute('data-cs-song','a');
  await expect(card.locator('.cs-spotlight')).toHaveCSS('background-color','rgb(241, 237, 248)');
@@ -37,6 +38,11 @@ test('one-line month totals and a clean song strip rotate the top five',async({p
  await expect(page.locator('.cal-own[data-kind=lesson] .item-title').first()).toContainText('시간 미정');
  await expect(page.locator('.cal-own[data-kind=lesson] .item-sub').first()).toContainText('피드백 미작성');
  await expect(page.locator('.cal-own[data-kind=practice] .avatar').first()).toHaveCSS('color','rgb(122, 50, 245)');
+ // 'free' (a song A take with no record of its own) is shown under A's record, not as a loose card.
+ const recA = page.locator('.cal-own[data-kind=practice]').filter({has:page.locator('[data-practice="p1"]')});
+ await expect(recA.locator('[data-media="free"]')).toHaveCount(1);
+ await expect(recA.locator('[data-media="linked"]')).toHaveCount(1);
+ await expect(page.locator('.cal-loose-card [data-media="free"]')).toHaveCount(0);
  await expect(page.locator('.cal-own[data-kind=stage]')).toHaveCount(0);
  expect((await card.boundingBox()).height).toBeLessThan(230);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -87,9 +93,9 @@ test('calendar uses the same circular recording entry and opens a focused dark r
 test('Actual practice time keeps calendar counts while using only entered minutes',async({page})=>{
  await boot(page);
  await expect(page.locator('[data-month-minutes]')).toHaveText('45분');
- await expect(page.locator('[data-month-count]')).toHaveText('7회');
+ await expect(page.locator('[data-month-count]')).toHaveText('6회');
  await page.evaluate(()=>VZ.change(d=>{d.practices.find(p=>p.id==='p1').manualMinutes=12;}));
  await expect(page.locator('[data-month-minutes]')).toHaveText('27분');
- await expect(page.locator('[data-month-count]')).toHaveText('7회');
+ await expect(page.locator('[data-month-count]')).toHaveText('6회');
  expect(await page.evaluate(()=>VZ.db.practices.find(p=>p.id==='p1').minutes)).toBe(30);
 });

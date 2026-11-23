@@ -113,6 +113,49 @@ VZ.editMedia = item => {
 VZ.SHORT_TAKE_SECONDS = 10;
 VZ.shortTakeNote = (seconds, songId) => songId && Number.isFinite(Number(seconds)) && Number(seconds) > 0 && Number(seconds) < VZ.SHORT_TAKE_SECONDS
   ? '<p class="ana-note warn" data-short-take><i class="ph ph-timer" aria-hidden="true"></i><span>' + Math.round(Number(seconds)) + '초 녹음이에요. 성장 분석은 노래한 시간이 10초 이상이어야 판정해요. 이대로 저장하면 판정 보류로 남아요. 한 프레이즈 더 불러도 좋아요.</span></p>' : '';
+/** 녹음 저장 화면 › 오늘 이 곡 연습 (owner, 2026-11-23): after a song's practice take is saved, that day's practice for the
+ * song is shown and set in one tap — no sheet to fill. The take's length already counts (app/recording-time.js, 곡 녹음 →
+ * 연습 시간); a chip writes the time actually practised as the person's own row for the song and day (practiceTimeSource
+ * 'manual', with the take), and then only that counts — the same rule as the 연습 기록 sheet. More than one row of their
+ * own that day: shown, changed in the sheet. 자세히 opens the sheet (their row, or a new one with the take). */
+VZ.recPracticeBlock = (card, {songId, date, mediaId}) => {
+  if (!card || !songId) return;
+  const host = document.createElement('div');host.className = 'rec-practice';host.dataset.recPractice = '';
+  card.querySelector('.btn-row')?.before(host);
+  const gone = () => new Set((VZ.db.deleted?.practices || []).map(String));
+  const rows = () => (VZ.db.practices || []).filter(p => p && p.date === date && p.songId === songId && p.practiceMode !== 'training' && !gone().has(String(p.id)));
+  const own = () => rows().filter(p => !['unconfirmed', 'recording'].includes(p.practiceTimeSource) && VZ.practiceMinutes(p) > 0);
+  const paint = () => {
+    if (!host.isConnected) { window.removeEventListener('vzip:data-changed', paint); return; }
+    const mine = own(), auto = rows().find(p => p.practiceTimeSource === 'recording');
+    const minutes = mine.length ? mine.reduce((n, p) => n + VZ.practiceMinutes(p), 0) : auto ? VZ.practiceMinutes(auto) : 0;
+    const when = date === VZ.today() ? '오늘' : VZ.dateLabel(date);
+    const line = minutes ? when + ' 이 곡 연습 <b data-rec-practice-min>' + esc(VZ.minutes(minutes)) + '</b>' : when + ' 이 곡 연습 시간';
+    const sub = mine.length ? '직접 적은 시간이에요' : auto ? '녹음 길이로 넣었어요. 실제로 연습한 시간을 누르면 그걸로 바꿔요.' : '실제로 연습한 시간을 누르면 연습 기록에 들어가요.';
+    const cur = mine.length === 1 ? VZ.practiceMinutes(mine[0]) : 0;
+    host.innerHTML = '<p class="rec-practice-line"><i class="ph ph-timer" aria-hidden="true"></i><span>' + line + '</span></p><p class="rec-practice-sub">' + esc(sub) + '</p>' +
+      (mine.length > 1 ? '' : '<div class="rec-practice-chips" role="group" aria-label="실제로 연습한 시간">' + [10, 20, 30, 60].map(n => '<button type="button" data-rec-min="' + n + '" aria-pressed="' + (cur === n) + '">' + n + '분</button>').join('') + '</div>') +
+      '<button type="button" class="rec-practice-more" data-log>' + (mine.length ? '연습 기록 고치기' : '자세히 적기') + ' <i class="ph ph-caret-right" aria-hidden="true"></i></button>';
+    host.querySelectorAll('[data-rec-min]').forEach(b => b.onclick = () => set(Number(b.dataset.recMin)));
+    host.querySelector('[data-log]').onclick = () => VZ.practiceSheet({songId, date, mediaIds:[mediaId], practice:own().length === 1 ? own()[0] : null});
+  };
+  const set = n => {
+    const target = own().length === 1 ? own()[0].id : '';
+    const ok = VZ.change(d => {
+      const e = target && d.practices.find(p => p.id === target);
+      if (e) Object.assign(e, {minutes:n, manualMinutes:n, practiceTimeSource:'manual', mediaIds:[...new Set([...(e.mediaIds || []), mediaId])], updatedAt:Date.now()});
+      else d.practices.push({id:VZ.uid(), date, minutes:n, manualMinutes:n, practiceTimeSource:'manual', mediaSeconds:0, mediaIds:[mediaId], practiceMode:'song', technique:[], songId, categoryId:'', categoryLabel:'', detail:'', detail2:'', rating:0, memo:'', completed:[], assignmentReps:{}, assignmentNotes:{}, created:Date.now()});
+    }, {silent:true});   // silent: a render would replace this saved-take card
+    if (!ok) return;
+    VZ.recordingTime?.run?.();   // the take's automatic row gives way to the time written now
+    VZ.toast((date === VZ.today() ? '오늘' : VZ.dateLabel(date)) + ' 이 곡 연습 ' + VZ.minutes(n) + '으로 적었어요.');
+    paint();
+  };
+  window.addEventListener('vzip:data-changed', paint);
+  paint();
+  // The take's length counts as soon as the list has it (app/recording-time.js runs after a list read).
+  Promise.resolve(M.list?.()).catch(() => {}).then(() => VZ.recordingTime?.run?.()).then(paint, paint);
+};
 VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = null, preset = null} = {}) => {
   const db = VZ.db, p = practice;
   const mode = p?.practiceMode || (songId || !p ? 'song' : 'training');
@@ -507,11 +550,14 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
       await M.saveBlob(item, p => { btn.textContent = '클라우드 저장 ' + p + '%'; });
       if (lessonId) VZ.change(d => { const l = d.lessons.find(x => x.id === lessonId); if (l) { l.recordings ||= []; if (!l.recordings.some(x => x.id === id)) l.recordings.push({id, note:item.review || ''}); } }, {silent:true});
       res.releaseProtection?.();state.saved = true; pl.destroy();
+      // A song's practice take: its practice time is shown and set right here (owner, 2026-11-23: "곡 녹음 연습 등록하는게 불편").
+      const songPractice = !lessonId && !!state.songId && kind === 'song' && !state.type.performance();
       review.innerHTML = '<div class="card stack"><div class="row"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-check"></i></span><div class="grow"><strong>저장했어요</strong><div class="small muted">' + esc(item.name) + ' · ' + VZ.clock(item.durationSeconds) + (window.vzipCloudSignedIn?.() ? ' · 클라우드 백업 진행' : '') + '</div></div></div><div class="btn-row">' +
-        (lessonId ? '<a class="btn secondary" href="#/lesson/' + esc(lessonId) + '">레슨으로</a>' : '<button type="button" class="btn secondary" data-log>연습 기록</button>') + '<button type="button" class="btn" data-again>새 녹음</button></div>' +
+        (songPractice ? '' : lessonId ? '<a class="btn secondary" href="#/lesson/' + esc(lessonId) + '">레슨으로</a>' : '<button type="button" class="btn secondary" data-log>연습 기록</button>') + '<button type="button" class="btn" data-again>새 녹음</button></div>' +
         (state.songId ? '<a class="btn ghost" href="#/song/' + esc(state.songId) + '">' + esc(VZ.songTitle(state.songId)) + ' 곡 보기</a>' : '') + '</div>';
       review.querySelector('[data-again]').onclick = reset;
       review.querySelector('[data-log]')?.addEventListener('click', () => VZ.practiceSheet({songId:state.songId, mediaIds:[id]}));
+      if (songPractice) VZ.recPracticeBlock(review.querySelector('.card'), {songId:state.songId, date:item.recordedDate, mediaId:id});
       VZ.toast('녹음을 저장했어요.');
       status.textContent = '';
       // A practice take can belong to one of today's goals (made from its row, or picked now): app/goal-routines.js.

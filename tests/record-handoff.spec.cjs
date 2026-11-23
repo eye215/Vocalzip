@@ -109,3 +109,35 @@ test('곡 녹음 → 연습 시간: a song\'s practice recording counts that day
   await page.evaluate(() => VZ.recordingTime.run());
   await expect.poll(() => page.evaluate(() => VZ.db.practices.map(p => p.id))).toEqual(['m']);
 });
+
+// 녹음 저장 화면 › 오늘 이 곡 연습 (VZ.recPracticeBlock, owner 2026-11-23: "곡 녹음 연습 등록하는게 불편"): the saved song
+// take shows that day's practice for the song (its length, counted at once), and one tap writes the time actually
+// practised as the person's own row — the automatic one gives way; a second tap changes that same row.
+test('녹음 저장 → 오늘 이 곡 연습: the take counts at once, one tap writes the real time, a second tap changes it', async ({page, browserName}) => {
+  test.skip(browserName !== 'chromium', 'Fake capture devices are Chromium-only.');
+  await page.setViewportSize({width:390, height:844});
+  await boot(page, seed());
+  await page.evaluate(() => { location.hash = '#/record?song=s1'; });
+  await page.getByRole('button', {name:'녹음 시작', exact:true}).click();
+  await page.waitForTimeout(1500);
+  await page.getByRole('button', {name:'녹음 종료', exact:true}).click();
+  await page.locator('[data-review] [data-save]').click();
+  const block = page.locator('[data-rec-practice]'), min = block.locator('[data-rec-practice-min]');
+  await expect(min).toHaveText('1분', {timeout:15000});
+  await expect(block).toContainText('녹음 길이로 넣었어요');
+  const rows = () => page.evaluate(() => VZ.db.practices.filter(p => p.songId === 's1' && p.date === VZ.today()).map(p => ({id:p.id, minutes:p.minutes, source:p.practiceTimeSource, media:p.mediaIds.length})));
+  expect(await rows()).toEqual([expect.objectContaining({id:expect.stringMatching(/^rec-time:/), minutes:1, source:'recording', media:1})]);
+  for (const b of await block.locator('[data-rec-min]').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await block.locator('[data-rec-min="30"]').click();
+  await expect(min).toHaveText('30분');
+  await expect(block).toContainText('직접 적은 시간이에요');
+  await expect(block.locator('[data-rec-min="30"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(rows).toEqual([expect.objectContaining({minutes:30, source:'manual', media:1})]);   // the automatic row went
+  const id = (await rows())[0].id;
+  await block.locator('[data-rec-min="20"]').click();
+  await expect(min).toHaveText('20분');
+  expect(await rows()).toEqual([expect.objectContaining({id, minutes:20, source:'manual'})]);           // the same row
+  // 연습 기록 고치기 opens that row in the sheet.
+  await block.locator('[data-log]').click();
+  await expect(page.locator('#practice-log [name=minutes]')).toHaveValue('20');
+});
