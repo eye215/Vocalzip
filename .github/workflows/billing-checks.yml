@@ -43,7 +43,7 @@ jobs:
           retention-days: 14
   database:
     runs-on: ubuntu-24.04  # Playwright 1.56 has no Ubuntu 26.04 build; ubuntu-latest moved there in Oct 2026
-    timeout-minutes: 5
+    timeout-minutes: 15   # npm ci alone has run past 5 minutes on a busy runner
     services:
       postgres:
         image: postgres:16

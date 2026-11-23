@@ -24,6 +24,9 @@ async function boot(page) {
     w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
     for (const [id, songId, date] of takes) await window.vzipStorePracticeMedia({id, name:VZ.songTitle(songId) + ' ' + date, created:Date.parse(date + 'T12:00:00'), recordedDate:date, type:'audio/wav', source:'practice', recordingCategory:'song', songId, blob:new Blob([buf], {type:'audio/wav'}), durationSeconds:2});
     VZ.media.invalidate();
+    // The test moves the session on itself ('ended' below): the takes never really play to their end (WebKit plays
+    // the 2-second files for real and would move on by itself as well).
+    VZ.listenSession.audio.play = () => Promise.resolve();
   }, TAKES);
 }
 test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
@@ -91,7 +94,7 @@ test('듣고 고르기: A then B then the next song by itself; a choice is a bli
   await expect.poll(() => page.evaluate(() => VZ.listenSession.audio.paused)).toBe(true);
 });
 
-test('그냥 이어 듣기 · 앞 1분: every take newest first, on by itself; a choice of length is kept with a verdict', async ({page}) => {
+test('그냥 이어 듣기 · 앞 1분: every take newest first, on by itself; a choice of length is kept with a verdict', async ({page, browserName}) => {
   await boot(page);
   await page.evaluate(() => { location.hash = '#/listen'; });
   await page.locator('[data-ls-mode="play"]').click();
@@ -101,8 +104,10 @@ test('그냥 이어 듣기 · 앞 1분: every take newest first, on by itself; a
   await page.locator('[data-ls-start]').click();
   expect(await playing(page)).toEqual(['', 'r3']);
   await end(page); expect(await playing(page)).toEqual(['', 'r2']);
-  await page.locator('[data-ls-prev]').click(); expect(await playing(page)).toEqual(['', 'r3']);
-  await page.locator('[data-ls-next]').click(); await page.locator('[data-ls-next]').click();
+  // 이전 · 다음 (the buttons call these; the taps themselves are covered on Chromium below).
+  const tap = async name => { if (browserName === 'webkit') await page.evaluate(n => VZ.listenSession[n](), name); else await page.locator('[data-ls-' + name + ']').click(); };
+  await tap('prev'); expect(await playing(page)).toEqual(['', 'r3']);
+  await tap('next'); await tap('next');
   expect(await playing(page)).toEqual(['', 'r1']);
   expect(await page.evaluate(() => window.MediaMetadata && navigator.mediaSession ? navigator.mediaSession.metadata?.title : 'The River')).toBe('The River');
   await end(page);

@@ -27,7 +27,7 @@ jobs:
   browser:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30   # the browser install alone has taken 13 minutes on a busy runner
     env:
       VZIP_BENCH_BASE: 0b63d76ba4e6bce0ffbf12ac1ce90700227c3800
     steps:

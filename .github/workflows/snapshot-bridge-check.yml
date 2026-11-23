@@ -71,7 +71,7 @@ jobs:
         run: node --test --test-concurrency=1 tests/snapshot-revision.test.mjs tests/field-drafts.test.mjs tests/field-draft-outbox.test.cjs tests/field-draft-outbox-integration.test.mjs
   bridge-browser:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30   # the browser install alone has taken 13 minutes on a busy runner
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

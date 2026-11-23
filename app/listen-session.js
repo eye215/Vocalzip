@@ -66,7 +66,8 @@ async function load(play) {
     const {url} = await srcOf(s.take.item);
     if (session !== mine || session.index !== at || session.extra) return;
     audio.src = url;
-    if (play) await audio.play().catch(() => {});
+    // Not waited on: some browsers settle play() late (or never, without sound out); the screen follows at once.
+    if (play) audio.play().catch(() => {});
   } catch {
     if (session !== mine) return;
     session.failed++;
@@ -109,7 +110,7 @@ async function hear(pair, side) {
   const take = side === 'A' ? pair.a : pair.b;
   session.extra = {pair, side, take};
   meta();
-  try { audio.src = (await srcOf(take.item)).url; await audio.play().catch(() => {}); } catch { session.extra = null; V.toast('이 녹음을 불러오지 못했어요.', 'error'); }
+  try { audio.src = (await srcOf(take.item)).url; audio.play().catch(() => {}); } catch { session.extra = null; V.toast('이 녹음을 불러오지 못했어요.', 'error'); }
   changed();
 }
 function resume() { if (!session) return; session.extra = null; load(true); }

@@ -11,7 +11,7 @@ permissions:
 jobs:
   settlement:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30   # the browser install alone has taken 13 minutes on a busy runner
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

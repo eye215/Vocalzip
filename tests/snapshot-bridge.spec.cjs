@@ -258,6 +258,9 @@ async function interruptedFileDelete(page){
   }
  });
  fixture.remote.block=false;await sync(page);await page.goto('/#/settings');
+ // The app's own background backup may be holding the upload lock right then; deleting waits for it by design
+ // ("다른 탭의 업로드가 끝난 뒤 삭제해 주세요"). Start once it is free, so the test sees the deletion it is about.
+ await expect.poll(()=>page.evaluate(async()=>!navigator.locks?.query||!(await navigator.locks.query()).held.some(l=>l.name==='vzip-cloud-media-upload')),{timeout:15000}).toBe(true);
  await page.locator('#cloud-delete-review').click();await page.locator('[data-media-delete-item="chosen"]').click();
  return {...fixture,original,dialog:page.locator('.snapshot-review-page')};
 }

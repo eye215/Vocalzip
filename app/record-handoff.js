@@ -30,9 +30,12 @@ async function send(songId){
   const s=V.song(songId);if(!s)return;
   const r={id:ROW,kind:ROW,v:1,songId,at:Date.now(),from:deviceId(),fromName:deviceName()};
   const kept=V.change(db=>{db.practicePlans||=[];const i=db.practicePlans.findIndex(p=>p?.id===ROW);if(i<0)db.practicePlans.push(r);else db.practicePlans[i]=r;},{silent:true});
+  // Also as a notification to the account's other devices that allowed it (app/push-handoff.js): with the app closed too.
+  const pushed=(window.VZ.pushHandoff?.ready?.()?window.vzipCloudPush?.send({songId,title:s.title,at:r.at,from:r.from,fromName:r.fromName}):null)?.catch?.(()=>null);
   const now=await window.vzipCloudDeviceSend?.({songId,at:r.at,from:r.from,fromName:r.fromName}).catch(()=>false);
+  const notified=Number((await pushed)?.sent)>0;
   V.sheet({title:'휴대폰으로 녹음',
-    body:'<div class="rh-sheet" data-rh-sheet><p><b>'+esc(s.title)+'</b></p><p>'+(now?'휴대폰에 앱이 열려 있으면 지금 ‘녹음 시작’이 떠요.':'휴대폰에서 앱을 열면 맨 위에 ‘녹음 시작’이 떠요.')+
+    body:'<div class="rh-sheet" data-rh-sheet><p><b>'+esc(s.title)+'</b></p><p>'+(notified?'휴대폰에 알림을 보냈어요. 알림을 누르면 녹음 화면이 열려요.':now?'휴대폰에 앱이 열려 있으면 지금 ‘녹음 시작’이 떠요.':'휴대폰에서 앱을 열면 맨 위에 ‘녹음 시작’이 떠요.')+
       ' '+HANDOFF_MINUTES+'분 안에 열어 주세요. 녹음은 이 곡에 저장되고 여기서도 보여요.</p>'+(kept?'':'<p class="muted">저장하지 못했어요. 휴대폰 앱이 열려 있을 때만 바로 떠요.</p>')+
       '<p class="muted">휴대폰 녹음은 이어폰 없이, '+deviceName()+' 스피커 소리와 함께 녹음돼요.</p></div>',
     foot:'<button type="button" class="btn block" data-close>확인</button>'});
@@ -74,5 +77,5 @@ window.addEventListener('vzip:data-changed',()=>setTimeout(check,0));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')check();});
 window.addEventListener('hashchange',()=>{if(shown&&/^#\/record/.test(location.hash))hide();});
 setTimeout(check,1500);
-V.recordHandoff={send,offer,check,HANDOFF_MINUTES};
+V.recordHandoff={send,offer,check,HANDOFF_MINUTES,deviceId,deviceName};
 })();
