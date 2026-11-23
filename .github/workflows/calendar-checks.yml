@@ -11,7 +11,7 @@ permissions:
 jobs:
   calendar:
     runs-on: ubuntu-24.04  # Playwright 1.56 has no Ubuntu 26.04 build; ubuntu-latest moved there in Oct 2026
-    timeout-minutes: 10
+    timeout-minutes: 20   # the browser install alone has taken 9 minutes on a busy runner
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
