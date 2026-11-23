@@ -209,7 +209,7 @@ async function mountAnalysis(host) {
   if (sw) sw.onchange = async () => { V.growthSong.setPractice(sw.checked); await mountAnalysis(host); host.querySelector('[data-hub-practice]')?.focus({preventScroll:true}); };
 }
 V.route('vocal-analysis', {title:'성장', tab:'growth', noAutoRefresh:true,
-  render:() => V.growthTabs('songs') + '<div class="growth-hub" data-growth-analysis></div>',
+  render:() => V.growthTabs('songs') + (V.listenSession ? '<a class="ls-entry" href="#/listen" data-listen-entry><i class="ph-fill ph-headphones" aria-hidden="true"></i><span><strong>듣고 고르기</strong><small>예전과 요즘 녹음을 이어 듣고 어느 쪽이 나은지 골라요. 화면을 꺼도 계속 나와요.</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>' : '') + '<div class="growth-hub" data-growth-analysis></div>',
   mount(main) { mountAnalysis(main.querySelector('[data-growth-analysis]')); },
   leave() { request++; }
 });
