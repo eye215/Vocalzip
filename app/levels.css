@@ -106,3 +106,4 @@
 }
 @media (min-width:1100px){.lv[data-lv-view=main] .lv-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .lv-how-to{margin:12px 0 0;padding:12px 14px;border-radius:14px;background:var(--vz-color-surface-subtle,#F4F0FD);color:var(--vz-color-ink,#101828);font-size:14px;line-height:21px;word-break:keep-all}
+.lv-tile-sub:empty{display:none}

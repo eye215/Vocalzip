@@ -73,3 +73,13 @@ body.vz-collection #view[data-collection=library] .lib-month:first-child h3{marg
 @media(max-width:380px){body.vz-collection #view[data-collection=library] .vz-library-tabs .lib-seg button{padding-inline:12px}}
 @media(max-width:359px){body.vz-collection #view[data-collection=library] .vz-library-tabs .lib-seg button{padding-inline:8px}}
 .vz-library-tabs.vz-more-right{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent)}
+/* UI 정리 2차 (2026-11-23): 곡별 | 전체 녹음 is the same two-way switch as 성장's 나 · 곡 · 기록 (one tinted bar, equal
+ * halves), so it reads as "which view" and not as one more filter chip; on a phone the songs are one white list with
+ * thin lines between rows instead of a tall card each (tablets keep their card grid, app/wide-lists.css). */
+.vz-songs-switch{gap:4px;padding:4px;border-radius:14px;background:var(--surface-2,#F2F4F7)}
+.vz-songs-switch a{flex:1 1 0;justify-content:center;border-radius:10px}
+@media (max-width:767px){
+  body.vz-collection .vz-song-list.list{background:#fff;border-radius:20px;overflow:hidden}
+  body.vz-collection .vz-song-list>.item{border-radius:0;margin:0;min-height:64px;padding:12px 16px}
+  body.vz-collection .vz-song-list>.item+.item{border-top:1px solid #F2EFF7}
+}

@@ -85,7 +85,9 @@ function tile(a){
   if(a.state==='step'){big='<strong>'+a.step+' / '+L.STEPS+'<small>단계</small></strong>';
     small=a.next?.due?'다음 연습을 마치면 '+a.next.step+'단계':a.step?(a.keeping?'요즘도 유지 중':'최근 '+L.RULES.keepDays+'일엔 기록이 없어요'):'아직 1단계 전이에요';}
   else if(a.state==='calibrating'){big='<strong class="is-word">기준 맞추는 중</strong>';small=a.day+'일째'+(a.estimate?' · 지금은 '+a.estimate+'단계쯤':'');ghost=a.estimate;}
-  else if(a.state==='ready'){big='<strong class="is-word">아직 안 쟀어요</strong>';small='오늘의 연습에서 재요';}
+  // Not measured yet: one quiet word (UI 정리 2차) — the card's line above already says where it is measured, so eight
+  // tiles do not repeat "아직 안 쟀어요 · 오늘의 연습에서 재요".
+  else if(a.state==='ready'){big='<strong class="is-word">아직</strong>';small='';}
   else{big='<strong class="is-word">준비 중</strong>';small='재는 연습을 준비 중이에요';}
   const said=a.state==='step'?a.step+'단계'+(a.keeping?', 요즘도 유지 중':''):a.state==='calibrating'?'기준 맞추는 중 '+a.day+'일째':a.state==='ready'?'아직 재지 않았어요':'재는 연습을 준비 중이에요';
   return '<li><a class="lv-tile" href="#/levels/'+a.id+'" data-area="'+a.id+'" data-state="'+a.state+'"'+(a.keeping?' data-keeping':'')+' aria-label="'+esc(areaName(a)+', '+said+', 자세히 보기')+'">'+
