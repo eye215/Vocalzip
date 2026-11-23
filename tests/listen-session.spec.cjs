@@ -24,6 +24,9 @@ async function boot(page) {
     w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
     for (const [id, songId, date] of takes) await window.vzipStorePracticeMedia({id, name:VZ.songTitle(songId) + ' ' + date, created:Date.parse(date + 'T12:00:00'), recordedDate:date, type:'audio/wav', source:'practice', recordingCategory:'song', songId, blob:new Blob([buf], {type:'audio/wav'}), durationSeconds:2});
     VZ.media.invalidate();
+    // The test moves the session on itself ('ended' below): the takes never really play to their end (WebKit plays
+    // the 2-second files for real and would move on by itself as well).
+    VZ.listenSession.audio.play = () => Promise.resolve();
   }, TAKES);
 }
 test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
