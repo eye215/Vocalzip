@@ -361,8 +361,8 @@ test('단계: 호흡 · 비브라토 · 리듬 show their real state, the area p
   await expect(tile(page, 'breath').locator('[data-tile-sub]')).toHaveText('요즘도 유지 중');
   await expect(tile(page, 'rhythm').locator('strong')).toHaveText('기준 맞추는 중');
   await expect(tile(page, 'rhythm').locator('[data-tile-sub]')).toHaveText('6일째 · 지금은 1단계쯤');
-  await expect(tile(page, 'vibrato').locator('strong')).toHaveText('아직 안 쟀어요');
-  await expect(tile(page, 'vibrato').locator('[data-tile-sub]')).toHaveText('오늘의 연습에서 재요');
+  await expect(tile(page, 'vibrato').locator('strong')).toHaveText('아직');
+  await expect(tile(page, 'vibrato').locator('[data-tile-sub]')).toHaveText('');
   for (const area of ['breath', 'pitch', 'sustain', 'path', 'range', 'high', 'vibrato', 'rhythm']) await expect(tile(page, area).locator('strong')).not.toHaveText('준비 중');
   await noOverflow(page);
   await host(page).locator('[data-lv-skills]').evaluate(e => e.scrollIntoView({block:'start'}));

@@ -124,8 +124,9 @@ test('단계: the level with today\'s points and how to earn them, 기본기 til
   expect(await tile(page, 'sustain').locator('.lv-pips i.is-ghost').count()).toBe(2);
   // Can be measured, not yet: every area has its measuring exercise now (소리 길 · 고음 too), said so.
   for (const area of ['breath', 'path', 'range', 'high', 'vibrato', 'rhythm']) {
-    await expect(tile(page, area).locator('strong')).toHaveText('아직 안 쟀어요');
-    await expect(tile(page, area).locator('[data-tile-sub]')).toHaveText('오늘의 연습에서 재요');
+    await expect(tile(page, area).locator('strong')).toHaveText('아직');
+    await expect(tile(page, area).locator('[data-tile-sub]')).toHaveText('');   // the card's line says where (UI 정리 2차)
+    await expect(tile(page, area)).toHaveAttribute('aria-label', /아직 재지 않았어요/);
   }
   await expect(tile(page, 'path').locator('.lv-tile-name')).toHaveText('소리 길연결');
   // (c) 선생님 지적 배지: what was retired as 이제 됐어요, newest first, apart from the numbers.
