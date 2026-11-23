@@ -54,27 +54,43 @@ test('아이폰으로 녹음 keeps one request and sends it; the same device is 
 
 test.describe('아이폰', () => {
 test.use({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148', viewport:{width:390, height:844}});
-test('the request shows 녹음 시작 at once (message) or when opened (kept row), opens the recorder with the song; not again, not after 10 minutes', async ({page}) => {
+test('the request opens the recorder with the song at once (kept row on opening, or a message); on the recorder or with a sheet open it waits as a line; not again, not after 10 minutes', async ({page}) => {
   await boot(page, seed({practicePlans:[{id:'record-handoff', kind:'record-handoff', v:1, songId:'s1', at:'AT_MINUTE_AGO', from:'ipad-1', fromName:'아이패드'}]}), {device:'phone-1'});
-  // No button on the phone's song page: the phone is the one that records.
+  // Opening the app within 10 minutes: straight to the recorder with the song (the mic still takes one tap there).
+  await expect(page).toHaveURL(/#\/record\?song=s1$/);
+  await expect(page.locator('.toast').last()).toContainText('아이패드에서 고른 곡이에요');
+  await expect(bar(page)).toHaveCount(0);
+  await page.evaluate(() => { location.hash = '#/home'; });
+  await page.evaluate(() => VZ.recordHandoff.check());
+  await expect(page).toHaveURL(/#\/home$/);                   // used: not offered again
+  // A new one by message while the app is open on 오늘: opens the recorder too.
+  await page.evaluate(() => window.__deliver({songId:'s1', at:Date.now(), from:'ipad-1', fromName:'아이패드'}));
+  await expect(page).toHaveURL(/#\/record\?song=s1$/);
+  // On the recorder already (a take may be running): it waits as the line at the top, and a tap opens it.
+  await page.evaluate(() => window.__deliver({songId:'s1', at:Date.now() + 1, from:'ipad-1', fromName:'아이패드'}));
   await expect(bar(page)).toBeVisible();
   await expect(bar(page)).toContainText('아이패드에서 고른 곡');
   await expect(bar(page)).toContainText('This Is the Moment');
   expect((await bar(page).locator('[data-rh-go]').boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await bar(page).locator('[data-rh-close]').click();
+  await expect(bar(page)).toHaveCount(0);
+  // A sheet open on 오늘: the line again, not a jump away from it.
+  await page.evaluate(() => { location.hash = '#/home'; });
+  await page.evaluate(() => VZ.sheet({title:'시험', body:'<p>열린 시트</p>'}));
+  await page.evaluate(() => window.__deliver({songId:'s1', at:Date.now() + 2, from:'ipad-1', fromName:'아이패드'}));
+  await expect(bar(page)).toBeVisible();
+  await expect(page).toHaveURL(/#\/home$/);
+  await page.locator('.sheet-back [data-close]').first().click();  // the sheet closed, the line is still there
+  await expect(page.locator('.sheet-back')).toHaveCount(0);
   await bar(page).locator('[data-rh-go]').click();
   await expect(page).toHaveURL(/#\/record\?song=s1$/);
   await expect(bar(page)).toHaveCount(0);
-  await page.evaluate(() => { location.hash = '#/home'; });
-  await page.evaluate(() => VZ.recordHandoff.check());
-  await expect(bar(page)).toHaveCount(0);                        // used: not offered again
-  // A new one by message, while the app is open; closed with ✕.
-  await page.evaluate(() => window.__deliver({songId:'s1', at:Date.now(), from:'ipad-1', fromName:'아이패드'}));
-  await expect(bar(page)).toBeVisible();
-  await bar(page).locator('[data-rh-close]').click();
-  await expect(bar(page)).toHaveCount(0);
   // Older than 10 minutes: not offered.
+  await page.evaluate(() => { location.hash = '#/home'; });
   await page.evaluate(() => window.__deliver({songId:'s1', at:Date.now() + 1 - 11 * 60000, from:'ipad-1', fromName:'아이패드'}));
   await expect(bar(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/home$/);
+  // No button on the phone's song page: the phone is the one that records.
   await page.evaluate(() => { location.hash = '#/song/s1'; });
   await expect(page.locator('#top [data-record-handoff]')).toHaveCount(0);
 });
@@ -84,8 +100,8 @@ test.describe('갤럭시', () => {
 test.use({userAgent:'Mozilla/5.0 (Linux; Android 14; SM-S921N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36', viewport:{width:384, height:832}});
 test('an Android phone receives too (here from a 태블릿), with no send button of its own', async ({page}) => {
   await boot(page, seed({practicePlans:[{id:'record-handoff', kind:'record-handoff', v:1, songId:'s1', at:'AT_MINUTE_AGO', from:'tab-1', fromName:'태블릿'}]}), {device:'galaxy-1'});
-  await expect(bar(page)).toBeVisible();
-  await expect(bar(page)).toContainText('태블릿에서 고른 곡');
+  await expect(page).toHaveURL(/#\/record\?song=s1$/);
+  await expect(page.locator('.toast').last()).toContainText('태블릿에서 고른 곡이에요');
   await page.evaluate(() => { location.hash = '#/song/s1'; });
   await expect(page.locator('#top [data-record-handoff]')).toHaveCount(0);
 });
