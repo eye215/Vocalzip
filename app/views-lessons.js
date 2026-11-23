@@ -373,7 +373,15 @@ VZ.route('calendar', {title:'기록', tab:'calendar', actions:() => '<a class="i
     const group = rows => rows ? '<div class="cal-list">' + rows + '</div>' : '';
     const lessonRow=l=>'<a class="item vz-calendar-item" data-kind="lesson" href="#/lesson/'+esc(l.id)+'"><span class="avatar">'+lessonNoteIcon+'</span><span class="item-main"><span class="item-title">'+esc(lessonRecordTitle(l))+'</span><span class="item-sub">'+esc(lessonRecordSub(l))+'</span></span>'+(VZ.lessonStatus(l)==='scheduled'?'':VZ.statusBadge(VZ.lessonStatus(l)))+'<i class="ph ph-caret-right chev"></i></a>';
     const lessonsHtml = group(e.l.sort(VZ.lessonSort).map(l => owner(lessonRow(l), (l.recordings || []).map(r => r.id),'lesson')).join('') + loose('기록에 연결되지 않은 레슨 녹음', e.rl,'lesson'));
-    const practiceHtml = group(e.p.filter(p => !VZ.practiceHidden?.(p)).map(p => owner(VZ.practiceRow(p, {day:true}), p.mediaIds || [],'practice')).join('') + loose('기록에 연결되지 않은 연습 녹음', e.rp,'practice'));
+    // A song's recording with no record of its own goes under that day's record of the same song (owner, 2026-11-23:
+    // "얘네 왜 the river에 안 들어가?" — time typed for the song wins, so its takes made no record of their own). Display only:
+    // nothing is written; the record's time stays what it was.
+    const shownPractices = e.p.filter(p => !VZ.practiceHidden?.(p)), sameSong = new Map(), looseRp = [];
+    for (const m of e.rp) {
+      const p = m.songId && shownPractices.find(x => x.songId === m.songId && x.practiceMode !== 'training');
+      if (p) { if (!sameSong.has(p.id)) sameSong.set(p.id, []); sameSong.get(p.id).push(m.id); } else looseRp.push(m);
+    }
+    const practiceHtml = group(shownPractices.map(p => owner(VZ.practiceRow(p, {day:true}), [...(p.mediaIds || []), ...(sameSong.get(p.id) || [])],'practice')).join('') + loose('기록에 연결되지 않은 연습 녹음', looseRp,'practice'));
     const stageHtml = group(e.ps.map(p=>owner(VZ.repertoire.showCard(p),[],'stage')).join('') + loose('공연 녹음·영상', e.rs,'stage'));
     dayHost.innerHTML = '<div class="vz-calendar-day-head"><h2 class="sec">' + esc(VZ.dateLabel(calDay)) + '</h2><button type="button" data-add aria-label="기록 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>' +
       (lessonsHtml || practiceHtml || stageHtml ? '<div class="stack">' + (stageHtml ? '<h3 class="cal-group stage">공연·오디션</h3>' + stageHtml : '') + (lessonsHtml ? '<h3 class="cal-group lesson">레슨</h3>' + lessonsHtml : '') + (practiceHtml ? '<h3 class="cal-group practice">연습</h3>' + practiceHtml : '') + '</div>'
