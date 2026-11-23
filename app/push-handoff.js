@@ -12,6 +12,10 @@
 const V = window.VZ;
 if (!V || typeof document === 'undefined') return;
 const esc = V.esc, ON_KEY = 'vzip_push_handoff_on';
+// Turned on once the server is set up (docs/push-handoff-setup.md, step 4). Until then nothing here calls the server:
+// no 설정 row, no request — so a function that is not deployed yet is never asked.
+const SERVER_READY = false;
+const ready = () => SERVER_READY || window.VZIP_PUSH_READY === true;
 const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const apple = () => /iPhone|iPad/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const standalone = () => navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
@@ -52,7 +56,7 @@ function rowHtml() {
 /** Put the 알림 section into 설정 once the server answers that it is set up. */
 async function mountSettings(host) {
   if (!host) return;
-  if (!window.vzipCloudPush) return;
+  if (!window.vzipCloudPush || !ready()) return;
   status = await window.vzipCloudPush.status().catch(() => null);
   if (!status?.available || !host.isConnected || host.querySelector('[data-push-row]')) return;
   host.insertAdjacentHTML('beforebegin', '<section class="vz-settings-section" data-settings-group="notify"><h2>알림</h2><div class="list icons vz-settings-list" data-push-host>' + rowHtml() + '</div></section>');
@@ -73,5 +77,5 @@ window.addEventListener('hashchange', () => { if (/^#\/settings/.test(location.h
 if (/^#\/settings/.test(location.hash)) setTimeout(() => mountSettings(document.querySelector('[data-settings-group="more"]')), 300);
 // The worker asks an open window to go to the tapped notification's address (when it cannot navigate itself).
 navigator.serviceWorker?.addEventListener?.('message', e => { if (e.data?.type === 'vzip-open' && typeof e.data.url === 'string' && e.data.url.startsWith(location.origin)) location.href = e.data.url; });
-V.pushHandoff = {supported, standalone, isOn, enable, disable, mountSettings, rowHtml, status:() => status};
+V.pushHandoff = {ready, supported, standalone, isOn, enable, disable, mountSettings, rowHtml, status:() => status};
 })();

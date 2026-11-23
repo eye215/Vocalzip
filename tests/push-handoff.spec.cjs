@@ -9,9 +9,9 @@ const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
  from:()=>{const c={};for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle','in','limit'])c[m]=()=>c;c.then=r=>r({data:[],error:null});return c}})};`;
 const seed = {categories:[], songs:[{id:'s1', title:'This Is the Moment'}], lessons:[], assignments:[], practices:[], performances:[], comparisonReports:[], dailyGoals:[], practicePlans:[]};
-async function boot(page, {available = true} = {}) {
+async function boot(page, {available = true, ready = true} = {}) {
   page.__errors = []; page.on('pageerror', e => page.__errors.push(e.message));
-  await page.addInitScript(([key, value, available]) => {
+  await page.addInitScript(([key, value, available, ready]) => {
     if (!sessionStorage.getItem('ph-seeded')) { localStorage.setItem(key, value); localStorage.setItem('vzip_device_id', 'pad-1'); sessionStorage.setItem('ph-seeded', '1'); }
     // The browser's side: permission and the push service.
     window.__calls = [];
@@ -28,7 +28,8 @@ async function boot(page, {available = true} = {}) {
       send:async payload => { window.__calls.push(['send', payload.songId, payload.title, payload.from]); return {sent:1, devices:1}; }};
     Object.defineProperty(window, 'vzipCloudPush', {configurable:true, get:() => fake, set() {}});
     window.vzipCloudDeviceSend = async () => false;
-  }, [KEY, JSON.stringify(seed), available]);
+    window.VZIP_PUSH_READY = ready;   // the server is set up (push-handoff.js SERVER_READY)
+  }, [KEY, JSON.stringify(seed), available, ready]);
   await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
   await page.route('**/*.supabase.co/**', r => r.abort());
   await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"}));
@@ -63,6 +64,15 @@ test('no 알림 section while the server is not set up', async ({page}) => {
   await expect(page.locator('[data-settings-group="more"]')).toBeVisible();
   await page.waitForTimeout(500);
   await expect(page.locator('[data-push-row]')).toHaveCount(0);
+});
+
+test('before the server is set up (SERVER_READY off): no row, no request, and 휴대폰으로 녹음 asks for no notification', async ({page}) => {
+  await boot(page, {ready:false});
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await expect(page.locator('[data-settings-group="more"]')).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(page.locator('[data-push-row]')).toHaveCount(0);
+  expect(await calls(page)).toEqual([]);
 });
 
 test.describe('iPhone in Safari (not the home-screen app)', () => {

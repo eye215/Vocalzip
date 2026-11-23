@@ -31,7 +31,7 @@ async function send(songId){
   const r={id:ROW,kind:ROW,v:1,songId,at:Date.now(),from:deviceId(),fromName:deviceName()};
   const kept=V.change(db=>{db.practicePlans||=[];const i=db.practicePlans.findIndex(p=>p?.id===ROW);if(i<0)db.practicePlans.push(r);else db.practicePlans[i]=r;},{silent:true});
   // Also as a notification to the account's other devices that allowed it (app/push-handoff.js): with the app closed too.
-  const pushed=window.vzipCloudPush?.send({songId,title:s.title,at:r.at,from:r.from,fromName:r.fromName}).catch(()=>null);
+  const pushed=(window.VZ.pushHandoff?.ready?.()?window.vzipCloudPush?.send({songId,title:s.title,at:r.at,from:r.from,fromName:r.fromName}):null)?.catch?.(()=>null);
   const now=await window.vzipCloudDeviceSend?.({songId,at:r.at,from:r.from,fromName:r.fromName}).catch(()=>false);
   const notified=Number((await pushed)?.sent)>0;
   V.sheet({title:'휴대폰으로 녹음',

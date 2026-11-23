@@ -1,7 +1,7 @@
 # 휴대폰으로 녹음 알림 — 켜는 방법
 
 **지금 상태:** 앱 코드·서비스 워커·DB 마이그레이션·Edge Function 코드와 자동 테스트까지 완료.
-**운영에는 아직 꺼져 있어요.** 아래 3단계를 하기 전에는 앱에 `설정 › 알림`이 보이지 않고, 휴대폰으로 녹음은 지금처럼
+**운영에는 아직 꺼져 있어요.** 아래 4단계를 하기 전에는 앱에 `설정 › 알림`이 보이지 않고, 휴대폰으로 녹음은 지금처럼
 (앱이 열려 있을 때 메시지, 10분 안에 열면 맨 위 줄) 동작해요.
 
 | 상태 | 내용 |
@@ -10,7 +10,7 @@
 | 자동 테스트 | `tests/push-subscriptions.test.mjs`(임시 PostgreSQL), `tests/push-worker.test.cjs`, `tests/push-handoff.spec.cjs` |
 | 실제 운영 검증 | **아직 안 함** — 아래 단계 후 iPhone(홈 화면 앱)·iPad로 확인 필요 |
 
-## 켜는 3단계 (Supabase 접근 권한이 있는 사람 또는 세션)
+## 켜는 4단계 (Supabase 접근 권한이 있는 사람 또는 세션)
 
 1. **DB 표 만들기** — 승인 후 `supabase/migrations/20261123_push_subscriptions.sql`을 운영 DB에 적용.
    새 표 하나와 함수 두 개만 추가하고, 기존 표·행은 건드리지 않아요.
@@ -20,6 +20,9 @@
    - `VAPID_PRIVATE_KEY` — 개인 키
    - `VAPID_SUBJECT` — `https://vocalzip.yullul.com`
 3. **함수 배포** — `supabase functions deploy vzip-push-handoff` (JWT 확인 켜 둔 채로).
+
+4. **앱에서 켜기** — `app/push-handoff.js`의 `SERVER_READY`를 `true`로 바꾸고 `?v=`를 올려 배포.
+   (그 전에는 앱이 알림 서버를 아예 부르지 않아요.)
 
 그 뒤 앱의 `설정 › 알림 › 휴대폰으로 녹음 알림`이 나타나요.
 
