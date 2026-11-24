@@ -9,6 +9,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble   # browsers already installed (the install step took up to 15 minutes)
     timeout-minutes: 30
     concurrency:
       group: vocalzip-session-release
@@ -21,7 +22,6 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts
-      - run: npx playwright install --with-deps chromium
       - name: Apply only the explicit verified release plan
         env:
           GITHUB_TOKEN: ${{ github.token }}

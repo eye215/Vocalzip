@@ -21,6 +21,7 @@ permissions:
 jobs:
   home:
     runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble   # browsers already installed (the install step took up to 15 minutes)
     timeout-minutes: 35  # the apt step of the browser install alone sometimes takes 15+ minutes on a busy runner
     permissions:
       contents: write
@@ -37,7 +38,6 @@ jobs:
       - name: Pure home model
         run: node --test tests/student-home-model.test.cjs
       - run: npm ci
-      - run: npx playwright install --with-deps chromium webkit
       - name: Approved dock regression
         run: npx playwright test tests/v6.spec.cjs --grep 'Bottom navigation reaches' --project=chromium-mobile --project=webkit-mobile --project=chromium-desktop --workers=2
       - name: Mobile Chromium, mobile WebKit, and desktop Chromium

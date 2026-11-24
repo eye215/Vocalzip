@@ -46,6 +46,7 @@ jobs:
   browser-smoke:
     # Playwright 1.56.1 is not compatible with ubuntu-26.04 runners.
     runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble   # browsers already installed (the install step took up to 15 minutes)
     timeout-minutes: 35
     strategy:
       fail-fast: false
