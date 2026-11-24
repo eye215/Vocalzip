@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<!-- Nothing leaves this page: no scripts from elsewhere, no network requests at all. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<title>알림 키 만들기</title>
+<!-- 휴대폰으로 녹음 알림 (docs/push-handoff-setup.md 2단계): the VAPID key pair for the vzip-push-handoff Edge Function,
+     made on this device with WebCrypto (ECDSA P-256), for someone with only an iPhone or iPad (no terminal for
+     `npx web-push generate-vapid-keys`). The keys are shown here once, to be pasted into Supabase › Edge Functions ›
+     Secrets; they are not stored, sent or logged anywhere (CSP connect-src 'none'). Formats as web-push expects:
+     public = the uncompressed point (65 bytes), private = the scalar d (32 bytes), both base64url without padding. -->
+<style>
+:root{color-scheme:light;--ink:#1D2939;--sub:#475467;--line:#E4E7EC;--brand:#6E3FD1;--soft:#F7F5FB}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;word-break:keep-all;overflow-wrap:break-word}
+main{max-width:560px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:22px;line-height:30px;margin:0 0 8px}
+p{margin:0 0 12px;color:var(--sub)}
+ol{margin:0 0 16px;padding-left:20px;color:var(--sub)}
+li{margin:0 0 6px}
+button{font:inherit;min-height:48px;border-radius:12px;border:0;cursor:pointer}
+.main{width:100%;background:var(--brand);color:#fff;font-weight:600;margin:8px 0 20px}
+.key{border:1px solid var(--line);border-radius:14px;padding:12px;margin:0 0 12px;background:var(--soft)}
+.key h2{font-size:15px;line-height:20px;margin:0 0 6px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.key h2 code{font-size:14px}
+.key output{display:block;font:13px/1.45 ui-monospace,Menlo,monospace;word-break:break-all;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;user-select:all;-webkit-user-select:all}
+.copy{min-height:44px;padding:0 14px;background:#fff;border:1px solid var(--line);color:var(--brand);font-weight:600;font-size:14px;white-space:nowrap}
+.warn{background:#FFFAEB;border-radius:12px;padding:12px;color:#93370D;font-size:14px;line-height:20px}
+.err{color:#B42318}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>알림 키 만들기</h1>
+<p>‘휴대폰으로 녹음’ 알림에 쓰는 키 한 쌍을 <b>이 기기 안에서만</b> 만들어요. 아무 데도 보내지 않고 저장하지도 않아요. 이 창을 닫으면 사라져요.</p>
+<button type="button" class="main" id="make">키 만들기</button>
+<p class="err" id="err" hidden></p>
+<section id="out" hidden>
+  <ol>
+    <li>Supabase 대시보드 → 이 프로젝트 → <b>Edge Functions</b> → <b>Secrets</b>를 열어요.</li>
+    <li>아래 세 줄을 하나씩 <b>Add new secret</b>으로 넣어요. 이름(Key)과 값(Value)을 그대로 복사해요.</li>
+    <li>저장하고 나면 이 창을 닫아요.</li>
+  </ol>
+  <div class="key"><h2><code>VAPID_PUBLIC_KEY</code><button type="button" class="copy" data-copy="pub">값 복사</button></h2><output id="pub"></output></div>
+  <div class="key"><h2><code>VAPID_PRIVATE_KEY</code><button type="button" class="copy" data-copy="priv">값 복사</button></h2><output id="priv"></output></div>
+  <div class="key"><h2><code>VAPID_SUBJECT</code><button type="button" class="copy" data-copy="subj">값 복사</button></h2><output id="subj">https://vocalzip.yullul.com</output></div>
+  <p class="warn"><b>VAPID_PRIVATE_KEY</b>는 비밀번호와 같아요. Supabase Secrets에만 넣고, 채팅·메모·GitHub·스크린샷에 남기지 마세요. 잃어버리거나 노출되면 이 화면에서 새로 만들어 세 값을 다시 넣으면 돼요(그 뒤에는 각 기기에서 알림을 한 번 다시 켜요).</p>
+</section>
+</main>
+<script>
+'use strict';
+const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+async function makeKeys() {
+  const pair = await crypto.subtle.generateKey({name:'ECDSA', namedCurve:'P-256'}, true, ['sign', 'verify']);
+  const pub = await crypto.subtle.exportKey('raw', pair.publicKey);           // 65 bytes, 0x04 || x || y
+  const jwk = await crypto.subtle.exportKey('jwk', pair.privateKey);          // d: the 32-byte scalar, base64url
+  return {publicKey:b64url(pub), privateKey:jwk.d};
+}
+window.vzipMakeVapidKeys = makeKeys;
+const $ = id => document.getElementById(id);
+$('make').onclick = async () => {
+  $('err').hidden = true;
+  try {
+    if (!window.crypto?.subtle) throw Error('이 브라우저에서는 만들 수 없어요. Safari나 Chrome 최신 버전으로 열어 주세요.');
+    const k = await makeKeys();
+    $('pub').textContent = k.publicKey; $('priv').textContent = k.privateKey;
+    $('out').hidden = false; $('make').textContent = '새로 만들기';
+  } catch (error) { $('err').textContent = error.message || String(error); $('err').hidden = false; }
+};
+document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+  const text = $(b.dataset.copy).textContent;
+  try { await navigator.clipboard.writeText(text); }
+  catch { const r = document.createRange(); r.selectNodeContents($(b.dataset.copy)); const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('copy'); }
+  const was = b.textContent; b.textContent = '복사했어요'; setTimeout(() => { b.textContent = was; }, 1500);
+});
+</script>
+</body>
+</html>

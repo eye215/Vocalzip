@@ -14,7 +14,7 @@
 
 1. **DB 표 만들기** — 승인 후 `supabase/migrations/20261123_push_subscriptions.sql`을 운영 DB에 적용.
    새 표 하나와 함수 두 개만 추가하고, 기존 표·행은 건드리지 않아요.
-2. **알림 키 만들기·비밀값 넣기** — VAPID 키 한 쌍을 만들고(예: `npx web-push generate-vapid-keys`),
+2. **알림 키 만들기·비밀값 넣기** — VAPID 키 한 쌍을 만들고(아이폰·아이패드: https://vocalzip.yullul.com/push-keys.html — 기기 안에서만 만들고 아무 데도 보내지 않음. 컴퓨터: `npx web-push generate-vapid-keys`),
    Supabase 대시보드 → Edge Functions → Secrets에 넣어요. **브라우저·GitHub·채팅·로그에 개인 키를 적지 않아요.**
    - `VAPID_PUBLIC_KEY` — 공개 키
    - `VAPID_PRIVATE_KEY` — 개인 키
