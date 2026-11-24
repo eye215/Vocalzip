@@ -16,7 +16,10 @@ const esc = V.esc, ON_KEY = 'vzip_push_handoff_on';
 // only when the server answers with its public key (status().available), so a missing key keeps it hidden.
 // window.VZIP_PUSH_READY = false turns it off on a page (tests).
 const SERVER_READY = true;
-const ready = () => window.VZIP_PUSH_READY ?? SERVER_READY;
+// Only from the sites the function answers (its ORIGINS, supabase/functions/vzip-push-handoff): elsewhere (a test
+// server, a preview) the browser refuses the answer and logs an access-control error on every 설정 visit.
+const ORIGINS = ['https://vocalzip.yullul.com', 'https://eye215.github.io', 'http://localhost:3000'];
+const ready = () => window.VZIP_PUSH_READY ?? (SERVER_READY && ORIGINS.includes(location.origin));
 const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const apple = () => /iPhone|iPad/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const standalone = () => navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
