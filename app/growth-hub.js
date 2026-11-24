@@ -209,8 +209,16 @@ async function mountAnalysis(host) {
   if (sw) sw.onchange = async () => { V.growthSong.setPractice(sw.checked); await mountAnalysis(host); host.querySelector('[data-hub-practice]')?.focus({preventScroll:true}); };
 }
 V.route('vocal-analysis', {title:'성장', tab:'growth', noAutoRefresh:true,
-  render:() => V.growthTabs('songs') + (V.listenSession ? '<a class="ls-entry" href="#/listen" data-listen-entry><i class="ph-fill ph-headphones" aria-hidden="true"></i><span><strong>듣고 고르기</strong><small>예전과 요즘 녹음을 이어 듣고 어느 쪽이 나은지 골라요. 화면을 꺼도 계속 나와요.</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>' : '') + '<div class="growth-hub" data-growth-analysis></div>',
-  mount(main) { mountAnalysis(main.querySelector('[data-growth-analysis]')); },
+  render:() => V.growthTabs('songs') + (V.listenSession ? '<a class="ls-entry" href="#/listen" data-listen-entry><i class="ph-fill ph-headphones" aria-hidden="true"></i><span><strong>듣고 고르기</strong><small>예전과 요즘 녹음을 이어 듣고 어느 쪽이 나은지 골라요. 화면을 꺼도 계속 나와요.</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>' : '') + '<div data-sc-notice></div><div class="growth-hub" data-growth-analysis></div>',
+  mount(main) {
+    mountAnalysis(main.querySelector('[data-growth-analysis]'));
+    // 곡 확인이 필요해 보이는 녹음 (app/song-check.js): one line, only when there is any.
+    const box = main.querySelector('[data-sc-notice]');
+    if (box && V.songCheck) M.list().catch(() => M.cached()).then(items => {
+      const n = box.isConnected ? V.songCheck.suspects(items || []).length : 0;
+      if (n) box.innerHTML = '<a class="sc-notice" href="#/song-mismatch" data-sc-notice-link><i class="ph ph-warning-circle" aria-hidden="true"></i><span>곡 확인이 필요해 보이는 녹음 ' + n + '개</span><i class="ph ph-caret-right" aria-hidden="true"></i></a>';
+    }).catch(() => {});
+  },
   leave() { request++; }
 });
 
