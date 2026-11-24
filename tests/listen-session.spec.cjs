@@ -184,6 +184,11 @@ test('native playback: previous, next and play/pause use real buttons without sy
   };
   await ready('r3');
   await page.locator('[data-ls-next]').click(); await ready('r2');
+  // Previous restarts the current take after 3 seconds. Pause and seek first so runner load cannot change
+  // this check from 'previous take' to 'restart this take' while Playwright waits for the button.
+  await page.locator('[data-ls-toggle]').click();
+  await expect.poll(() => page.evaluate(() => VZ.listenSession.audio.paused)).toBe(true);
+  await page.evaluate(() => { VZ.listenSession.audio.currentTime = 0; });
   await page.locator('[data-ls-prev]').click(); await ready('r3');
   await page.locator('[data-ls-next]').click(); await ready('r2');
   await page.locator('[data-ls-next]').click(); await ready('r1');
