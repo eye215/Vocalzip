@@ -78,6 +78,7 @@ async function load(play) {
 }
 function next() {
   if (!session) return;
+  if (session.flash) { clearTimeout(session.flash.timer); session.flash = null; }
   if (session.extra) { session.extra = null; }
   const s = step();
   // A pair that went by without a choice waits in 답 안 한 비교.
@@ -88,6 +89,7 @@ function next() {
 }
 function prev() {
   if (!session) return;
+  if (session.flash) { clearTimeout(session.flash.timer); session.flash = null; }
   session.extra = null;
   session.index = Math.max(0, session.index - (audio.currentTime > 3 ? 0 : 1));
   load(true);
@@ -137,13 +139,46 @@ function choose(pair, side) {
   window.dispatchEvent(new CustomEvent('vzip:listen-verdicts'));
   session.answered.set(pair.key, side);
   session.missed = session.missed.filter(p => p.key !== pair.key);
-  // Chosen while its pair is playing: on to the next pair.
+  try { navigator.vibrate?.(12); } catch {}
+  // Owner, 2026-11-24: "선택했는데 넘어갔는지 모르겠어" — the choice is shown (what was chosen, which take was which,
+  // what it means) for a moment, with 되돌리기 and 바로 다음, and only then the next pair comes.
   const s = step();
   if (!session.extra && s?.pair?.key === pair.key) {
-    session.index = session.steps.findIndex((x, i) => i > session.index && x.pair?.key !== pair.key);
-    if (session.index < 0) return done();
-    load(true);
-  } else changed();
+    clearTimeout(session.flash?.timer);
+    session.flash = {key:pair.key, side, recordId:record.id, overall:record.overall, at:Date.now(), timer:setTimeout(() => advance(pair.key), FLASH_MS)};
+    changed();
+  } else { V.toast('저장했어요 · ' + meaning(record.overall)); changed(); }
+}
+const FLASH_MS = 2600;
+/** On from a chosen pair to the next one (unless the choice was taken back, or the session moved on meanwhile). */
+function advance(key) {
+  if (!session || session.flash?.key !== key) return;
+  clearTimeout(session.flash.timer); session.flash = null;
+  const s = step();
+  if (s?.pair?.key !== key) return changed();
+  session.index = session.steps.findIndex((x, i) => i > session.index && x.pair?.key !== key);
+  if (session.index < 0) return done();
+  load(true);
+}
+/** 되돌리기: the verdict just saved goes again (the pair can be chosen anew). */
+function undo() {
+  const f = session?.flash; if (!f) return;
+  clearTimeout(f.timer); session.flash = null;
+  const ok = V.change(db => { db.comparisonReports = (db.comparisonReports || []).filter(x => x.id !== f.recordId); }, {silent:true});
+  if (ok) { session.answered.delete(f.key); window.dispatchEvent(new CustomEvent('vzip:listen-verdicts')); V.toast('고른 것을 되돌렸어요.'); }
+  changed();
+}
+const meaning = overall => overall === 'same' ? '비슷하다고 남겼어요' : overall === 'second' ? '요즘 녹음이 더 낫다고 남겼어요' : '예전 녹음이 더 낫다고 남겼어요';
+/** Which take was which: "A · 예전 9월 10일", "B · 요즘 11월 20일". */
+const sides = pair => [['A', pair.a, pair.aIsFirst], ['B', pair.b, !pair.aIsFirst]].map(([k, t, older]) => ({k, when:older ? '예전' : '요즘', date:dotted(t.date)}));
+function resultHtml(pair, f) {
+  const elapsed = Math.min(FLASH_MS, Date.now() - f.at);
+  return '<div class="ls-result" data-ls-result data-side="' + e(f.side) + '" role="status" aria-live="polite">' +
+    '<p class="ls-result-head"><i class="ph-fill ph-check-circle" aria-hidden="true"></i><strong>' + e(saidOf(f.side)) + '</strong></p>' +
+    '<div class="ls-result-sides">' + sides(pair).map(x => '<span' + (x.k === f.side ? ' data-picked' : '') + '><b>' + x.k + '</b>' + x.when + ' · ' + e(x.date) + '</span>').join('') + '</div>' +
+    '<p class="ls-result-meaning">' + e(meaning(f.overall)) + '</p>' +
+    '<div class="ls-result-bar" aria-hidden="true"><span style="animation-duration:' + FLASH_MS + 'ms;animation-delay:-' + elapsed + 'ms"></span></div>' +
+    '<div class="ls-result-actions"><button type="button" data-ls-undo>되돌리기</button><button type="button" class="is-main" data-ls-skip>바로 다음 <i class="ph ph-arrow-right" aria-hidden="true"></i></button></div></div>';
 }
 const reveal = pair => 'A ' + dotted(pair.a.date) + ' · B ' + dotted(pair.b.date);
 const saidOf = side => side === 'same' ? '비슷해요' : side + '가 나아요';
@@ -197,14 +232,14 @@ function nowHtml() {
   const pair = x.pair, answered = pair && session.answered.get(pair.key);
   const n = pick ? Math.floor(session.index / 2) + 1 : session.index + 1, of = pick ? session.steps.length / 2 : session.steps.length;
   return '<section class="ls-now" data-ls-now>' +
-    '<p class="ls-step">' + (session.extra ? '다시 듣기' : (pick ? '비교 ' : '') + n + ' / ' + of) + '</p>' +
+    '<p class="ls-step">' + (session.extra ? '다시 듣기' : (pick ? '비교 ' : '') + n + ' / ' + of + (pick && session.answered.size ? ' · 고른 것 ' + session.answered.size : '')) + '</p>' +
     '<p class="ls-song">' + e(title(x.take.songId)) + '</p>' +
     (x.side ? '<p class="ls-side" data-ls-side>' + x.side + '</p>' : '<p class="ls-take">' + e(M.label(x.take.item)) + ' · ' + e(dotted(x.take.date)) + '</p>') +
     '<div class="ls-controls"><button type="button" data-ls-prev aria-label="이전"><i class="ph-fill ph-skip-back"></i></button>' +
     '<button type="button" class="ls-play" data-ls-toggle aria-label="' + (audio.paused ? '재생' : '일시정지') + '"><i class="ph-fill ' + (audio.paused ? 'ph-play' : 'ph-pause') + '"></i></button>' +
     '<button type="button" data-ls-next aria-label="다음"><i class="ph-fill ph-skip-forward"></i></button></div>' +
     (session.extra ? '<button type="button" class="btn secondary block" data-ls-resume>이어 듣기로 돌아가기</button>' : '') +
-    (pair && !session.extra ? (answered ? '<p class="ls-said" data-ls-said>' + saidOf(answered) + ' · ' + e(reveal(pair)) + '</p>' : choiceHtml(pair)) : '') +
+    (pair && !session.extra ? (session.flash?.key === pair.key ? resultHtml(pair, session.flash) : answered ? '<p class="ls-said" data-ls-said>' + saidOf(answered) + ' · ' + e(reveal(pair)) + '</p>' : choiceHtml(pair)) : '') +
     '</section>';
 }
 const choiceHtml = pair => '<div class="ls-choice" role="group" aria-label="어느 쪽이 나아요?" data-ls-choice="' + e(pair.key) + '">' +
@@ -231,6 +266,8 @@ function wire() {
   const n = q('[data-ls-next]'); if (n) n.onclick = () => session.extra ? resume() : next();
   const p = q('[data-ls-prev]'); if (p) p.onclick = () => prev();
   const r = q('[data-ls-resume]'); if (r) r.onclick = () => resume();
+  const u = q('[data-ls-undo]'); if (u) u.onclick = () => undo();
+  const k = q('[data-ls-skip]'); if (k) k.onclick = () => advance(session.flash?.key);
   host.querySelectorAll('[data-ls-choice]').forEach(box => {
     const pair = session.steps.find(x => x.pair?.key === box.dataset.lsChoice)?.pair; if (!pair) return;
     box.querySelectorAll('[data-ls-pick]').forEach(b => b.onclick = () => choose(pair, b.dataset.lsPick));
@@ -263,5 +300,5 @@ V.route('listen', {title:'듣고 고르기', back:true, tab:'growth', noAutoRefr
     if (!session) { cached = await takes(); if (!host.isConnected) return; }
     paint();
   }});
-V.listenSession = {start, next, prev, stop, choose, state:() => session, audio};
+V.listenSession = {start, next, prev, stop, choose, undo, advance, state:() => session, audio};
 })();

@@ -35,3 +35,21 @@
 .ls-bar a{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;color:#fff;text-decoration:none;font-size:14px;font-weight:600}
 .ls-bar a span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ls-bar button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:#7A32F5;color:#fff;font-size:18px;cursor:pointer}
+/* 고른 뒤 (2026-11-24): what was chosen, which take was which, what it means — then the next pair. */
+.ls-result{display:grid;gap:10px;width:100%;padding:14px;border-radius:18px;background:#F3ECFF;text-align:left;animation:ls-pop .22s ease-out}
+.ls-result-head{display:flex;align-items:center;gap:8px;margin:0;font-size:18px;line-height:24px;color:#3B1F78}
+.ls-result-head i{font-size:26px;color:#7A32F5}
+.ls-result-sides{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ls-result-sides span{display:flex;align-items:center;gap:6px;min-height:40px;padding:6px 10px;border-radius:12px;background:#fff;color:#475467;font-size:13px;font-weight:600}
+.ls-result-sides b{display:grid;place-items:center;flex:none;width:24px;height:24px;border-radius:8px;background:#EDE7F7;color:#6E3FD1;font-size:13px}
+.ls-result-sides span[data-picked]{box-shadow:0 0 0 2px #7A32F5;color:#3B1F78}
+.ls-result-sides span[data-picked] b{background:#7A32F5;color:#fff}
+.ls-result-meaning{margin:0;color:#344054;font-size:14px;font-weight:600}
+.ls-result-bar{height:4px;border-radius:99px;background:#E4D8FB;overflow:hidden}
+.ls-result-bar span{display:block;height:100%;width:100%;background:#7A32F5;transform-origin:left;animation-name:ls-bar;animation-timing-function:linear;animation-fill-mode:both}
+.ls-result-actions{display:flex;gap:8px}
+.ls-result-actions button{flex:1;min-height:44px;border:0;border-radius:12px;background:#fff;color:#6E3FD1;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.ls-result-actions button.is-main{background:#7A32F5;color:#fff}
+@keyframes ls-bar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes ls-pop{from{transform:scale(.97);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.ls-result{animation:none}}
