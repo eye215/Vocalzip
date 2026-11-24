@@ -58,9 +58,16 @@ test('듣고 고르기: A then B then the next song by itself; a choice is a bli
   await expect(now(page).locator('[data-ls-side]')).toHaveText('B');
   const [, b1] = await playing(page);
   expect(new Set([a1, b1])).toEqual(new Set(['r1', 'r3']));
-  // A가 나아: saved blind, and the days are shown; on to the next pair (Home comes next: songs take turns).
+  // A가 나아: saved blind; for a moment the choice is shown (which take was which, what it means), then on to the
+  // next pair by itself (Home comes next: songs take turns).
   await now(page).locator('[data-ls-pick="A"]').click();
-  await expect(now(page)).toContainText('비교 2 / 3');
+  const result = now(page).locator('[data-ls-result]');
+  await expect(result).toContainText('A가 나아요');
+  await expect(result.locator('[data-picked]')).toContainText(a1 === 'r1' ? '예전 · 8월 1일' : '요즘 · 11월 20일');
+  await expect(result).toContainText(a1 === 'r1' ? '예전 녹음이 더 낫다고 남겼어요' : '요즘 녹음이 더 낫다고 남겼어요');
+  await expect(now(page)).toContainText('비교 1 / 3 · 고른 것 1');
+  if (process.env.LS_SHOTS) { await page.waitForTimeout(900); await page.screenshot({path:process.env.LS_SHOTS + '/result.png'}); }
+  await expect(now(page)).toContainText('비교 2 / 3', {timeout:6000});
   await expect(now(page)).toContainText('Home');
   const v = await verdicts(page);
   expect(v).toEqual([{songId:'river', firstId:'r1', secondId:'r3', overall:a1 === 'r1' ? 'first' : 'second', blind:true, judge:'me', firstRange:null}]);
@@ -92,6 +99,44 @@ test('듣고 고르기: A then B then the next song by itself; a choice is a bli
   await page.locator('[data-ls-stop]').click();
   await expect(page.locator('[data-ls-count]')).toHaveText(/비교 [12]개/);
   await expect.poll(() => page.evaluate(() => VZ.listenSession.audio.paused)).toBe(true);
+});
+
+test('되돌리기 takes the choice back (the pair can be chosen anew); 바로 다음 goes on at once', async ({page}) => {
+  await boot(page);
+  await page.evaluate(() => { location.hash = '#/listen'; });
+  await page.locator('[data-ls-start]').click();
+  await now(page).locator('[data-ls-pick="B"]').click();
+  await expect(now(page).locator('[data-ls-result]')).toContainText('B가 나아요');
+  expect(await verdicts(page)).toHaveLength(1);
+  await now(page).locator('[data-ls-undo]').click();
+  await expect(now(page).locator('[data-ls-result]')).toHaveCount(0);
+  await expect(now(page).locator('[data-ls-choice]')).toBeVisible();
+  expect(await verdicts(page)).toEqual([]);
+  await page.waitForTimeout(3000);
+  await expect(now(page)).toContainText('비교 1 / 3');                       // taken back: it did not move on
+  await now(page).locator('[data-ls-pick="same"]').click();
+  await expect(now(page).locator('[data-ls-result]')).toContainText('비슷해요');
+  await expect(now(page).locator('[data-ls-result]')).toContainText('비슷하다고 남겼어요');
+  await now(page).locator('[data-ls-skip]').click();
+  await expect(now(page)).toContainText('비교 2 / 3');
+  expect((await verdicts(page)).map(v => v.overall)).toEqual(['same']);
+});
+
+test('곡이 틀렸어요: the take gets its song through 곡 지정, and its pairs leave the session', async ({page}) => {
+  await boot(page);
+  await page.evaluate(() => { location.hash = '#/listen?song=river'; });
+  await expect(page.locator('[data-ls-count]')).toHaveText('비교 2개');
+  await page.locator('[data-ls-start]').click();
+  // The same 곡 지정 as everywhere (pick, then save on the recording); here a stand-in records what is saved.
+  await page.evaluate(() => { window.__saved = []; VZ.pickRecordingSong = async () => 'home'; VZ.saveRecordingSong = async (m, v) => { window.__saved.push([m.id, v]); }; });
+  const [side, take] = await playing(page);
+  await now(page).locator('[data-ls-fix-song]').click();
+  await expect(page.locator('.toast').last()).toContainText('이 비교는 건너뛸게요');
+  expect(await page.evaluate(() => window.__saved)).toEqual([[take, 'home']]);
+  // r3 (the latest) was in both pairs: if it was the one moved, nothing of River is left; else the other pair plays.
+  if (take === 'r3') await expect(page.locator('[data-ls-done]')).toBeVisible();
+  else { const next = await playing(page); expect(next[1]).not.toBe(take); await expect(now(page)).toContainText('The River'); }
+  expect(side).toMatch(/^[AB]$/);
 });
 
 test('그냥 이어 듣기 · 앞 1분: every take newest first, on by itself; a choice of length is kept with a verdict', async ({page, browserName}) => {
