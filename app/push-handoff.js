@@ -12,10 +12,11 @@
 const V = window.VZ;
 if (!V || typeof document === 'undefined') return;
 const esc = V.esc, ON_KEY = 'vzip_push_handoff_on';
-// Turned on once the server is set up (docs/push-handoff-setup.md, step 4). Until then nothing here calls the server:
-// no 설정 row, no request — so a function that is not deployed yet is never asked.
-const SERVER_READY = false;
-const ready = () => SERVER_READY || window.VZIP_PUSH_READY === true;
+// On since 2026-11-24 (docs/push-handoff-setup.md, step 4: table, function and keys set up). The 설정 row still shows
+// only when the server answers with its public key (status().available), so a missing key keeps it hidden.
+// window.VZIP_PUSH_READY = false turns it off on a page (tests).
+const SERVER_READY = true;
+const ready = () => window.VZIP_PUSH_READY ?? SERVER_READY;
 const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const apple = () => /iPhone|iPad/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const standalone = () => navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
