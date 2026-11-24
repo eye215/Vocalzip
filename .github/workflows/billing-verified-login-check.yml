@@ -8,13 +8,16 @@ jobs:
   verified-login:
     runs-on: ubuntu-24.04
     timeout-minutes: 6
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts
-      - run: npx playwright install --with-deps chromium webkit
       - run: npx playwright test --config=billing/playwright.config.cjs billing/tests/session-startup.spec.cjs
       - uses: actions/upload-artifact@v4
         if: always()

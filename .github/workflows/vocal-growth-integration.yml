@@ -51,6 +51,10 @@ jobs:
       fail-fast: false
       matrix:
         browser: [chromium, webkit]
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -59,8 +63,6 @@ jobs:
           cache: npm
       - name: Install test dependencies
         run: npm ci
-      - name: Install headless browser engine
-        run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Run isolated VOCAL.zip browser smoke tests
         env:
           VZIP_TEST_BROWSER: ${{ matrix.browser }}

@@ -13,6 +13,10 @@ jobs:
     concurrency:
       group: vocalzip-session-release
       cancel-in-progress: false
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,7 +25,6 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts
-      - run: npx playwright install --with-deps chromium
       - name: Apply only the explicit verified release plan
         env:
           GITHUB_TOKEN: ${{ github.token }}

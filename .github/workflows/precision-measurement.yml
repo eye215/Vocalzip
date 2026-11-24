@@ -10,11 +10,14 @@ jobs:
       fail-fast: false
       matrix:
         browser: [chromium, webkit]
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '22', cache: npm}
       - run: npm ci
       - run: node --test tests/precision-session.test.cjs
-      - run: npx playwright install --with-deps ${{ matrix.browser }}
       - run: npx playwright test tests/precision-session.spec.cjs tests/growth-characterization.spec.cjs --project=${{ matrix.browser }}-mobile --workers=1

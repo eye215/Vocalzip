@@ -21,6 +21,10 @@ jobs:
   prepare-transfer:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,8 +34,7 @@ jobs:
       - run: npm run test:syntax
       - name: Cache identity, cancellation, memory bound and multipart failure tests
         run: node --test tests/media-inspection-reuse.test.cjs tests/upload-throughput.test.cjs tests/media-upload-recovery.test.cjs tests/flac-encode.test.cjs
-      - run: npx playwright install --with-deps chromium webkit
-      - run: sudo apt-get install -y ffmpeg
+      - run: apt-get update && apt-get install -y ffmpeg
       - name: Bounded media parser bundle
         run: curl --fail --location --retry 2 https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs --output /tmp/vzip-mediabunny.mjs
       - name: Create synthetic audio and video fixtures

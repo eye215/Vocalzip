@@ -16,6 +16,10 @@ jobs:
   recording:
     runs-on: ubuntu-24.04
     timeout-minutes: 35  # the apt step of the browser install alone sometimes takes 15+ minutes on a busy runner
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,7 +27,6 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: npx playwright install --with-deps chromium webkit
       - name: Recorder IDs, failure retry, original preservation and lesson links
         run: npx playwright test tests/v6.spec.cjs --grep 'One-touch recording|New recording after save|Lesson recording retry|Recording from a lesson|Denied microphone' --workers=2
       - name: Bluetooth route test screen (stubbed microphone and audio session)

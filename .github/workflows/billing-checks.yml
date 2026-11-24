@@ -18,6 +18,10 @@ jobs:
   billing:
     runs-on: ubuntu-24.04  # Playwright 1.56 has no Ubuntu 26.04 build; ubuntu-latest moved there in Oct 2026
     timeout-minutes: 15
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,7 +34,6 @@ jobs:
       - name: JavaScript syntax
         run: |
           for file in billing/*.js; do node --check "$file"; done
-      - run: npx playwright install --with-deps chromium webkit
       - name: Billing browser tests
         run: npx playwright test --config=billing/playwright.config.cjs
       - uses: actions/upload-artifact@v4

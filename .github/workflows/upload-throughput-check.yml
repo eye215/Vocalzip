@@ -30,6 +30,10 @@ jobs:
     timeout-minutes: 30   # the browser install alone has taken 13 minutes on a busy runner
     env:
       VZIP_BENCH_BASE: 0b63d76ba4e6bce0ffbf12ac1ce90700227c3800
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,7 +42,6 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts
-      - run: npx playwright install --with-deps chromium webkit
       - run: npx playwright test tests/r2.spec.cjs --workers=2
       - uses: actions/upload-artifact@v4
         if: failure()

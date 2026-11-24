@@ -20,6 +20,10 @@ jobs:
   deletion:
     runs-on: ubuntu-24.04
     timeout-minutes: 35  # the apt step of the browser install alone sometimes takes 15+ minutes on a busy runner
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,7 +32,6 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
       - run: node --test tests/lesson-deletion.test.cjs tests/media-delete.test.cjs tests/data-merge.test.cjs tests/cloud-sync.test.cjs billing/tests/*.test.cjs
-      - run: npx playwright install --with-deps chromium webkit
       - name: Existing lesson deletion preserves unselected records
         run: npx playwright test tests/v6.spec.cjs --grep 'Lesson delete keeps|Lesson deletion' --workers=2
       - name: Cloud cancellation acknowledgement and restore guards
@@ -50,6 +53,10 @@ jobs:
   accounts:
     runs-on: ubuntu-24.04
     timeout-minutes: 30  # the apt step of the browser install alone sometimes takes 15+ minutes on a busy runner
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -57,7 +64,6 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: npx playwright install --with-deps chromium webkit
       - run: npx playwright test tests/account-session.spec.cjs --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
@@ -70,6 +76,10 @@ jobs:
   billing-all:
     runs-on: ubuntu-24.04  # Playwright 1.56 has no Ubuntu 26.04 build; ubuntu-latest moved there in Oct 2026
     timeout-minutes: 30  # the apt step of the browser install alone sometimes takes 15+ minutes on a busy runner
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -82,7 +92,6 @@ jobs:
       - name: JavaScript syntax
         run: |
           for file in billing/*.js; do node --check "$file"; done
-      - run: npx playwright install --with-deps chromium webkit
       - name: Billing browser tests
         run: npx playwright test --config=billing/playwright.config.cjs
       - uses: actions/upload-artifact@v4

@@ -72,13 +72,16 @@ jobs:
   bridge-browser:
     runs-on: ubuntu-24.04
     timeout-minutes: 30   # the browser install alone has taken 13 minutes on a busy runner
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts
-      - run: npx playwright install --with-deps chromium webkit
       - name: Actual signed-in snapshot bridge and pending lesson deletion
         run: npx playwright test tests/snapshot-bridge.spec.cjs --workers=2
       - name: Two sessions and account isolation regression
