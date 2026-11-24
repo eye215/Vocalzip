@@ -41,6 +41,7 @@ jobs:
   browser:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble   # browsers already installed (the install step took up to 15 minutes)
     timeout-minutes: 30   # the browser install alone has taken 13 minutes on a busy runner
     env:
       VZIP_BENCH_BASE: 0b63d76ba4e6bce0ffbf12ac1ce90700227c3800
@@ -48,11 +49,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # Inside the image the workspace belongs to another user: let git read it (git show of an older commit).
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts
-      - run: npx playwright install --with-deps chromium webkit
       - run: npx playwright test tests/media-publication.spec.cjs tests/r2-resumable.spec.cjs tests/r2.spec.cjs --workers=2
       - name: Repeat legacy imported-date navigation in WebKit
         run: npx playwright test tests/ui.spec.cjs --project=webkit-mobile --grep 'Metadata-derived dates' --repeat-each=6 --workers=2

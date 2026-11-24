@@ -13,6 +13,7 @@ jobs:
       - run: node --test tests/precision-report.test.cjs tests/precision-long-input.test.cjs tests/precision-coach.test.mjs tests/precision-integration.test.cjs
   browser:
     runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble   # browsers already installed (the install step took up to 15 minutes)
     strategy:
       fail-fast: false
       matrix:
@@ -22,7 +23,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22', cache: npm}
       - run: npm ci
-      - run: npx playwright install --with-deps ${{ matrix.browser }}
       - run: npx playwright test --config=tests/precision.playwright.config.cjs --project=${{ matrix.browser }}-mobile
       - name: Existing growth values and report archive routes
         run: npx playwright test tests/growth-characterization.spec.cjs tests/growth-tabs.spec.cjs tests/growth-unify.spec.cjs --project=${{ matrix.browser }}-mobile --workers=1
