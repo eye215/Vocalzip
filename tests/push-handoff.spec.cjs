@@ -22,13 +22,13 @@ async function boot(page, {available = true, ready = true} = {}) {
     window.Notification = {permission:'default', requestPermission:async () => { window.__calls.push(['permission']); window.Notification.permission = 'granted'; return 'granted'; }};
     Object.defineProperty(navigator, 'serviceWorker', {configurable:true, value:{ready:Promise.resolve({pushManager}), register:async () => ({}), addEventListener() {}}});
     // The server's side (cloud-sync.js would call the edge function and the two database functions).
-    const fake = {status:async () => available ? {available:true, publicKey:'BElpZ' + 'A'.repeat(82)} : {available:false},
+    const fake = {status:async () => (window.__statusCalls = (window.__statusCalls || 0) + 1, available) ? {available:true, publicKey:'BElpZ' + 'A'.repeat(82)} : {available:false},
       register:async (json, id, name) => { window.__calls.push(['register', json.endpoint, id, name]); return true; },
       unregister:async endpoint => { window.__calls.push(['unregister', endpoint]); return true; },
       send:async payload => { window.__calls.push(['send', payload.songId, payload.title, payload.from]); return {sent:1, devices:1}; }};
     Object.defineProperty(window, 'vzipCloudPush', {configurable:true, get:() => fake, set() {}});
     window.vzipCloudDeviceSend = async () => false;
-    window.VZIP_PUSH_READY = ready;   // the server is set up (push-handoff.js SERVER_READY)
+    if (ready !== 'origin') window.VZIP_PUSH_READY = ready;   // the server is set up; 'origin': as the site decides
   }, [KEY, JSON.stringify(seed), available, ready]);
   await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
   await page.route('**/*.supabase.co/**', r => r.abort());
@@ -68,6 +68,17 @@ test('the 알림 section is always in 설정: when the server does not answer wi
   expect(await page.evaluate(() => document.querySelector('[data-settings-group="notify"]').nextElementSibling?.dataset.settingsGroup)).toBe('more');
   await page.evaluate(() => { location.hash = '#/home'; }); await page.evaluate(() => { location.hash = '#/settings'; });
   await expect(page.locator('[data-settings-group="notify"]')).toHaveCount(1);
+});
+
+test('on a site the server does not answer (this test server): no 알림 section and no request at all', async ({page}) => {
+  await boot(page, {ready:'origin'});
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await expect(page.locator('[data-settings-group="more"]')).toBeVisible();
+  await page.waitForTimeout(800);
+  await expect(page.locator('[data-settings-group="notify"]')).toHaveCount(0);
+  expect(await calls(page)).toEqual([]);
+  expect(await page.evaluate(() => window.__statusCalls || 0)).toBe(0);
+  expect(await page.evaluate(() => VZ.pushHandoff.ready())).toBe(false);
 });
 
 test('signed out: 로그인하면 켤 수 있어요', async ({page}) => {
