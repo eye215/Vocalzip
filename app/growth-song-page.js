@@ -48,9 +48,14 @@ function rowsHtml(v) {
     v.rows.map(r => '<li data-row="' + e(r.id) + '" data-state="' + e(r.state) + '"><div><strong>' + e(r.title) + '</strong><span class="gsp-chip" data-state="' + e(r.state) + '">' + e(STATE[r.state] || '') + '</span></div>' +
       '<p>' + e(r.text || '') + '</p>' + (r.note ? '<small>' + e(r.note) + '</small>' : '') + '</li>').join('') + '</ul></section>';
 }
-function heardHtml(song) {
+function heardHtml(song, state = '') {
   const list = L ? L.list(V.db, {songId:song.id}) : [];
-  return '<section class="gsp-card" data-gsp-heard><h3>들어 본 평가 <small>' + (list.length ? list.length + '개' : '') + '</small></h3>' +
+  // 모아 보기 (owner, 2026-11-24): how the ear leans over all of the song's verdicts, next to the measured direction.
+  const t = L?.tally ? L.tally(list) : null, ear = t && L.earOf(t), agree = ear ? L.agreeText(t, state) : '';
+  const sum = ear ? '<div class="gsp-ear" data-gsp-ear="' + ear + '"><p><strong>' + e(L.EAR_TEXT[ear]) + '</strong></p>' +
+    '<div class="gsp-ear-bar" aria-hidden="true">' + ['later', 'same', 'earlier'].map(k => t[k] ? '<i data-k="' + k + '" style="flex:' + t[k] + '"></i>' : '').join('') + '</div>' +
+    '<small data-gsp-ear-count>' + e(L.tallyText(t)) + '</small>' + (agree ? '<small data-gsp-agree>' + e(agree) + '</small>' : '') + '</div>' : '';
+  return '<section class="gsp-card" data-gsp-heard data-state="' + e(state) + '"><h3>들어 본 평가 <small>' + (list.length ? list.length + '개' : '') + '</small></h3>' + sum +
     (list.length ? '<ul class="gsp-heard">' + list.slice(0, 3).map(x => '<li>' + e(L.line(x)) + '</li>').join('') + '</ul>' : '<p class="gsp-empty">아직 없어요. 두 녹음을 들어 보고 어느 쪽이 나은지 남겨 보세요.</p>') +
     '<button type="button" class="btn secondary block" data-listen-open data-song="' + e(song.id) + '">두 녹음 비교하기</button></section>';
 }
@@ -70,7 +75,7 @@ function checkHtml(song, items) {
   return list.length ? '<section class="gsp-card" data-gsp-check><h3>곡 확인이 필요해 보이는 녹음 <small>' + list.length + '</small></h3>' + V.songCheck.listHtml(list, items) + '</section>' : '';
 }
 function html(song, v, takes, items) {
-  return heroHtml(song, v, takes) + timelineHtml(takes, v) + rowsHtml(v) + heardHtml(song) + weakHtml(song, items) +
+  return heroHtml(song, v, takes) + timelineHtml(takes, v) + rowsHtml(v) + heardHtml(song, v?.state) + weakHtml(song, items) +
     checkHtml(song, items) +
     '<section class="gsp-points" data-gsp-points></section>' +
     '<a class="gsp-all" href="#/vocal-lab/' + encodeURIComponent(song.id) + '" data-gsp-all><span><strong>모든 분석 도구</strong><small>분석 실행 · MR로 다시 분석 · 정밀 리포트 · AI 해석 · 깊이 보기</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>' +
@@ -115,6 +120,6 @@ V.route('growth-song', {title:'곡', back:true, tab:'growth', noAutoRefresh:true
 window.addEventListener('vzip:listen-verdicts', () => {
   const box = document.querySelector('[data-gsp-heard]'), id = /^#\/growth-song\/([^?]+)/.exec(location.hash)?.[1];
   const song = id && V.song(decodeURIComponent(id));
-  if (box && song) box.outerHTML = heardHtml(song);
+  if (box && song) box.outerHTML = heardHtml(song, box.dataset.state);
 });
 })();

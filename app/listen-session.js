@@ -249,6 +249,7 @@ function nowHtml() {
   const x = session.extra || step(), pick = session.mode === 'pick';
   if (session.over || !x) {
     return '<section class="ls-now" data-ls-done><p class="ls-big">다 들었어요</p><p class="muted">' + (pick ? '고른 비교 ' + session.answered.size + '개' : '녹음 ' + session.steps.length + '개') + (session.failed ? ' · 불러오지 못한 녹음 ' + session.failed + '개' : '') + '</p>' +
+      (pick ? summaryHtml() : '') +
       '<button type="button" class="btn secondary block" data-ls-stop>처음으로</button></section>';
   }
   const pair = x.pair, answered = pair && session.answered.get(pair.key);
@@ -264,6 +265,22 @@ function nowHtml() {
     (session.extra ? '<button type="button" class="btn secondary block" data-ls-resume>이어 듣기로 돌아가기</button>' : '') +
     (pair && !session.extra ? (session.flash?.key === pair.key ? resultHtml(pair, session.flash) : answered ? '<p class="ls-said" data-ls-said>' + saidOf(answered) + ' · ' + e(reveal(pair)) + '</p>' : choiceHtml(pair)) : '') +
     '</section>';
+}
+/** 이번에 고른 것 모아 보기 (owner, 2026-11-24): per song, how many times the later take (요즘), 비슷함 or the earlier
+ * take (예전) was chosen in this session, with a link to that song's page (all its 들어 본 평가 and the measured direction). */
+function summaryHtml() {
+  const bySong = new Map();
+  for (const [key, side] of session.answered) {
+    const pair = session.steps.find(st => st.pair?.key === key)?.pair;
+    if (!pair) continue;
+    const t = bySong.get(pair.songId) || {later:0, same:0, earlier:0, n:0};
+    t.n++; t[side === 'same' ? 'same' : (side === 'A') !== pair.aIsFirst ? 'later' : 'earlier']++;
+    bySong.set(pair.songId, t);
+  }
+  if (!bySong.size) return '';
+  return '<ul class="ls-sum" data-ls-summary>' + [...bySong].map(([sid, t]) => '<li data-ls-sum-song="' + e(sid) + '"><a href="#/growth-song/' + encodeURIComponent(sid) + '">' +
+    '<strong>' + e(title(sid)) + '</strong><small>' + e(L.tallyText ? L.tallyText(t) : '') + '</small><i class="ph ph-caret-right" aria-hidden="true"></i></a></li>').join('') + '</ul>' +
+    '<p class="ls-note">곡을 누르면 지금까지 고른 것을 모두 모아 측정 숫자와 나란히 보여 드려요.</p>';
 }
 const choiceHtml = pair => '<div class="ls-choice" role="group" aria-label="어느 쪽이 나아요?" data-ls-choice="' + e(pair.key) + '">' +
   [['A', 'A가 나아'], ['same', '비슷해'], ['B', 'B가 나아']].map(([v, t]) => '<button type="button" data-ls-pick="' + v + '">' + t + '</button>').join('') + '</div>';

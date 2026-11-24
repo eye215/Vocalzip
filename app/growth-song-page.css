@@ -61,3 +61,11 @@
 .sc-notice{display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:12px 14px;border-radius:16px;background:#FFFAEB;color:#93370D;font-size:14px;font-weight:600;text-decoration:none}
 .sc-notice i:first-child{font-size:20px}
 .sc-notice span{flex:1}
+/* 들어 본 평가 모아 보기 */
+.gsp-ear{display:grid;gap:6px;margin:0 0 10px;padding:12px;border-radius:12px;background:#F7F5FB}
+.gsp-ear p{margin:0;font-size:15px;line-height:21px;color:#1D2939}
+.gsp-ear small{color:#475467;font-size:13px;line-height:18px}
+.gsp-ear-bar{display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden}
+.gsp-ear-bar i[data-k=later]{background:#6E3FD1}
+.gsp-ear-bar i[data-k=same]{background:#C9BEEB}
+.gsp-ear-bar i[data-k=earlier]{background:#98A2B3}

@@ -96,6 +96,11 @@ test('듣고 고르기: A then B then the next song by itself; a choice is a bli
   // The last pair ends: done. A pair already judged is not offered again.
   await end(page); await end(page);
   await expect(page.locator('[data-ls-done]')).toContainText('다 들었어요');
+  // 이번에 고른 것: per song, which side was chosen (요즘 · 비슷 · 예전), each a way to that song's page.
+  const sum = page.locator('[data-ls-summary]');
+  await expect(sum.locator('[data-ls-sum-song="river"]')).toContainText(a1 === 'r1' ? '예전 쪽 1' : '요즘 쪽 1');
+  await expect(sum.locator('[data-ls-sum-song="home"]')).toContainText('비슷 1');
+  await expect(sum.locator('[data-ls-sum-song="river"] a')).toHaveAttribute('href', '#/growth-song/river');
   await page.locator('[data-ls-stop]').click();
   await expect(page.locator('[data-ls-count]')).toHaveText(/비교 [12]개/);
   await expect.poll(() => page.evaluate(() => VZ.listenSession.audio.paused)).toBe(true);

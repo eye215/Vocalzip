@@ -116,6 +116,28 @@ function basisText(v, clock = s => s + '초') {
   const ranges = v.firstRange || v.secondRange ? ' · 구간 ' + range(v.firstRange) + ' / ' + range(v.secondRange) : '';
   return '들어 본 평가 · ' + l1 + ' → ' + l2 + (v.blind ? ' · 가리고 들음' : '') + ranges;
 }
+/** 들어 본 평가 모아 보기 (owner, 2026-11-24: 듣고 고르기 결과 모아 보기). Counts the verdicts by which take was heard
+ * better: the later one (요즘), 비슷함, or the earlier one (예전). A verdict on two takes of one day counts by recording order. */
+function tally(verdicts) {
+  const t = {later:0, same:0, earlier:0, n:0};
+  for (const v of verdicts || []) {
+    if (!isVerdict(v) || !CHOICES.includes(v.overall)) continue;
+    t.n++; t[v.overall === 'second' ? 'later' : v.overall === 'first' ? 'earlier' : 'same']++;
+  }
+  return t;
+}
+/** "요즘 쪽 5 · 비슷 2 · 예전 쪽 1" ('' with none). */
+const tallyText = t => t?.n ? [['later', '요즘 쪽'], ['same', '비슷'], ['earlier', '예전 쪽']].filter(([k]) => t[k]).map(([k, w]) => w + ' ' + t[k]).join(' · ') : '';
+/** Which way the ear leans: 'better' (요즘 쪽이 더 많음), 'worse', 'similar' (요즘·예전이 같은 수, or only 비슷함), null with none. */
+const earOf = t => !t?.n ? null : t.later > t.earlier ? 'better' : t.earlier > t.later ? 'worse' : 'similar';
+const EAR_TEXT = {better:'들어 보면 요즘 녹음이 낫다는 쪽이 많아요', worse:'들어 보면 예전 녹음이 낫다는 쪽이 많아요', similar:'들어 보면 요즘과 예전이 엇비슷해요'};
+/** The ear next to the measured direction (app/growth-song-model.js state: better · worse · similar; mixed · hold · one ·
+ * none say nothing). Both are quoted as they are; neither overrides the other. '' when there is nothing to set side by side. */
+function agreeText(t, state) {
+  const ear = earOf(t);
+  if (!ear || !['better', 'worse', 'similar'].includes(state)) return '';
+  return ear === state ? '측정 숫자도 같은 쪽이에요' : '측정 숫자는 ' + ({better:'좋아진 방향', worse:'아쉬운 방향', similar:'비슷함'})[state] + '이에요 · 귀와 숫자가 달라요';
+}
 return {KIND, VERSION, CHOICES, TAGS, JUDGES, MEMO_MAX, TEACHER_MAX, isVerdict, order, defaultPair, list, make, choiceOf, sideOf,
-  dayLabels, who, overallText, tagsText, line, basisText};
+  dayLabels, who, overallText, tagsText, line, basisText, tally, tallyText, earOf, EAR_TEXT, agreeText};
 });
