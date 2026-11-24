@@ -54,14 +54,28 @@ function rowHtml() {
   return '<div class="item vz-push-row" data-push-row><i class="ph ph-bell-ringing" aria-hidden="true"></i><span class="item-main"><span class="item-title">휴대폰으로 녹음 알림</span><span class="item-sub" data-push-sub>' + esc(sub) + '</span></span>' +
     (blocked ? '' : '<button type="button" class="switch" role="switch" aria-checked="' + on + '" aria-label="휴대폰으로 녹음 알림" data-push-toggle><span></span></button>') + '</div>';
 }
-/** Put the 알림 section into 설정 once the server answers that it is set up. */
+/** The 알림 section of 설정. Always there (owner, 2026-11-24: "이게 어딨음?"): with the switch once the server answers with
+ * its key, otherwise one line saying why it cannot be turned on yet (signed out · the server did not answer). */
+const waitRow = (sub) => '<div class="item vz-push-row" data-push-row data-push-unavailable><i class="ph ph-bell-ringing" aria-hidden="true"></i><span class="item-main"><span class="item-title">휴대폰으로 녹음 알림</span><span class="item-sub" data-push-sub>' + esc(sub) + '</span></span></div>';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let mounting = 0;
 async function mountSettings(host) {
-  if (!host) return;
   if (!window.vzipCloudPush || !ready()) return;
-  status = await window.vzipCloudPush.status().catch(() => null);
-  if (!status?.available || !host.isConnected || host.querySelector('[data-push-row]')) return;
-  host.insertAdjacentHTML('beforebegin', '<section class="vz-settings-section" data-settings-group="notify"><h2>알림</h2><div class="list icons vz-settings-list" data-push-host>' + rowHtml() + '</div></section>');
-  wire(host.parentNode.querySelector('[data-push-host]'));
+  const run = ++mounting;
+  // 설정 may still be drawing: wait for its 공유·점검 section (the 알림 section goes just before it).
+  for (let i = 0; !host?.isConnected && i < 30; i++) { await sleep(100); host = document.querySelector('[data-settings-group="more"]'); }
+  if (!host?.isConnected || run !== mounting || host.parentNode.querySelector('[data-settings-group="notify"]')) return;
+  host.insertAdjacentHTML('beforebegin', '<section class="vz-settings-section" data-settings-group="notify"><h2>알림</h2><div class="list icons vz-settings-list" data-push-host>' + waitRow('확인하는 중…') + '</div></section>');
+  const box = host.parentNode.querySelector('[data-push-host]');
+  // Signing in can finish a moment after the app opens: ask again for a few seconds before saying "로그인".
+  for (let i = 0; i < 6; i++) {
+    status = await window.vzipCloudPush.status().catch(() => null);
+    if (status?.available || status?.why !== 'signed-out') break;
+    await sleep(500);
+  }
+  if (!box.isConnected || run !== mounting) return;
+  if (status?.available) { box.innerHTML = rowHtml(); wire(box); return; }
+  box.innerHTML = waitRow(status?.why === 'signed-out' ? '로그인하면 켤 수 있어요.' : '알림 서버에 연결하지 못했어요. 잠시 뒤 설정을 다시 열어 보세요.');
 }
 function wire(box) {
   const t = box?.querySelector('[data-push-toggle]'); if (!t) return;
@@ -74,8 +88,9 @@ function wire(box) {
   };
 }
 // 설정 opens: its 공유·점검 section is the place; the 알림 section goes just before it.
-window.addEventListener('hashchange', () => { if (/^#\/settings/.test(location.hash)) setTimeout(() => mountSettings(document.querySelector('[data-settings-group="more"]')), 0); });
-if (/^#\/settings/.test(location.hash)) setTimeout(() => mountSettings(document.querySelector('[data-settings-group="more"]')), 300);
+const onSettings = () => { if (/^#\/settings/.test(location.hash)) setTimeout(() => mountSettings(document.querySelector('[data-settings-group="more"]')), 0); };
+window.addEventListener('hashchange', onSettings);
+onSettings();
 // The worker asks an open window to go to the tapped notification's address (when it cannot navigate itself).
 navigator.serviceWorker?.addEventListener?.('message', e => { if (e.data?.type === 'vzip-open' && typeof e.data.url === 'string' && e.data.url.startsWith(location.origin)) location.href = e.data.url; });
 V.pushHandoff = {ready, supported, standalone, isOn, enable, disable, mountSettings, rowHtml, status:() => status};

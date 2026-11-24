@@ -58,12 +58,29 @@ test('설정 › 알림: on asks permission, subscribes and registers this devic
   expect(await page.evaluate(() => localStorage.getItem('vzip_push_handoff_on'))).toBe(null);
 });
 
-test('no 알림 section while the server is not set up', async ({page}) => {
+test('the 알림 section is always in 설정: when the server does not answer with its key, one line says why (no switch)', async ({page}) => {
   await boot(page, {available:false});
   await page.evaluate(() => { location.hash = '#/settings'; });
-  await expect(page.locator('[data-settings-group="more"]')).toBeVisible();
-  await page.waitForTimeout(500);
-  await expect(page.locator('[data-push-row]')).toHaveCount(0);
+  const row = page.locator('[data-settings-group="notify"] [data-push-row]');
+  await expect(row).toContainText('알림 서버에 연결하지 못했어요');
+  await expect(row.locator('[data-push-toggle]')).toHaveCount(0);
+  // It sits just before 공유·점검, once.
+  expect(await page.evaluate(() => document.querySelector('[data-settings-group="notify"]').nextElementSibling?.dataset.settingsGroup)).toBe('more');
+  await page.evaluate(() => { location.hash = '#/home'; }); await page.evaluate(() => { location.hash = '#/settings'; });
+  await expect(page.locator('[data-settings-group="notify"]')).toHaveCount(1);
+});
+
+test('signed out: 로그인하면 켤 수 있어요', async ({page}) => {
+  await boot(page);
+  await page.evaluate(() => { window.vzipCloudPush.status = async () => ({available:false, why:'signed-out'}); location.hash = '#/settings'; });
+  await expect(page.locator('[data-push-row]')).toContainText('로그인하면 켤 수 있어요', {timeout:6000});
+});
+
+test('설정 opened straight from its address (app start on #/settings) still gets the section', async ({page}) => {
+  await boot(page);
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await page.reload();
+  await expect(page.locator('[data-push-toggle]')).toBeVisible();
 });
 
 test('before the server is set up (SERVER_READY off): no row, no request, and 휴대폰으로 녹음 asks for no notification', async ({page}) => {
