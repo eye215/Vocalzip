@@ -11,6 +11,7 @@ on:
       - 'share-worker.js'
       - 'cloud-sync.js'
       - 'tests/push-*'
+      - 'push-keys.html'
       - '.github/workflows/push-handoff-check.yml'
 permissions:
   contents: read
@@ -50,4 +51,4 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts
-      - run: npx playwright test tests/push-handoff.spec.cjs tests/record-handoff.spec.cjs --project=chromium-mobile --project=chromium-desktop --project=webkit-mobile --workers=2
+      - run: npx playwright test tests/push-handoff.spec.cjs tests/push-keys.spec.cjs tests/record-handoff.spec.cjs --project=chromium-mobile --project=chromium-desktop --project=webkit-mobile --workers=2
