@@ -122,6 +122,23 @@ test('되돌리기 takes the choice back (the pair can be chosen anew); 바로 �
   expect((await verdicts(page)).map(v => v.overall)).toEqual(['same']);
 });
 
+test('곡이 틀렸어요: the take gets its song through 곡 지정, and its pairs leave the session', async ({page}) => {
+  await boot(page);
+  await page.evaluate(() => { location.hash = '#/listen?song=river'; });
+  await expect(page.locator('[data-ls-count]')).toHaveText('비교 2개');
+  await page.locator('[data-ls-start]').click();
+  // The same 곡 지정 as everywhere (pick, then save on the recording); here a stand-in records what is saved.
+  await page.evaluate(() => { window.__saved = []; VZ.pickRecordingSong = async () => 'home'; VZ.saveRecordingSong = async (m, v) => { window.__saved.push([m.id, v]); }; });
+  const [side, take] = await playing(page);
+  await now(page).locator('[data-ls-fix-song]').click();
+  await expect(page.locator('.toast').last()).toContainText('이 비교는 건너뛸게요');
+  expect(await page.evaluate(() => window.__saved)).toEqual([[take, 'home']]);
+  // r3 (the latest) was in both pairs: if it was the one moved, nothing of River is left; else the other pair plays.
+  if (take === 'r3') await expect(page.locator('[data-ls-done]')).toBeVisible();
+  else { const next = await playing(page); expect(next[1]).not.toBe(take); await expect(now(page)).toContainText('The River'); }
+  expect(side).toMatch(/^[AB]$/);
+});
+
 test('그냥 이어 듣기 · 앞 1분: every take newest first, on by itself; a choice of length is kept with a verdict', async ({page, browserName}) => {
   await boot(page);
   await page.evaluate(() => { location.hash = '#/listen'; });

@@ -150,6 +150,28 @@ function choose(pair, side) {
   } else { V.toast('저장했어요 · ' + meaning(record.overall)); changed(); }
 }
 const FLASH_MS = 2600;
+/** 곡이 틀렸어요 (owner, 2026-11-24: listening found a take filed under the wrong song): the same 곡 지정 as everywhere
+ * (app/recording-menu.js pickRecordingSong → saveRecordingSong: confirm, then the take's song and title change). The
+ * take then no longer belongs here: its pairs are left out of the rest of the session (and of 답 안 한 비교); in 그냥
+ * 이어 듣기 it just plays on under its new song. */
+async function fixSong() {
+  const x = session?.extra || step(); if (!x) return;
+  const item = x.take.item, before = x.take.songId;
+  const v = await V.pickRecordingSong([item]); if (v == null || !session) return;
+  try { await V.saveRecordingSong(item, v); M.invalidate?.(); }
+  catch (error) { V.toast('곡을 바꾸지 못했어요: ' + error.message, 'error'); return; }
+  item.songId = v; x.take.songId = v;
+  const now = V.song(v) ? title(v) : '곡 미지정';
+  if (session.mode !== 'pick' || v === before) { V.toast('곡을 ‘' + now + '’(으)로 바꿨어요.'); return changed(); }
+  const id = item.id, uses = st => st.pair && (st.pair.a.id === id || st.pair.b.id === id);
+  if (session.flash && uses(step())) { clearTimeout(session.flash.timer); session.flash = null; }
+  session.steps = session.steps.slice(0, session.index).concat(session.steps.slice(session.index).filter(st => !uses(st)));
+  session.missed = session.missed.filter(p => p.a.id !== id && p.b.id !== id);
+  session.extra = null;
+  V.toast('곡을 ‘' + now + '’(으)로 바꿨어요. 이 비교는 건너뛸게요.');
+  if (session.index >= session.steps.length) return done();
+  load(true);
+}
 /** On from a chosen pair to the next one (unless the choice was taken back, or the session moved on meanwhile). */
 function advance(key) {
   if (!session || session.flash?.key !== key) return;
@@ -234,6 +256,7 @@ function nowHtml() {
   return '<section class="ls-now" data-ls-now>' +
     '<p class="ls-step">' + (session.extra ? '다시 듣기' : (pick ? '비교 ' : '') + n + ' / ' + of + (pick && session.answered.size ? ' · 고른 것 ' + session.answered.size : '')) + '</p>' +
     '<p class="ls-song">' + e(title(x.take.songId)) + '</p>' +
+    (V.pickRecordingSong && V.saveRecordingSong ? '<button type="button" class="ls-fix" data-ls-fix-song><i class="ph ph-music-notes" aria-hidden="true"></i>' + (x.side ? x.side + ' 녹음' : '이 녹음') + '의 곡이 틀렸어요</button>' : '') +
     (x.side ? '<p class="ls-side" data-ls-side>' + x.side + '</p>' : '<p class="ls-take">' + e(M.label(x.take.item)) + ' · ' + e(dotted(x.take.date)) + '</p>') +
     '<div class="ls-controls"><button type="button" data-ls-prev aria-label="이전"><i class="ph-fill ph-skip-back"></i></button>' +
     '<button type="button" class="ls-play" data-ls-toggle aria-label="' + (audio.paused ? '재생' : '일시정지') + '"><i class="ph-fill ' + (audio.paused ? 'ph-play' : 'ph-pause') + '"></i></button>' +
@@ -267,6 +290,7 @@ function wire() {
   const p = q('[data-ls-prev]'); if (p) p.onclick = () => prev();
   const r = q('[data-ls-resume]'); if (r) r.onclick = () => resume();
   const u = q('[data-ls-undo]'); if (u) u.onclick = () => undo();
+  const fx = q('[data-ls-fix-song]'); if (fx) fx.onclick = () => fixSong();
   const k = q('[data-ls-skip]'); if (k) k.onclick = () => advance(session.flash?.key);
   host.querySelectorAll('[data-ls-choice]').forEach(box => {
     const pair = session.steps.find(x => x.pair?.key === box.dataset.lsChoice)?.pair; if (!pair) return;
@@ -300,5 +324,5 @@ V.route('listen', {title:'듣고 고르기', back:true, tab:'growth', noAutoRefr
     if (!session) { cached = await takes(); if (!host.isConnected) return; }
     paint();
   }});
-V.listenSession = {start, next, prev, stop, choose, undo, advance, state:() => session, audio};
+V.listenSession = {start, next, prev, stop, choose, undo, advance, fixSong, state:() => session, audio};
 })();

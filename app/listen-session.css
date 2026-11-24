@@ -53,3 +53,5 @@
 @keyframes ls-bar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 @keyframes ls-pop{from{transform:scale(.97);opacity:.4}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.ls-result{animation:none}}
+/* 곡이 틀렸어요: a quiet link under the song's name. */
+.ls-fix{display:inline-flex;align-items:center;gap:4px;min-height:44px;margin-top:-6px;padding:0 10px;border:0;background:none;color:#6E3FD1;font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
