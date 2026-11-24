@@ -2172,8 +2172,10 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   await expect(page.locator('.vz-journey')).toHaveCSS('font-family', /Pretendard/);
   await expect(page.locator('.vz-journey')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(page.locator('[data-sync-summary]')).toBeVisible();
+  // 알림 (app/push-handoff.js) is put in once 설정 is drawn, just before 공유·점검.
+  await expect(page.locator('[data-settings-group="notify"]')).toBeVisible();
   const headings = await page.locator('.vz-settings-section h2').allTextContents();
-  expect(headings.map(h => h.trim())).toEqual(['연습', '분석', '파일·저장', '공유·점검']);
+  expect(headings.map(h => h.trim())).toEqual(['연습', '분석', '파일·저장', '알림', '공유·점검']);
   // v5 settings groups: each row sits in the one group it belongs to (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md).
   const rows = async g => (await page.locator('[data-settings-group="' + g + '"] .item-title').allTextContents()).map(s => s.trim());
   // 노래 연습실 opens from 오늘 › 연습하기 only (one door for the things you do), not from 설정 too.
