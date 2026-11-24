@@ -9,7 +9,7 @@ const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:
  from:()=>{const c={};for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle','in','limit'])c[m]=()=>c;c.then=r=>r({data:[],error:null});return c}})};`;
 const seed = {categories:[], songs:[{id:'river', title:'The River'}, {id:'home', title:'Home'}, {id:'one', title:'혼자'}], lessons:[], assignments:[], practices:[], performances:[], comparisonReports:[], dailyGoals:[], practicePlans:[]};
 const TAKES = [['r1', 'river', '2026-08-01'], ['r2', 'river', '2026-09-10'], ['r3', 'river', '2026-11-20'], ['h1', 'home', '2026-10-01'], ['h2', 'home', '2026-11-19'], ['o1', 'one', '2026-11-02']];
-async function boot(page) {
+async function boot(page, {nativeAudio = false} = {}) {
   page.__errors = []; page.on('pageerror', e => page.__errors.push(e.message));
   await page.addInitScript(([key, value]) => { if (!sessionStorage.getItem('ls-seeded')) { localStorage.setItem(key, value); sessionStorage.setItem('ls-seeded', '1'); } }, [KEY, JSON.stringify(seed)]);
   await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
@@ -18,26 +18,28 @@ async function boot(page) {
   await page.route('**/tus.min.js', r => r.fulfill({contentType:'application/javascript', body:'window.tus={}'}));
   await page.goto('/#/home');
   await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
-  await page.evaluate(async takes => {
+  await page.evaluate(async ({takes, nativeAudio}) => {
     window.vzipCloudSignedIn = () => false;
-    const sr = 8000, n = sr * 2, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf), w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    const sr = 8000, n = sr * (nativeAudio ? 60 : 2), buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf), w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
     w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
-    for (const [id, songId, date] of takes) await window.vzipStorePracticeMedia({id, name:VZ.songTitle(songId) + ' ' + date, created:Date.parse(date + 'T12:00:00'), recordedDate:date, type:'audio/wav', source:'practice', recordingCategory:'song', songId, blob:new Blob([buf], {type:'audio/wav'}), durationSeconds:2});
+    for (const [id, songId, date] of takes) await window.vzipStorePracticeMedia({id, name:VZ.songTitle(songId) + ' ' + date, created:Date.parse(date + 'T12:00:00'), recordedDate:date, type:'audio/wav', source:'practice', recordingCategory:'song', songId, blob:new Blob([buf], {type:'audio/wav'}), durationSeconds:n / sr});
     VZ.media.invalidate();
-    // The test moves the session on itself ('ended' below): the takes never really play to their end (WebKit plays
-    // the 2-second files for real and would move on by itself as well).
-    VZ.listenSession.audio.play = () => Promise.resolve();
-    window.__listenMediaEvents = [];
-    const audio = VZ.listenSession.audio;
-    for (const type of ['error', 'emptied', 'loadstart', 'loadedmetadata', 'play', 'pause', 'ended']) {
-      audio.addEventListener(type, () => window.__listenMediaEvents.push({type, code:audio.error?.code, index:VZ.listenSession.state()?.index}));
+    if (!nativeAudio) {
+      // These interaction tests dispatch ended/timeupdate themselves. Stubbing play alone still lets WebKit
+      // preload/decode every src and emit native media errors between our controlled steps. Keep the
+      // transport in memory as well; real decoding and play/pause are checked separately below.
+      const player = VZ.listenSession.audio;
+      let src = '';
+      const get = player.getAttribute.bind(player), remove = player.removeAttribute.bind(player);
+      Object.defineProperty(player, 'src', {configurable:true, get:() => src, set:value => {src = String(value);}});
+      player.getAttribute = name => name === 'src' ? (src || null) : get(name);
+      player.removeAttribute = name => { if (name === 'src') src = ''; else remove(name); };
+      player.load = () => {};
+      player.play = () => Promise.resolve();
     }
-  }, TAKES);
+  }, {takes:TAKES, nativeAudio});
 }
-test.afterEach(async ({page}, info) => {
-  if (info.status !== info.expectedStatus) await info.attach('listen-media-events', {body:JSON.stringify(await page.evaluate(() => window.__listenMediaEvents || [])), contentType:'application/json'});
-  expect(page.__errors || []).toEqual([]);
-});
+test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
 const now = page => page.locator('[data-ls-now]');
 const verdicts = page => page.evaluate(() => (VZ.db.comparisonReports || []).filter(x => x.kind === 'listen-verdict').map(x => ({songId:x.songId, firstId:x.firstId, secondId:x.secondId, overall:x.overall, blind:x.blind, judge:x.judge, firstRange:x.firstRange})));
 /** What is in the audio element now: the take id (its object URL's take is found through the session). */
@@ -165,6 +167,30 @@ test('그냥 이어 듣기 · 앞 1분: every take newest first, on by itself; a
   expect(await page.evaluate(() => window.MediaMetadata && navigator.mediaSession ? navigator.mediaSession.metadata?.title : 'The River')).toBe('The River');
   await end(page);
   await expect(page.locator('[data-ls-done]')).toContainText('녹음 3개');
+});
+
+test('native playback: previous, next and play/pause use real buttons without synthetic ended events', async ({page}) => {
+  await boot(page, {nativeAudio:true});
+  await page.evaluate(() => { location.hash = '#/listen'; });
+  await page.locator('[data-ls-mode="play"]').click();
+  await page.locator('[data-ls-song]').selectOption('river');
+  await page.locator('[data-ls-start]').click();
+  const ready = async id => {
+    await expect.poll(() => playing(page)).toEqual(['', id]);
+    await expect.poll(() => page.evaluate(() => {
+      const a = VZ.listenSession.audio;
+      return a.readyState >= 2 && !a.paused && !a.error;
+    })).toBe(true);
+  };
+  await ready('r3');
+  await page.locator('[data-ls-next]').click(); await ready('r2');
+  await page.locator('[data-ls-prev]').click(); await ready('r3');
+  await page.locator('[data-ls-next]').click(); await ready('r2');
+  await page.locator('[data-ls-next]').click(); await ready('r1');
+  await page.locator('[data-ls-toggle]').click();
+  await expect.poll(() => page.evaluate(() => VZ.listenSession.audio.paused)).toBe(true);
+  await page.locator('[data-ls-toggle]').click(); await ready('r1');
+  expect(await page.evaluate(() => VZ.listenSession.state().failed)).toBe(0);
 });
 
 test('#/listen?song=<id> opens with that song chosen', async ({page}) => {
