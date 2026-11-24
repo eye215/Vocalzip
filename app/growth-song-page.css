@@ -41,3 +41,23 @@
 .gsp-all span{display:grid;gap:2px}
 .gsp-all small{color:#667085;font-size:12px}
 .gsp-points .vz-pts-card{margin:0}
+/* 곡 확인이 필요해 보이는 녹음 (app/song-check.js): the list here and on #/song-mismatch, and the 성장 › 곡 line. */
+.sc{display:grid;gap:12px;padding-bottom:24px}
+.sc-lead{margin:0;padding:12px 14px;border-radius:14px;background:#F8F5FD;color:#4A3B66;font-size:13px;line-height:20px}
+.sc-note,.sc-empty{margin:0;color:#98A2B3;font-size:12px;line-height:18px}
+.sc-empty{padding:16px;border-radius:16px;background:#fff;color:#667085;font-size:14px;text-align:center}
+.sc-list{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.sc-row{display:grid;gap:8px;padding:14px;border-radius:16px;background:#fff;box-shadow:0 0 0 1px #EFE9F8}
+.gsp-card .sc-row{padding:12px 0 0;border-radius:0;box-shadow:none;border-top:1px solid #F2EFF7}
+.sc-head{display:grid;gap:2px}
+.sc-head strong{font-size:15px}
+.sc-head small{color:#667085;font-size:12px}
+.sc-why{margin:0;color:#344054;font-size:13px;line-height:19px}
+.sc-why b{color:#6E3FD1}
+.sc-actions{display:flex;flex-wrap:wrap;gap:6px}
+.sc-actions button{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 12px;border:0;border-radius:12px;background:#F3ECFF;color:#6E3FD1;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.sc-actions button.is-main{background:#7A32F5;color:#fff}
+.sc-player:not(:empty){padding-top:4px}
+.sc-notice{display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:12px 14px;border-radius:16px;background:#FFFAEB;color:#93370D;font-size:14px;font-weight:600;text-decoration:none}
+.sc-notice i:first-child{font-size:20px}
+.sc-notice span{flex:1}

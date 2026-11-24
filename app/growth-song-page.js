@@ -64,8 +64,14 @@ function weakHtml(song, items) {
       : '<p class="gsp-empty">최근 녹음에서 선을 넘은 곳이 없어요.</p>') +
     '<a class="gsp-link" href="#/vocal-lab/' + encodeURIComponent(song.id) + '?jump=weak" data-gsp-weak-more>구간별로 보기 · 파사지오 · 음높이 확인 · 구간 A/B<i class="ph ph-caret-right" aria-hidden="true"></i></a></section>';
 }
+/** 곡 확인이 필요해 보이는 녹음 of this song (app/song-check.js), when there is any. */
+function checkHtml(song, items) {
+  const list = V.songCheck ? V.songCheck.suspects(items).filter(s => s.songId === song.id) : [];
+  return list.length ? '<section class="gsp-card" data-gsp-check><h3>곡 확인이 필요해 보이는 녹음 <small>' + list.length + '</small></h3>' + V.songCheck.listHtml(list, items) + '</section>' : '';
+}
 function html(song, v, takes, items) {
   return heroHtml(song, v, takes) + timelineHtml(takes, v) + rowsHtml(v) + heardHtml(song) + weakHtml(song, items) +
+    checkHtml(song, items) +
     '<section class="gsp-points" data-gsp-points></section>' +
     '<a class="gsp-all" href="#/vocal-lab/' + encodeURIComponent(song.id) + '" data-gsp-all><span><strong>모든 분석 도구</strong><small>분석 실행 · MR로 다시 분석 · 정밀 리포트 · AI 해석 · 깊이 보기</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>' +
     '<p class="gsp-disclaimer">수치는 음성 측정에 기반한 참고 정보예요. 분석하지 않은 녹음에는 결과를 만들어 넣지 않아요.</p>';
@@ -98,6 +104,8 @@ V.route('growth-song', {title:'곡', back:true, tab:'growth', noAutoRefresh:true
     host.querySelectorAll('[data-gsp-play]').forEach(b => b.onclick = () => playIn(host, byId.get(b.dataset.gspPlay)));
     host.querySelectorAll('[data-gsp-take]').forEach(b => b.onclick = () => playIn(host, byId.get(b.dataset.gspTake)));
     try { V.scorePoints?.card(host.querySelector('[data-gsp-points]'), song.id); } catch (error) { console.error(error); }
+    const check = host.querySelector('[data-gsp-check]');
+    if (check) V.songCheck.wire(check, items, () => { if (location.hash.startsWith('#/growth-song/')) V.render?.(); });
     // The latest take is in view on the timeline.
     const tl = host.querySelector('[data-gsp-timeline]'); if (tl) tl.scrollLeft = tl.scrollWidth;
   },
