@@ -134,3 +134,18 @@ test('the card: verdicts first (newest), songs most recent first, every left-out
   assert.deepEqual(m.songs.map(s => s.songId), ['s2', 's1']);
   assert.deepEqual(m.excluded.map(x => [x.kind, x.songId, x.reason]), [['song', 's3', 'method-mixed']]);
 });
+
+test('들어 본 평가 모아 보기: 요즘 쪽 · 비슷 · 예전 쪽, the way the ear leans, and the measured direction next to it', () => {
+  const v = overall => ({kind:'listen-verdict', overall});
+  const t = L.tally([v('second'), v('second'), v('same'), v('first'), {kind:'report'}, {kind:'listen-verdict', overall:'?'}]);
+  assert.deepEqual(t, {later:2, same:1, earlier:1, n:4});
+  assert.equal(L.tallyText(t), '요즘 쪽 2 · 비슷 1 · 예전 쪽 1');
+  assert.equal(L.earOf(t), 'better');
+  assert.equal(L.agreeText(t, 'better'), '측정 숫자도 같은 쪽이에요');
+  assert.equal(L.agreeText(t, 'worse'), '측정 숫자는 아쉬운 방향이에요 · 귀와 숫자가 달라요');
+  for (const state of ['mixed', 'hold', 'one', 'none', '']) assert.equal(L.agreeText(t, state), '');
+  assert.equal(L.earOf(L.tally([v('first'), v('second')])), 'similar');
+  assert.equal(L.earOf(L.tally([v('first')])), 'worse');
+  assert.equal(L.tallyText(L.tally([])), '');
+  assert.equal(L.earOf(L.tally([])), null);
+});

@@ -73,6 +73,15 @@ test('a verdict saved from 두 녹음 비교 shows on the screen at once', async
   });
   await expect(page.locator('[data-gsp-heard]')).toContainText('1개');
   await expect(page.locator('[data-gsp-heard] li')).toHaveCount(1);
+  // 모아 보기: how the ear leans over the song's verdicts, counted; the measured direction is set beside it only when
+  // there is one to compare with (좋아진 방향 · 아쉬운 방향 · 비슷함).
+  const ear = page.locator('[data-gsp-ear]');
+  await expect(ear).toHaveAttribute('data-gsp-ear', 'better');
+  await expect(ear).toContainText('들어 보면 요즘 녹음이 낫다는 쪽이 많아요');
+  await expect(ear.locator('[data-gsp-ear-count]')).toHaveText('요즘 쪽 1');
+  const state = await page.locator('[data-gsp-heard]').getAttribute('data-state');
+  if (['better', 'worse', 'similar'].includes(state)) await expect(ear.locator('[data-gsp-agree]')).toHaveText(state === 'better' ? '측정 숫자도 같은 쪽이에요' : /귀와 숫자가 달라요/);
+  else await expect(ear.locator('[data-gsp-agree]')).toHaveCount(0);
 });
 
 test('320px: nothing runs off the screen; the buttons are at least 44px', async ({page}) => {
