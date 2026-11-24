@@ -27,9 +27,17 @@ async function boot(page) {
     // The test moves the session on itself ('ended' below): the takes never really play to their end (WebKit plays
     // the 2-second files for real and would move on by itself as well).
     VZ.listenSession.audio.play = () => Promise.resolve();
+    window.__listenMediaEvents = [];
+    const audio = VZ.listenSession.audio;
+    for (const type of ['error', 'emptied', 'loadstart', 'loadedmetadata', 'play', 'pause', 'ended']) {
+      audio.addEventListener(type, () => window.__listenMediaEvents.push({type, code:audio.error?.code, index:VZ.listenSession.state()?.index}));
+    }
   }, TAKES);
 }
-test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
+test.afterEach(async ({page}, info) => {
+  if (info.status !== info.expectedStatus) await info.attach('listen-media-events', {body:JSON.stringify(await page.evaluate(() => window.__listenMediaEvents || [])), contentType:'application/json'});
+  expect(page.__errors || []).toEqual([]);
+});
 const now = page => page.locator('[data-ls-now]');
 const verdicts = page => page.evaluate(() => (VZ.db.comparisonReports || []).filter(x => x.kind === 'listen-verdict').map(x => ({songId:x.songId, firstId:x.firstId, secondId:x.secondId, overall:x.overall, blind:x.blind, judge:x.judge, firstRange:x.firstRange})));
 /** What is in the audio element now: the take id (its object URL's take is found through the session). */
@@ -139,7 +147,7 @@ test('곡이 틀렸어요: the take gets its song through 곡 지정, and its pa
   expect(side).toMatch(/^[AB]$/);
 });
 
-test('그냥 이어 듣기 · 앞 1분: every take newest first, on by itself; a choice of length is kept with a verdict', async ({page, browserName}) => {
+test('그냥 이어 듣기 · 앞 1분: every take newest first, on by itself; a choice of length is kept with a verdict', async ({page}) => {
   await boot(page);
   await page.evaluate(() => { location.hash = '#/listen'; });
   await page.locator('[data-ls-mode="play"]').click();
@@ -149,8 +157,8 @@ test('그냥 이어 듣기 · 앞 1분: every take newest first, on by itself; a
   await page.locator('[data-ls-start]').click();
   expect(await playing(page)).toEqual(['', 'r3']);
   await end(page); expect(await playing(page)).toEqual(['', 'r2']);
-  // 이전 · 다음 (the buttons call these; the taps themselves are covered on Chromium below).
-  const tap = async name => { if (browserName === 'webkit') await page.evaluate(n => VZ.listenSession[n](), name); else await page.locator('[data-ls-' + name + ']').click(); };
+  // Every engine must use the same real controls, including WebKit.
+  const tap = name => page.locator('[data-ls-' + name + ']').click();
   await tap('prev'); expect(await playing(page)).toEqual(['', 'r3']);
   await tap('next'); await tap('next');
   expect(await playing(page)).toEqual(['', 'r1']);
