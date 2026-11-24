@@ -145,6 +145,11 @@ VZ.recPracticeBlock = (card, {songId, date, mediaId}) => {
       const e = target && d.practices.find(p => p.id === target);
       if (e) Object.assign(e, {minutes:n, manualMinutes:n, practiceTimeSource:'manual', mediaIds:[...new Set([...(e.mediaIds || []), mediaId])], updatedAt:Date.now()});
       else d.practices.push({id:VZ.uid(), date, minutes:n, manualMinutes:n, practiceTimeSource:'manual', mediaSeconds:0, mediaIds:[mediaId], practiceMode:'song', technique:[], songId, categoryId:'', categoryLabel:'', detail:'', detail2:'', rating:0, memo:'', completed:[], assignmentReps:{}, assignmentNotes:{}, created:Date.now()});
+      // The take's automatic row (app/recording-time-model.js) gives way in the same change: time entered for the song
+      // that day is the only time that counts. Left to recording-time.js alone, it stayed until the recordings list was
+      // read in full (never, while the cloud list failed) and the song showed both (1.0 walkthrough, 2026-11-24).
+      const auto = (window.VzipRecordingTime?.PREFIX || 'rec-time:') + date + ':' + songId;
+      d.practices = d.practices.filter(p => !(p?.id === auto && p.practiceTimeSource === 'recording'));
     }, {silent:true});   // silent: a render would replace this saved-take card
     if (!ok) return;
     VZ.recordingTime?.run?.();   // the take's automatic row gives way to the time written now
