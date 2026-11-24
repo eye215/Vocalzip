@@ -18,6 +18,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - name: Trust only the checked-out workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
