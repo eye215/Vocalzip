@@ -144,7 +144,11 @@ test('녹음 저장 → 오늘 이 곡 연습: the take counts at once, one tap 
   const rows = () => page.evaluate(() => VZ.db.practices.filter(p => p.songId === 's1' && p.date === VZ.today()).map(p => ({id:p.id, minutes:p.minutes, source:p.practiceTimeSource, media:p.mediaIds.length})));
   expect(await rows()).toEqual([expect.objectContaining({id:expect.stringMatching(/^rec-time:/), minutes:1, source:'recording', media:1})]);
   for (const b of await block.locator('[data-rec-min]').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  // The automatic row goes in the same change as the tap, even when the recordings list is not at hand (a failed cloud
+  // read leaves it unread: 1.0 walkthrough, 2026-11-24 — the song showed 1분 + 30분 until another screen read it).
+  await page.evaluate(() => { VZ.media.cached = () => []; });
   await block.locator('[data-rec-min="30"]').click();
+  expect(await rows()).toEqual([expect.objectContaining({minutes:30, source:'manual', media:1})]);
   await expect(min).toHaveText('30분');
   await expect(block).toContainText('직접 적은 시간이에요');
   await expect(block.locator('[data-rec-min="30"]')).toHaveAttribute('aria-pressed', 'true');

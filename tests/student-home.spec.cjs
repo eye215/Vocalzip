@@ -296,7 +296,7 @@ test('daily time comes from onboarding/settings; tomorrow offers goals once with
  await boot(page,value);
  await expect(page.getByRole('dialog',{name:'오늘의 목표',exact:true})).toHaveCount(0);
  // No explicit plans: the week target is seven days of the 30-minute onboarding/settings default.
- await expect(weekRow(page)).toHaveAccessibleName('오늘 연습 30분, 오늘 목표 30분, 이번 주 연습 30분, 목표 3시간 30분, 달성률 14%, 자세히 보기');
+ await expect(weekRow(page)).toHaveAccessibleName('오늘 연습 30분, 오늘 목표 30분, 오늘 달성률 100%, 이번 주 연습 30분, 목표 3시간 30분, 이번 주 달성률 14%, 자세히 보기');
  await page.evaluate(()=>{VZ.today=()=> '2026-11-05';VZ.render();});await ready(page);
  const automatic=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(automatic).toBeVisible();
  await expect(automatic.locator('[name=dayMinutes],[name=weekMinutes]')).toHaveCount(0);
@@ -320,13 +320,14 @@ test('settings changes the default daily target on home',async({page})=>{
  await sheet.getByRole('button',{name:'저장'}).click();
  await page.goto('/#/home');await ready(page);
  // Seven days of the new 45-minute default.
- await expect(weekRow(page)).toHaveAccessibleName('오늘 연습 30분, 오늘 목표 45분, 이번 주 연습 30분, 목표 5시간 15분, 달성률 10%, 자세히 보기');
+ await expect(weekRow(page)).toHaveAccessibleName('오늘 연습 30분, 오늘 목표 45분, 오늘 달성률 67%, 이번 주 연습 30분, 목표 5시간 15분, 이번 주 달성률 10%, 자세히 보기');
  expect((await db(page)).settings.dailyTargetMinutes).toBe(45);
 });
 test('week summary row shows only this week\'s actual practice time against the target',async({page})=>{
  await phoneWidth(page); // the one-line 이번 주 row is the phone layout; tablets show the full 주간 연습 card
  await boot(page);const row=weekRow(page);
- for(const [minutes,value,badge,done]of [[0,'0분 / 3시간','0%',false],[99,'1시간 39분 / 3시간','55%',false],[180,'3시간 / 3시간','100%',true],[240,'4시간 / 3시간','133%',true]]){
+ // The badge is today's share against the 30-minute day (1.0 walkthrough: the week's share read as today's); the week's is spoken.
+ for(const [minutes,value,week,badge,done]of [[0,'0분 / 3시간','0%','0%',false],[99,'1시간 39분 / 3시간','55%','330%',true],[180,'3시간 / 3시간','100%','600%',true],[240,'4시간 / 3시간','133%','800%',true]]){
   // Manual minutes win over stored minutes and recording length; tomorrow and last week never count.
   await page.evaluate(({minutes,date})=>VZ.change(d=>{d.practices=[{id:'boundary',date,manualMinutes:minutes,minutes:999,mediaSeconds:9999,songId:'s1'},{id:'tomorrow',date:'2026-11-05',manualMinutes:60,songId:'s1'},{id:'last-week',date:'2026-11-01',manualMinutes:45,songId:'s1'}];}),{minutes,date:TODAY});
   // 오늘 line (against today's 30-minute plan) and 이번 주 line (against the week target, named 목표).
@@ -334,10 +335,10 @@ test('week summary row shows only this week\'s actual practice time against the 
   await expect(row.locator('.vz-summary-value')).toHaveText(actual+' / 30분');await expect(row.locator('.vz-summary-sub')).toHaveText('이번 주 '+actual+' / 목표 3시간');
   await expect(row.locator('.vz-summary-badge')).toHaveText(badge);
   if(done)await expect(row).toHaveAttribute('data-tone','done');else await expect(row).not.toHaveAttribute('data-tone','done');
-  await expect(row).toHaveAccessibleName('오늘 연습 '+actual+', 오늘 목표 30분, 이번 주 연습 '+actual+', 목표 3시간, 달성률 '+badge+', 자세히 보기');
+  await expect(row).toHaveAccessibleName('오늘 연습 '+actual+', 오늘 목표 30분, 오늘 달성률 '+badge+', 이번 주 연습 '+actual+', 목표 3시간, 이번 주 달성률 '+week+', 자세히 보기');
  }
  await page.evaluate(()=>VZ.change(d=>{d.practicePlans=[];}));
- await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 4시간 / 30분 · 이번 주 4시간 / 목표 3시간 30분');await expect(row.locator('.vz-summary-badge')).toHaveText('114%');
+ await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 4시간 / 30분 · 이번 주 4시간 / 목표 3시간 30분');await expect(row.locator('.vz-summary-badge')).toHaveText('800%');
  expect((await db(page)).practices.map(p=>[p.id,p.manualMinutes])).toEqual([['boundary',240],['tomorrow',60],['last-week',45]]);
 });
 test('four home navigation buttons (v4 IA) and floating recording reach existing routes',async({page})=>{
@@ -369,7 +370,7 @@ test('weekly home keeps actual practice time separate from every recording lengt
  await expect.poll(()=>page.evaluate(()=>window.__homeMediaListed===true)).toBe(true);
  await page.evaluate(()=>new Promise(r=>setTimeout(r,100)));
  await expect(weekRow(page).locator('.vz-summary-copy')).toHaveText('오늘 4분 / 30분 · 이번 주 4분 / 목표 3시간');
- await expect(weekRow(page)).toHaveAccessibleName('오늘 연습 4분, 오늘 목표 30분, 이번 주 연습 4분, 목표 3시간, 달성률 2%, 자세히 보기');
+ await expect(weekRow(page)).toHaveAccessibleName('오늘 연습 4분, 오늘 목표 30분, 오늘 달성률 13%, 이번 주 연습 4분, 목표 3시간, 이번 주 달성률 2%, 자세히 보기');
  expect((await db(page)).practices[0].manualMinutes).toBe(4);
 });
 
@@ -381,7 +382,7 @@ test('week row follows the current week across Monday and reaches today in the c
  // A future-dated practice is not counted yet.
  await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 0분 / 30분 · 이번 주 0분 / 목표 3시간');
  await page.evaluate(()=>{VZ.today=()=> '2026-11-08';VZ.render();});await ready(page);await later();
- await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 14분 / 30분 · 이번 주 14분 / 목표 3시간');await expect(row.locator('.vz-summary-badge')).toHaveText('8%');
+ await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 14분 / 30분 · 이번 주 14분 / 목표 3시간');await expect(row.locator('.vz-summary-badge')).toHaveText('47%');
  await expect(page.locator('.vz-today-streak')).toContainText('1일 연속');
  // Monday starts a new week: Sunday's minutes stay in last week and the target falls back to the daily default.
  await page.evaluate(()=>{VZ.today=()=> '2026-11-09';VZ.render();});await ready(page);await later();
@@ -397,7 +398,7 @@ test('지금 할 것, summary rows, recent songs and profile retain their real d
  await boot(page);const before=await db(page);
  await expect(page.locator('.vz-summary-row')).toHaveCount(3);
  for(const [i,key] of ['lesson','stage','week'].entries())await expect(page.locator('.vz-summary-row').nth(i)).toHaveAttribute('data-row',key);
- for(const [name,route]of [['숙제 호흡을 길게 유지하기 보기','homework'],['다음 레슨, 11.6 (금) 18:30, D-2','lesson/l1'],[/^(공연|오디션|무대), 가을 뮤지컬 오디션, D-4$/,'show/stage1'],['오늘 연습 30분, 오늘 목표 30분, 이번 주 연습 30분, 목표 3시간, 달성률 17%, 자세히 보기','calendar?date='+TODAY],['This Is the Moment 연습하기','record?song=s1'],['프로필','settings']]){
+ for(const [name,route]of [['숙제 호흡을 길게 유지하기 보기','homework'],['다음 레슨, 11.6 (금) 18:30, D-2','lesson/l1'],[/^(공연|오디션|무대), 가을 뮤지컬 오디션, D-4$/,'show/stage1'],['오늘 연습 30분, 오늘 목표 30분, 오늘 달성률 100%, 이번 주 연습 30분, 목표 3시간, 이번 주 달성률 17%, 자세히 보기','calendar?date='+TODAY],['This Is the Moment 연습하기','record?song=s1'],['프로필','settings']]){
   await page.goto('/#/home');await ready(page);await page.getByRole('button',{name,exact:typeof name==='string'}).click();
   // The 오늘 · 이번 주 row first shows its numbers and where the target comes from; the calendar is one tap further.
   if(route.startsWith('calendar'))await page.getByRole('dialog',{name:'이번 주 연습',exact:true}).getByRole('button',{name:'기록에서 보기',exact:true}).click();
@@ -589,7 +590,7 @@ test('checking a goal asks for the time at once: chip, 저장, then the row, tod
  await phoneWidth(page);await boot(page,timeSeed());
  await page.evaluate(()=>{window.__sameDocument=true;});
  const before=await db(page),row=goalRow(page,'후렴 연결 연습하기'),week=weekRow(page);
- await expect(week.locator('.vz-summary-copy')).toHaveText('오늘 12분 / 30분 · 이번 주 12분 / 목표 3시간');await expect(week.locator('.vz-summary-badge')).toHaveText('7%');
+ await expect(week.locator('.vz-summary-copy')).toHaveText('오늘 12분 / 30분 · 이번 주 12분 / 목표 3시간');await expect(week.locator('.vz-summary-badge')).toHaveText('40%');
  await page.getByRole('checkbox',{name:'후렴 연결 연습하기',exact:true}).check();
  const sheet=timeSheet(page);await expect(sheet).toBeVisible();await expect(page.locator('.vz-perform-offer')).toHaveCount(0);
  await expect(sheet.locator('.sheet-head h2')).toHaveText('후렴 연결 연습하기');await expect(sheet.getByText('얼마나 연습했나요?',{exact:true})).toBeVisible();
@@ -620,7 +621,7 @@ test('checking a goal asks for the time at once: chip, 저장, then the row, tod
  await expect(row.locator('.vz-goal-record')).toHaveText('10분');
  await expect(row.getByRole('button',{name:'후렴 연결 연습하기 시간·녹음, 10분 기록됨',exact:true})).toBeVisible();
  expect((await row.locator('.vz-goal-record').boundingBox()).height).toBeGreaterThanOrEqual(44);
- await expect(week.locator('.vz-summary-copy')).toHaveText('오늘 22분 / 30분 · 이번 주 22분 / 목표 3시간');await expect(week.locator('.vz-summary-badge')).toHaveText('12%');
+ await expect(week.locator('.vz-summary-copy')).toHaveText('오늘 22분 / 30분 · 이번 주 22분 / 목표 3시간');await expect(week.locator('.vz-summary-badge')).toHaveText('73%');
  expect(await page.evaluate(()=>window.__sameDocument)).toBe(true);
  let value=await db(page);
  expect(value.practices.find(p=>p.id==='p1')).toEqual(before.practices[0]);
@@ -749,8 +750,8 @@ for(const width of [320,375])test('summary row at '+width+'px: 오늘 and 이번
  await page.setViewportSize({width,height:width===320?640:812});
  const value=timeSeed();value.practicePlans=[];value.practices.push({id:'p0',date:'2026-11-03',manualMinutes:50,songId:'s1',practiceMode:'song'});
  await boot(page,value);const row=weekRow(page);
- await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 12분 / 30분 · 이번 주 1시간 2분 / 목표 3시간 30분');await expect(row.locator('.vz-summary-badge')).toHaveText('30%');
- await expect(row).toHaveAccessibleName('오늘 연습 12분, 오늘 목표 30분, 이번 주 연습 1시간 2분, 목표 3시간 30분, 달성률 30%, 자세히 보기');
+ await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 12분 / 30분 · 이번 주 1시간 2분 / 목표 3시간 30분');await expect(row.locator('.vz-summary-badge')).toHaveText('40%');
+ await expect(row).toHaveAccessibleName('오늘 연습 12분, 오늘 목표 30분, 오늘 달성률 40%, 이번 주 연습 1시간 2분, 목표 3시간 30분, 이번 주 달성률 30%, 자세히 보기');
  // Two lines (오늘 above 이번 주); every number group is on one line, inside the row, and nothing is clipped.
  const box=await row.evaluate(el=>{
   const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,height:r.height};};

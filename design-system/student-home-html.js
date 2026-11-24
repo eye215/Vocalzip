@@ -531,10 +531,13 @@ export async function createFloatingHome(opts={}){
   week=week||{};if(day)todayInfo=day;
   const actual=num(week.actualMinutes),target=Number(week.targetMinutes)>0?Number(week.targetMinutes):null,percent=target?Math.round(actual/target*100):null;
   const t=todayInfo||(week.days||[]).find(d=>d.today)||{},mine=num(t.minutes),dayTarget=Number(t.targetMinutes)>0?Number(t.targetMinutes):null;
+  // The badge beside "오늘 35분 / 30분" is today's share (1.0 walkthrough, 2026-11-24: it showed the week's 17% there, read as
+  // today's); the week's share is in 자세히 (the 주간 sheet) and the spoken name. Without a daily goal the badge is the week's.
+  const dayPercent=dayTarget?Math.round(mine/dayTarget*100):null;
   weekRow={key:"week",icon:"",label:"오늘",value:duration(mine)+(dayTarget?" / "+duration(dayTarget):""),
    sub:["이번 주 "+duration(actual),"/ "+(target?"목표 "+duration(target):"목표 없음")],
-   badge:target?percent+"%":"",tone:target&&actual>=target?"done":"",
-   aria:"오늘 연습 "+duration(mine)+(dayTarget?", 오늘 목표 "+duration(dayTarget):"")+", 이번 주 연습 "+duration(actual)+(target?", 목표 "+duration(target)+", 달성률 "+percent+"%":", 목표 없음")+", 자세히 보기",
+   badge:dayTarget?dayPercent+"%":target?percent+"%":"",tone:dayTarget?(mine>=dayTarget?"done":""):target&&actual>=target?"done":"",
+   aria:"오늘 연습 "+duration(mine)+(dayTarget?", 오늘 목표 "+duration(dayTarget)+", 오늘 달성률 "+dayPercent+"%":"")+", 이번 주 연습 "+duration(actual)+(target?", 목표 "+duration(target)+", 이번 주 달성률 "+percent+"%":", 목표 없음")+", 자세히 보기",
    action:()=>(opts.onWeekSummary||opts.onWeek)?.()};
   paintSummary();
   const streak=num(week.streak),d=opts.today?new Date(opts.today+"T12:00:00"):new Date();
