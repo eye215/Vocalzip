@@ -101,10 +101,14 @@ body.vz-record-mode .vz-record-screen [data-review] .btn.ghost{color:#e8d9ff;bor
 .vz-record-screen .vz-record-score[hidden]{display:none}
 .vz-record-screen .vz-record-score:disabled{opacity:.45;cursor:default}
 /* 기록 landing: entries to 레슨 · 숙제 · 연습 기록 · 나의 공연 (content pills, one row). */
-body.vz-calendar-mode .vz-record-links{display:flex;gap:6px;margin:0 0 12px;overflow-x:auto;scrollbar-width:none}
-body.vz-calendar-mode .vz-record-links::-webkit-scrollbar{display:none}
-body.vz-calendar-mode .vz-record-links a{flex:1 0 auto;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 12px;border-radius:99px;background:#fff;color:#475467;font-size:14px;line-height:20px;font-weight:600;text-decoration:none;white-space:nowrap}
-body.vz-calendar-mode .vz-record-links a:active{background:#EDE1FF;color:#7A32F5}
+/* 기록 탭 바로가기 (UI 정리 3차): four equal tiles, icon over the word — one row, not four more pills. */
+body.vz-calendar-mode .vz-record-links{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 12px}
+body.vz-calendar-mode .vz-record-links a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:64px;padding:8px 2px;border-radius:16px;background:#fff;color:#344054;font-size:13px;line-height:17px;font-weight:600;text-decoration:none;white-space:nowrap;box-shadow:0 0 0 1px #EFE9F8}
+body.vz-calendar-mode .vz-record-links a i{font-size:22px;color:#7A32F5}
+body.vz-calendar-mode .vz-record-links a:active{background:#F3ECFF}
+@media(max-width:340px){body.vz-calendar-mode .vz-record-links a{font-size:12px}}
+/* 녹음 저장 (UI 정리 3차): 다시 · 저장 stay in reach at the bottom while 제목 · 유형 · 메모 scroll by. */
+body.vz-record-mode [data-review] .card>.btn-row{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom));z-index:3;margin:0 -6px;padding:6px;border-radius:18px;background:rgba(29,22,38,.92);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 
 /* 녹음 저장 화면 › 오늘 이 곡 연습 (VZ.recPracticeBlock, app/views-main.js): the practice time, set in one tap. */
 .rec-practice{display:grid;gap:8px;margin:4px 0 2px;padding:12px;border-radius:16px;background:rgba(167,139,250,.12);}

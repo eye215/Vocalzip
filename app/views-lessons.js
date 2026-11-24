@@ -330,7 +330,8 @@ VZ.route('calendar', {title:'기록', tab:'calendar', actions:() => '<a class="i
   calSetOn = today;
   if(date&&VZ.ymd(date)===requested){calDay=requested;calMonth=requested.slice(0,7);}
   // 기록 holds lessons, homework, practices and performances (V4 IA): one small row of ways in.
-  const links = '<nav class="vz-record-links" aria-label="기록 바로가기"><a href="#/lessons">레슨</a><a href="#/homework">숙제</a><a href="#/practices">연습 기록</a><a href="#/performances">나의 공연</a></nav>';
+  const links = '<nav class="vz-record-links" aria-label="기록 바로가기">' + [['lessons', 'chat-circle-text', '레슨'], ['homework', 'check-square', '숙제'], ['practices', 'timer', '연습 기록'], ['performances', 'ticket', '나의 공연']]
+    .map(([route, icon, label]) => '<a href="#/' + route + '"><i class="ph ph-' + icon + '" aria-hidden="true"></i><span>' + label + '</span></a>').join('') + '</nav>';
   return links + '<div data-calendar-summary></div><div class="card vz-calendar-month"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="vz-calendar-footer"><div class="legend"><span><i class="s"></i>공연·오디션</span><span><i class="l"></i>레슨</span><span><i class="p"></i>연습</span></div><button type="button" data-today>오늘</button></div></div><div data-day></div>';
 }, leave() { calPicked = false; }, async mount(main) {
   const grid = main.querySelector('[data-grid]'), dayHost = main.querySelector('[data-day]');
