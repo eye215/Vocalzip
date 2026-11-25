@@ -59,13 +59,13 @@ test.describe('phone 375', () => {
   test('월별 측정 흐름 is a line: one point a month, a gap where a month has no value, the same numbers and the same tap', async ({page}) => {
     await boot(page);
     const trend = page.locator('[data-overall-trend]');
-    // The numbers are the model's monthly means, as before.
+    // The numbers are the model's: each song against its own usual (곡 영향 빼기, 2026-11-25), on those songs' level.
     const model = await page.evaluate(async () => VZ.growthModel(await VZ.media.list()).overall.metrics.find(m => m.id === 'intonation').trend.map(p => [p.month, Math.round(p.value * 10) / 10, p.songs]));
-    expect(model).toEqual([['2026-06', 28, 2], ['2026-07', 29, 1], ['2026-09', 20.3, 3], ['2026-10', 19.7, 3], ['2026-11', 20, 2]]);
+    expect(model).toEqual([['2026-06', 24.3, 2], ['2026-07', 24.1, 1], ['2026-09', 20.3, 3], ['2026-10', 19.7, 3], ['2026-11', 16.3, 2]]);
     // One point per month with a value (a button, as the bars were), and an empty place for August.
     expect(await trend.locator('.growth-chart-point').evaluateAll(els => els.map(e => [e.dataset.overallMonth, e.dataset.overallValue, e.dataset.overallCount, e.getAttribute('aria-label'), e.classList.contains('is-small')])))
-      .toEqual([['2026-06', '±28 cent', '2', '2026-06 ±28 cent 2곡', false], ['2026-07', '±29 cent', '1', '2026-07 ±29 cent 1곡', true], ['2026-09', '±20.3 cent', '3', '2026-09 ±20.3 cent 3곡', false],
-        ['2026-10', '±19.7 cent', '3', '2026-10 ±19.7 cent 3곡', false], ['2026-11', '±20 cent', '2', '2026-11 ±20 cent 2곡', false]]);
+      .toEqual([['2026-06', '±24.3 cent', '2', '2026-06 ±24.3 cent 2곡', false], ['2026-07', '±24.1 cent', '1', '2026-07 ±24.1 cent 1곡', true], ['2026-09', '±20.3 cent', '3', '2026-09 ±20.3 cent 3곡', false],
+        ['2026-10', '±19.7 cent', '3', '2026-10 ±19.7 cent 3곡', false], ['2026-11', '±16.3 cent', '2', '2026-11 ±16.3 cent 2곡', false]]);
     expect(await trend.locator('[data-overall-line] > :not(svg)').evaluateAll(els => els.map(e => e.dataset.overallMonth || 'gap:' + e.dataset.overallGap))).toEqual(['2026-06', '2026-07', 'gap:2026-08', '2026-09', '2026-10', '2026-11']);
     await expect(trend.locator('[data-overall-gap="2026-08"]')).toHaveAttribute('aria-label', '2026-08 값 없음');
     // The line: two pieces (June–July, September–November) — nothing is drawn across the month without a value.
@@ -76,20 +76,21 @@ test.describe('phone 375', () => {
     for (const [i, dot] of g.dots.entries()) { expect(Math.abs(dot.x - vertices[i].x), dot.month + ' x').toBeLessThanOrEqual(1.5); expect(Math.abs(dot.y - vertices[i].y), dot.month + ' y').toBeLessThanOrEqual(1.5); }
     // A higher value is higher on the chart; equal spacing by month, the gap keeping its place.
     const y = Object.fromEntries(g.dots.map(d => [d.month, d.y])), x = g.dots.map(d => d.x);
-    expect(y['2026-07']).toBeLessThan(y['2026-06']); expect(y['2026-06']).toBeLessThan(y['2026-11']); expect(y['2026-11']).toBeLessThan(y['2026-10']);
+    expect(y['2026-06']).toBeLessThan(y['2026-07']); expect(y['2026-07']).toBeLessThan(y['2026-09']); expect(y['2026-10']).toBeLessThan(y['2026-11']);
     expect(Math.abs((x[2] - x[1]) - 2 * (x[1] - x[0]))).toBeLessThanOrEqual(1.5);
     // The good direction is said; the hollow point and the gap are explained; the latest value is still in the head.
     await expect(trend.locator('[data-overall-direction]')).toHaveText('낮을수록 좋아요');
     await expect(trend.locator('.growth-line-legend')).toContainText('속이 빈 점은 한 곡만으로 낸 달'); await expect(trend.locator('.growth-line-legend')).toContainText('값이 없는 달은 선을 잇지 않아요');
-    await expect(trend.locator('.growth-chart-current strong')).toHaveText('±20 cent');
+    await expect(trend.locator('.growth-chart-current strong')).toHaveText('±16.3 cent');
+    await expect(trend.locator('[data-overall-basis]')).toContainText('곡마다 그 곡의 평소 값과 견줘서 곡 영향을 뺐어요');
     // Tapping a point: that month's value and the number of songs, as the bars did.
     await trend.locator('[data-overall-month="2026-09"]').click();
-    await expect(page.locator('.growth-chart-dialog')).toContainText('±20.3 cent'); await expect(page.locator('.growth-chart-dialog')).toContainText('분석된 곡 3곡의 월별 평균값이에요.');
+    await expect(page.locator('.growth-chart-dialog')).toContainText('±20.3 cent'); await expect(page.locator('.growth-chart-dialog')).toContainText('두 달 이상 부른 곡 3곡을 그 곡의 평소 값과 견줘서 낸 값이에요.');
     await page.locator('.sheet [data-close]').click();
     // 달별 값 보기: the same values as a table, the empty month included.
     await trend.locator('[data-overall-trend-table] summary').click();
     expect(await trend.locator('[data-overall-trend-table] tbody tr').evaluateAll(rows => rows.map(r => [...r.children].map(c => c.textContent))))
-      .toEqual([['2026-06', '±28 cent', '2곡'], ['2026-07', '±29 cent', '1곡'], ['2026-08', '값 없음'], ['2026-09', '±20.3 cent', '3곡'], ['2026-10', '±19.7 cent', '3곡'], ['2026-11', '±20 cent', '2곡']]);
+      .toEqual([['2026-06', '±24.3 cent', '2곡'], ['2026-07', '±24.1 cent', '1곡'], ['2026-08', '값 없음'], ['2026-09', '±20.3 cent', '3곡'], ['2026-10', '±19.7 cent', '3곡'], ['2026-11', '±16.3 cent', '2곡']]);
     expect((await trend.locator('[data-overall-trend-table] summary').boundingBox()).height).toBeGreaterThanOrEqual(44);
     await trend.locator('[data-overall-trend-table] summary').click();
     // The other measure draws the same way.

@@ -45,13 +45,23 @@ function calculate(items,{getDate,valid,reference=()=>null,title=()=>''}={}){
   if(TREND.includes(agg.id)){
    const byMonth=new Map();
    for(const m of trendTakes){const month=ym(dateOf(m,getDate));const rows=byMonth.get(month)||[];rows.push(m);byMonth.set(month,rows);}
-   trend=[...byMonth].sort(([a],[b])=>a.localeCompare(b)).map(([month,takes])=>{
-    const means=[];
-    for(const songId of new Set(takes.map(x=>x.songId))){
-     const obs=takes.filter(x=>x.songId===songId).map(m=>value(m,agg.id)).filter(n=>n!=null);
-     if(obs.length)means.push(avg(obs));
-    }
-    return {month,value:avg(means),songs:means.length};
+   // Each song's mean per month (cell), then — 곡 영향 빼기 (owner, 2026-11-25: "월별 성장이 노래 자체 음역에 따라 영향을
+   // 많이 받네") — a month is not the plain mean of whatever songs were sung (a month of high songs reads worse): each
+   // song counts as how far it was from ITS OWN usual (the mean of its months), placed on the level of those songs'
+   // usual. Only songs sung in two months or more say anything about change; a month with none of them is left out.
+   // With no such song at all the plain monthly mean stays (adjusted:false), as before.
+   const cells=new Map();// songId → Map(month → mean)
+   for(const [month,takes] of byMonth)for(const songId of new Set(takes.map(x=>x.songId))){
+    const obs=takes.filter(x=>x.songId===songId).map(m=>value(m,agg.id)).filter(n=>n!=null);
+    if(!obs.length)continue;
+    const row=cells.get(songId)||new Map();row.set(month,avg(obs));cells.set(songId,row);
+   }
+   const usual=new Map([...cells].filter(([,row])=>row.size>=2).map(([songId,row])=>[songId,avg([...row.values()])]));
+   const level=usual.size?avg([...usual.values()]):null;
+   trend=[...byMonth.keys()].sort().map(month=>{
+    if(level==null){const means=[...cells.values()].map(row=>row.get(month)).filter(n=>n!=null);return {month,value:avg(means),songs:means.length,adjusted:false};}
+    const gaps=[...usual].filter(([songId])=>cells.get(songId).has(month)).map(([songId,own])=>cells.get(songId).get(month)-own);
+    return {month,value:gaps.length?level+avg(gaps):null,songs:gaps.length,adjusted:true};
    }).filter(x=>x.value!=null).slice(-12);
   }
   // 파사지오: what recurs over every counted take (the latest 40), next to the per-song lines. Reference only.
