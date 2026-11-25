@@ -1254,6 +1254,7 @@ test('Library filters, edit and play; compare A/B with memo saved in v5 report s
   await boot(page);
   await page.goto('/#/library');
   await expect(page.locator('[data-media]')).toHaveCount(2);
+  await expect(page.locator('[data-collection-count]')).toHaveText('녹음 2개');   // not "내 곡 2개" (that reads as two songs)
   await page.getByRole('group', {name:'녹음 유형별 보기'}).getByRole('button', {name:'레슨 녹음', exact:true}).click();
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await page.locator('[data-media] [data-toggle]').click();
