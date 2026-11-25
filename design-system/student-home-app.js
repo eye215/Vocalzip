@@ -50,6 +50,10 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   if(!(V.db.songs||[]).some(x=>x&&!(V.db.deleted?.songs||[]).includes(x.id)))return {kind:'first-song',title:'첫 곡 추가하기',badge:'시작',line:'곡마다 녹음·레슨·숙제가 모여요',label:'첫 곡 추가하기',action:()=>{if(V.songSheet)V.songSheet(null,id=>nav('#/song/'+encodeURIComponent(id)));else nav('#/songs');}};
   if(songs[0])return {kind:'practice',title:'이어서 연습하기',badge:'',line:songs[0].title,label:songs[0].title+' 이어서 연습하기',action:()=>nav('#/record?song='+encodeURIComponent(songs[0].id))};
   if(l)return lessonCard('');
+  // No lesson coming either: the first take (1.0 점검 P1 #3: a new student's home pointed to a breathing exercise, not to singing the song just
+  // added): songs, but nothing practised or recorded yet — record the newest song. Recording is all it does; nothing is saved.
+  const firstSong=!songs[0]&&!(V.db.practices||[]).length&&!(V.media?.cached?.()||[]).length&&V.songsNewest?.().find(x=>x&&!(V.db.deleted?.songs||[]).includes(x.id));
+  if(firstSong)return {kind:'first-take',title:'첫 녹음하기',badge:'시작',line:firstSong.title+' · 지금 목소리를 남겨 두면 나중에 비교돼요',label:firstSong.title+' 첫 녹음하기',action:()=>nav('#/record?song='+encodeURIComponent(firstSong.id))};
   // Nothing scheduled or practised: suggest one practice (done in 오늘의 연습) instead of a second "오늘의 목표 정하기" (the
   // empty goal list below already offers that). A suggestion already in today's goals is not repeated; then simply record.
   const rec=s.recommendationCandidates.find(c=>c.source==='recommendation'&&!(s.goals||[]).some(g=>g.source===c.source&&g.sourceId===c.sourceId));

@@ -243,6 +243,15 @@ test('empty state removes all sample data and connects songs and goal setup',asy
  await page.getByRole('button',{name:'첫 곡 추가하기',exact:true}).click();await expect(page.locator('.sheet-back input').first()).toBeVisible();await page.locator('.sheet-back [data-close]').first().click();
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances'])expect(after[key]).toEqual([]);
  expect(after.dailyGoals||[]).toEqual([]);expect(after.practicePlans||[]).toEqual([]);
+ // A song, but nothing sung yet: 지금 할 것 is the first take of that song (1.0 점검 P1 #3); it opens the recorder on it.
+ await page.evaluate(()=>VZ.change(d=>{d.songs.push({id:'s-first',title:'Defying Gravity',created:Date.now()});}));
+ await expect(page.locator('.vz-event')).toHaveAttribute('data-kind','first-take');await expect(page.locator('.vz-event h2')).toHaveText('첫 녹음하기');
+ await expect(page.locator('.vz-event')).toContainText('Defying Gravity');
+ await page.locator('.vz-event').click();await expect(page).toHaveURL(/#\/record\?song=s-first$/);
+ // Once something is practised, it is the usual 이어서 연습하기.
+ await page.goto('/#/home');await ready(page);
+ await page.evaluate(day=>VZ.change(d=>{d.practices.push({id:'p-first',date:day,minutes:10,manualMinutes:10,practiceTimeSource:'manual',practiceMode:'song',songId:'s-first',technique:[],mediaIds:[],completed:[]});}),TODAY);
+ await expect(page.locator('.vz-event')).toHaveAttribute('data-kind','practice');
 });
 test('지금 할 것 homework opens guided practice and the final step saves practice and goal automatically',async({page})=>{
  await boot(page);
@@ -429,6 +438,10 @@ test('지금 할 것 follows today\'s lesson, homework, latest song, upcoming le
  await page.evaluate(()=>VZ.change(d=>{d.practices=[];}));
  await expect(now).toHaveAttribute('data-kind','lesson');await expect(title).toHaveText('보컬 레슨');await expect(badge).toHaveText('D-2');await expect(line).toHaveText('11.6 (금) 18:30');await expect(lessonRow).toHaveCount(0);
  await page.evaluate(()=>VZ.change(d=>{d.lessons=[];}));
+ // Songs but nothing sung or practised yet, and no lesson coming: the first take of the newest song (1.0 점검 P1 #3).
+ await expect(now).toHaveAttribute('data-kind','first-take');await expect(title).toHaveText('첫 녹음하기');
+ // Something practised that is not a song (a training row): a suggested practice, as before.
+ await page.evaluate(()=>VZ.change(d=>{d.practices=[{id:'p-train',date:'2026-10-01',minutes:10,manualMinutes:10,practiceTimeSource:'manual',practiceMode:'training',technique:[],mediaIds:[],completed:[]}];}));
  await expect(now).toHaveAttribute('data-kind','recommend');await expect(title).toHaveText('호흡과 발성 연습하기');await expect(badge).toHaveText('추천');
  await now.click();await expect(page).toHaveURL(/#\/practice-set$/);await page.goto('/#/home');await ready(page);
  // The same suggestion already in today's goals is not repeated: the card then just offers to record.
@@ -1119,9 +1132,9 @@ test('six real schedule combinations never restore sample events',async({page},t
  const lesson=date=>({id:'l1',date,startTime:'18:30',endTime:'19:30',status:'scheduled',songId:'s1',songIds:['s1'],teacher:'김선생',place:'연습실'}),stage=seed().performances;
  for(const [name,data,kind,heading,rows]of [
   ['both',{lessons:[lesson('2026-11-06')],performances:stage},'lesson','보컬 레슨',['stage','week']],
-  ['stages',{lessons:[],performances:stage},'recommend','호흡과 발성 연습하기',['stage','week']],
+  ['stages',{lessons:[],performances:stage},'first-take','첫 녹음하기',['stage','week']],
   ['lesson',{lessons:[lesson('2026-11-06')],performances:[]},'lesson','보컬 레슨',['week']],
-  ['none',{lessons:[],performances:[]},'recommend','호흡과 발성 연습하기',['week']],
+  ['none',{lessons:[],performances:[]},'first-take','첫 녹음하기',['week']],
   ['today',{lessons:[lesson(TODAY)],performances:stage},'lesson','오늘 보컬 레슨',['stage','week']],
   ['practice',{lessons:[lesson('2026-11-06')],performances:stage,practices:seed().practices},'practice','이어서 연습하기',['lesson','stage','week']]]){
   await page.setViewportSize({width:390,height:940});
