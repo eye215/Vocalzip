@@ -19,6 +19,12 @@ test('homework ranks first, the one due soonest first; done, past-due and checke
   assert.equal(m.items.some(x => /hw-done|hw-past/.test(x.id)), false);
   const checked = {...DB, dailyGoals:DB.dailyGoals.map(g => g.id === 'g-hw' ? {...g, completed:true} : g)};
   assert.equal(N.fromHomework(checked, {today:TODAY}).some(x => x.id === 'homework:hw-soon'), false);
+  // A practice record of today that says it was done (연습 기록 "했어요") counts too; one of another day, or a deleted one, does not.
+  const logged = (date, extra = {}) => ({...DB, practices:[...(DB.practices || []), {id:'p-hw', date, minutes:20, completed:['hw-soon'], assignmentReps:{'hw-soon':1}}], ...extra});
+  assert.equal(N.fromHomework(logged(TODAY), {today:TODAY}).some(x => x.id === 'homework:hw-soon'), false);
+  assert.equal(N.fromHomework(logged(TODAY), {today:TODAY}).some(x => x.id === 'homework:hw-late'), true);
+  assert.equal(N.fromHomework(logged('2026-11-01'), {today:TODAY}).some(x => x.id === 'homework:hw-soon'), true);
+  assert.equal(N.fromHomework(logged(TODAY, {deleted:{practices:['p-hw']}}), {today:TODAY}).some(x => x.id === 'homework:hw-soon'), true);
 });
 
 test('the order of the sources: 숙제 > 놓친 레슨 지적 > 기본기 > 측정 기반 > 정밀 측정 > 목표·계획 > AI 초안', () => {

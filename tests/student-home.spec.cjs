@@ -416,6 +416,12 @@ test('지금 할 것 follows today\'s lesson, homework, latest song, upcoming le
  await now.click();await expect.poll(()=>new URL(page.url()).hash).toBe('#/lesson/l1');await page.goto('/#/home');await ready(page);
  await page.evaluate(()=>VZ.change(d=>{d.lessons[0].date='2026-11-06';}));
  await expect(now).toHaveAttribute('data-kind','homework');await expect(title).toHaveText('호흡을 길게 유지하기');await expect(badge).toHaveText('숙제');await expect(lessonRow).toHaveCount(1);
+ // A homework already done today (연습 기록 "했어요") is not "오늘 해 볼 숙제" any more; undoing that record brings it back.
+ const hwId=(await db(page)).assignments[0].id;
+ await page.evaluate(([day,id])=>VZ.change(d=>{d.practices.push({id:'p-hw-today',date:day,minutes:10,manualMinutes:10,practiceTimeSource:'manual',practiceMode:'training',technique:[],mediaIds:[],completed:[id],assignmentReps:{[id]:1}});}),[TODAY,hwId]);
+ await expect(now).toHaveAttribute('data-kind','practice');
+ await page.evaluate(()=>VZ.change(d=>{d.practices=d.practices.filter(p=>p.id!=='p-hw-today');}));
+ await expect(now).toHaveAttribute('data-kind','homework');
  await page.evaluate(()=>VZ.change(d=>{d.assignments[0].status='done';}));
  await expect(now).toHaveAttribute('data-kind','practice');await expect(title).toHaveText('이어서 연습하기');await expect(badge).toBeHidden();await expect(line).toHaveText('This Is the Moment');
  await expect(now).toHaveAccessibleName('This Is the Moment 이어서 연습하기');
