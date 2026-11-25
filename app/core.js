@@ -203,6 +203,19 @@ window.vzipNotice = m => VZ.toast(m);
 window.vzipSetPracticeBusy = () => {};
 
 const sheets = [];
+/* 시트 뒤 화면 막기 (1.0 점검 P2 #8): while a sheet is open, everything else on the page is inert — not read by a screen
+ * reader, not reachable with Tab, not tappable — so "곡 추가" behind the sheet is not a second "곡 추가". Only the top
+ * sheet is live; a sheet under another one is inert too. Toasts stay live (they are announced). Only what this code made
+ * inert is made live again: something inert for its own reason (account-scope's boot cover) is left as it is. */
+const syncInert = () => {
+  const top = sheets.at(-1)?.back || null;
+  for (const child of document.body.children) {
+    if (/^(SCRIPT|STYLE|LINK|TEMPLATE)$/.test(child.tagName)) continue;
+    const off = !!top && child !== top && !child.classList.contains('toast');
+    if (off && !child.inert) { child.inert = true; child.dataset.vzSheetInert = '1'; }
+    else if (!off && child.dataset.vzSheetInert) { child.inert = false; delete child.dataset.vzSheetInert; }
+  }
+};
 /* iOS Safari scrolls the page behind a sheet unless the body is pinned; the scroll position comes back on close.
  * The on-screen keyboard shrinks the visual viewport: sheets get that much bottom room (--kb) so fields stay visible. */
 let lockedY = 0;
@@ -258,6 +271,7 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
   const close = () => {
     if (closed) return; closed = true; back.remove();
     sheets.splice(sheets.indexOf(api), 1);
+    syncInert();
     if (!sheets.length) unlockPage();
     onClose?.(); if (previous?.isConnected) previous.focus();
     // A refresh that waited for this sheet runs now — unless the caller already redrew the screen meanwhile (save
@@ -277,7 +291,7 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
     if (!discardAsking) VZ.confirmDiscard(note()).then(ok => { if (ok) { close(); VZ.toast('취소했어요.'); } });
   };
   const note = () => { try { return (typeof closeNote === 'function' ? closeNote() : closeNote) || ''; } catch { return ''; } };
-  const api = {el, close, dirty, closeNote:note};
+  const api = {el, back, close, dirty, closeNote:note};
   back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) dismiss(); });
   back.addEventListener('keydown', e => {
     if (e.key === 'Escape') { e.preventDefault(); dismiss(); }
@@ -289,7 +303,7 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
     }
   });
   document.body.append(back); if (variant !== 'menu') lockPage();
-  sheets.push(api);
+  sheets.push(api); syncInert();
   // A sheet that sets its own leave question while mounting (VZ.setGuard) asks by itself: no second question here.
   const guardBefore = guard;
   onMount?.(el, close);

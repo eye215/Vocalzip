@@ -522,6 +522,35 @@ test('A save that fails says why — storage full (with how much and its largest
   expect(await data(page)).toEqual(before);
 });
 
+test('A sheet makes the page behind it inert: one "곡 추가" for a screen reader, nothing behind reachable; all live again on close', async ({page}) => {
+  await boot(page, {media:false});
+  await page.goto('/#/songs');
+  const named = () => page.getByRole('button', {name:'곡 추가', exact:true});
+  await expect(named()).toHaveCount(1);                       // the header +
+  await expect(page.getByRole('link', {name:'녹음 시작', exact:true})).toHaveCount(1);
+  await named().click();
+  const sheet = page.locator('.sheet-back').last();
+  await expect(sheet).toBeVisible();
+  // Behind the sheet: the header +, the bottom menu and the mic button are out of reach (inert).
+  expect(await page.evaluate(() => [...document.body.children].filter(e => !e.classList.contains('sheet-back') && !/^(SCRIPT|STYLE|LINK|TEMPLATE)$/.test(e.tagName)).every(e => e.inert))).toBe(true);
+  expect(await page.evaluate(() => document.querySelector('.sheet-back').inert)).toBe(false);
+  const fabInert = () => page.evaluate(() => !!document.querySelector('.vz-collection-record')?.closest('[inert]'));
+  const plusInert = () => page.evaluate(() => !!document.querySelector('[data-add-song]')?.closest('[inert]'));
+  expect([await fabInert(), await plusInert()]).toEqual([true, true]);
+  // A second sheet on top (닫기 asks first once something is typed): the first sheet is inert under it.
+  await sheet.locator('input').first().fill('새 곡');
+  await page.locator('.sheet-page [data-close]').first().click();
+  const ask = page.getByRole('dialog', {name:'작성 중인 내용이 있어요'});
+  await expect(ask).toBeVisible();
+  expect(await page.evaluate(() => [...document.querySelectorAll('.sheet-back')].map(b => b.inert))).toEqual([true, false]);
+  await ask.getByRole('button', {name:'닫기', exact:true}).click();
+  // All closed: everything is live again, and the page works.
+  await expect(page.locator('.sheet-back')).toHaveCount(0);
+  expect(await page.evaluate(() => [...document.body.querySelectorAll(':scope > *')].filter(e => e.inert).length)).toBe(0);
+  expect([await fabInert(), await plusInert()]).toEqual([false, false]);
+  await expect(named()).toHaveCount(1);
+});
+
 test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pauses on expired login, retries only failures, resumable', async ({page}) => {
   test.setTimeout(180000);
   await boot(page, {media:false});
