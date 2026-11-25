@@ -31,7 +31,7 @@ function installAudio() {
     sampleRate = 48000; currentTime = 0; destination = {}; state = 'running';
     resume() { return Promise.resolve(); } close() { return Promise.resolve(); }
     createMediaStreamSource() { return {connect() {}, disconnect() {}}; }
-    createAnalyser() { return {fftSize:4096, connect() {}, disconnect() {}, getFloatTimeDomainData(data) { const f = window.__sing; for (let i = 0; i < data.length; i++) data[i] = f ? .2 * Math.sin(2 * Math.PI * f * i / 48000) : 0; }}; }
+    createAnalyser() { return {fftSize:4096, connect() {}, disconnect() {}, getFloatTimeDomainData(data) { const f = window.__sing; for (let i = 0; i < data.length; i++) data[i] = f ? (window.__amp ?? .2) * Math.sin(2 * Math.PI * f * i / 48000) : 0; }}; }
     createGain() { return {gain:{setValueAtTime() {}, linearRampToValueAtTime() {}}, connect() {}, disconnect() {}}; }
     createOscillator() { const o = {frequency:{value:0}, connect(g) { return g; }, start() { window.__tones.push(Math.round(o.frequency.value * 10) / 10); }, stop() {}, disconnect() {}}; return o; }
   };
@@ -634,4 +634,26 @@ test('a finished set on 오늘: a step under a minute says its seconds, not "0�
   await boot(page, value);
   await expect(card(page)).toHaveAttribute('data-state', 'done');
   await expect(line(page).locator('.vz-set-meta > span:not(.vz-visually-hidden)')).toHaveText(['30초', '2분', '0분']);
+});
+
+test('소리 안내: on a hold, 2 s with no note heard says why — nothing reaches the mic, too quiet, — and goes once a note is heard', async ({page}) => {
+  await boot(page);
+  await start(page);
+  await skipTo(page, 'hold');
+  await primary(page).click(); await primary(page).click();
+  await expect(run(page)).toHaveAttribute('data-state', 'doing');
+  await elapse(page, 1.3);               // the note is played; now it is the singer's turn
+  await elapse(page, 1);
+  await expect(sub(page)).not.toContainText('소리가');          // not after one second
+  await elapse(page, 1.5);
+  await expect(sub(page)).toHaveText('소리가 안 들려요 · 폰 아래쪽 마이크를 막지 않았는지 봐 주세요');
+  // A voice under the floor (about −53 dBFS): too quiet.
+  await page.evaluate(() => { window.__amp = .003; }); await sing(page, 0);
+  await elapse(page, .5);
+  await expect(sub(page)).toHaveText('소리가 작게 들려요 · 조금 더 크게 불러 보세요');
+  // Heard: the usual reading comes back.
+  await page.evaluate(() => { window.__amp = .2; });
+  await elapse(page, .5);
+  await expect(sub(page)).toContainText(' / 4초');
+  await expect(sub(page)).not.toContainText('소리가');
 });
