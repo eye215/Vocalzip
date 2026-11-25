@@ -492,9 +492,16 @@ test('오늘 부를 곡: at most three of my songs with the reason for today, ea
  await page.evaluate(day=>VZ.change(d=>{d.practices.push({id:'p-s2-today',date:day,manualMinutes:10,minutes:10,songId:'s2',practiceMode:'song'});}),TODAY);
  await expect(pills.locator('.vz-pick-words>span')).toHaveText(['곡 3','곡 5','곡 4']);
  await expect(pills.nth(2).locator('.vz-pick-why')).toHaveText('2일 전에 불렀어요');
- // 랜덤: one of my songs not sung today, straight to recording it.
+ // 랜덤 (🎲 룰렛): titles spin and stop on one of my songs not sung today; 다시 돌리기 spins again; 이 곡 부르기 records it.
  await page.getByRole('button',{name:'아무 곡이나 랜덤으로 고르기',exact:true}).click();
- await expect(page).toHaveURL(/#\/record\?song=s[345]$/);
+ const wheel=page.getByRole('dialog',{name:'오늘 부를 곡 뽑기'});
+ await expect(wheel.locator('[data-roulette-result]')).toHaveText(/^오늘은 곡 [345]!$/,{timeout:6000});
+ await wheel.getByRole('button',{name:'다시 돌리기'}).click();
+ await expect(wheel.getByRole('button',{name:'이 곡 부르기'})).toBeDisabled();
+ await expect(wheel.locator('[data-roulette-result]')).toHaveText(/^오늘은 곡 [345]!$/,{timeout:6000});
+ const landed=(await wheel.locator('[data-roulette-title]').textContent()).trim();
+ await wheel.getByRole('button',{name:'이 곡 부르기'}).click();
+ await expect(page).toHaveURL(/#\/record\?song=s[345]$/);await expect(page.locator('[data-song-name]')).toHaveText(landed);
  const after=await db(page);for(const key of ['songs','dailyGoals'])expect(after[key]).toEqual(before[key]);
 });
 test('goal editor saves only user entered plans and personal goals',async({page})=>{
