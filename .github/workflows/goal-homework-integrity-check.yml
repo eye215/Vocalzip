@@ -9,6 +9,8 @@ on:
       - 'app/views-lessons.js'
       - 'design-system/student-home-app.js'
       - 'tests/goal-homework-integrity.test.cjs'
+      - 'app/song-pick-model.js'
+      - 'tests/song-pick-model.test.cjs'
       - '.github/workflows/goal-homework-integrity-check.yml'
 permissions:
   contents: read
@@ -24,7 +26,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/goal-homework-integrity.test.cjs tests/student-home-model.test.cjs tests/practice-time.test.cjs
+      - run: node --test tests/goal-homework-integrity.test.cjs tests/student-home-model.test.cjs tests/practice-time.test.cjs tests/song-pick-model.test.cjs
       - name: Goal editor and homework integrity on mobile and desktop
         run: npx playwright test tests/student-home.spec.cjs --grep 'Goal integrity|Homework integrity|goal editor saves|goal selection remains|checked goal persists|persistence failure restores|weekly home keeps actual' --workers=2
       - name: Existing homework writes and practice editing
