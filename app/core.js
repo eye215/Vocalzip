@@ -84,6 +84,30 @@ function stampedText(before, after) {
   // Everything else (settings, deleted, deletedAt …) is read after stamping, which may have just changed it.
   return storeText(Object.keys(after).map(key => parts.has(key) ? {key, rows:parts.get(key)} : {key, whole:text(after[key])}));
 }
+/** 저장 실패 안내 (2026-11-25: "저장하지 못했어요" kept coming back on 내 곡 with no way to tell why). Says which of the
+ * two it is — this device's app storage is full (with how much the app keeps here and its largest part), or the change
+ * itself failed (with the error) — and says it once a minute, not on every automatic save. Nothing is deleted or sent. */
+VZ.storageReport = () => {
+  const store = window.localStorage, rows = [];
+  try { for (let i = 0; i < store.length; i++) { const k = store.key(i), v = store.getItem(k) || ''; rows.push({key:k, bytes:(k.length + v.length) * 2}); } } catch { /* unreadable: report nothing */ }
+  rows.sort((a, b) => b.bytes - a.bytes);
+  return {bytes:rows.reduce((n, r) => n + r.bytes, 0), rows};
+};
+const mb = bytes => (bytes / 1048576).toFixed(1) + 'MB';
+let lastSaveNote = {text:'', at:0};
+function saveFailed(error, {silent} = {}) {
+  console.error(error);
+  const full = error?.name === 'QuotaExceededError' || error?.code === 22 || /quota|exceeded/i.test(error?.message || '');
+  let text;
+  if (full) {
+    const r = VZ.storageReport(), top = r.rows[0];
+    text = '이 기기의 앱 저장 공간이 가득 차서 저장하지 못했어요 (' + mb(r.bytes) + (top ? ' · 가장 큰 것 ' + String(top.key).replace(/^vzip_account_v1:[^:]*:/, '').slice(0, 40) + ' ' + mb(top.bytes) : '') + '). 지금까지 저장된 기록은 그대로예요.';
+  } else text = '저장하지 못했어요 (' + String(error?.name || 'Error') + ': ' + String(error?.message || error).slice(0, 80) + '). 지금까지 저장된 기록은 그대로예요.';
+  const now = Date.now();
+  if (silent && lastSaveNote.text === text && now - lastSaveNote.at < 60000) return;
+  lastSaveNote = {text, at:now};
+  VZ.toast(text, 'error');
+}
 VZ.change = (mutate, {silent} = {}) => {
   if(accountFrozen)return false;
   let before = null;
@@ -97,8 +121,7 @@ VZ.change = (mutate, {silent} = {}) => {
   } catch (error) {
     // Back to the state before the change, rebuilt from its text (the store is JSON: this is what a reload would read).
     if (before) db = JSON.parse(storeText(before));
-    VZ.toast('저장하지 못했어요. 저장 공간을 확인하고 다시 시도해 주세요.', 'error');
-    console.error(error);
+    saveFailed(error, {silent});
     return false;
   }
   writing = true;

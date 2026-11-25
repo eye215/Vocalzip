@@ -500,6 +500,28 @@ test('Homework row 기록 opens the practice sheet on its song with 했어요, a
   expect(page.__errors).toEqual([]);
 });
 
+test('A save that fails says why — storage full (with how much and its largest part) or the error — once a minute when automatic', async ({page}) => {
+  await boot(page, {media:false});
+  const toasts = () => page.locator('.toast.error').allTextContents();
+  // A change whose own code fails: the error is named; nothing is changed.
+  const before = await data(page);
+  expect(await page.evaluate(() => VZ.change(() => { throw new TypeError('x is undefined'); }))).toBe(false);
+  await expect(page.locator('.toast.error').last()).toHaveText('저장하지 못했어요 (TypeError: x is undefined). 지금까지 저장된 기록은 그대로예요.');
+  // Storage full: said as such, with the size; automatic (silent) saves say it once, not on every try.
+  await page.evaluate(() => {
+    localStorage.setItem('big-cache', 'x'.repeat(300000));
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) { if (k === 'vocal-zip_mvp_v1') throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); return real.call(this, k, v); };
+    document.querySelectorAll('.toast').forEach(t => t.remove());
+  });
+  for (let i = 0; i < 3; i++) expect(await page.evaluate(() => VZ.change(d => { d.songs[0].title = 'changed'; }, {silent:true}))).toBe(false);
+  const said = await toasts();
+  expect(said.length).toBe(1);
+  expect(said[0]).toMatch(/^이 기기의 앱 저장 공간이 가득 차서 저장하지 못했어요 \(\d+\.\dMB · 가장 큰 것 big-cache 0\.6MB\)\. 지금까지 저장된 기록은 그대로예요\.$/);
+  expect(await page.evaluate(() => VZ.db.songs[0].title)).toBe(before.songs[0].title);
+  expect(await data(page)).toEqual(before);
+});
+
 test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pauses on expired login, retries only failures, resumable', async ({page}) => {
   test.setTimeout(180000);
   await boot(page, {media:false});
