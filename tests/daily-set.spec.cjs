@@ -624,3 +624,14 @@ test('the doing screen fits phones and tablets, keeps 44px targets and stays sti
   // Words are whole sentences in 해요체; nothing on the screen is cut off.
   expect(await run(page).evaluate(el => [...el.querySelectorAll('.dset-say,.dset-why,.dset-word,.dset-sub')].filter(e => e.scrollWidth > e.clientWidth + 1).length)).toBe(0);
 });
+
+test('a finished set on 오늘: a step under a minute says its seconds, not "0분" (2026-11-25)', async ({page}) => {
+  const value = seed(), date = NOW.slice(0, 10);
+  const item = (id, title, seconds, state = 'done') => ({id, kind:'exercise', title, state, seconds, minutes:seconds / 60});
+  value.practices = [...(value.practices || []), {id:'practice-set:s-short', date, minutes:2.5, manualMinutes:2.5, practiceTimeSource:'practice-set', practiceMode:'training', songId:'',
+    memo:'[오늘의 연습] 3개 중 2개', mediaIds:[], completed:[], created:1,
+    dailySet:{v:1, minutes:2.5, items:[item('a', '허밍 롱톤', 30), item('b', '립트릴', 120), item('c', '“스~” 길게', 0, 'skipped')]}}];
+  await boot(page, value);
+  await expect(card(page)).toHaveAttribute('data-state', 'done');
+  await expect(line(page).locator('.vz-set-meta > span:not(.vz-visually-hidden)')).toHaveText(['30초', '2분', '0분']);
+});
