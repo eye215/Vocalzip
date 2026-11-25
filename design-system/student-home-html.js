@@ -386,7 +386,7 @@ export async function createFloatingHome(opts={}){
   if(name.textContent!==row.title)name.textContent=row.title;
   if(state.textContent!==(row.line||""))state.textContent=row.line||"";
   pick.setAttribute("aria-label","오늘의 연습 편집");pick.onclick=()=>row.onPick?.();
-  const items=Array.isArray(row.items)?row.items:[],sign=JSON.stringify(items.map(x=>[x.title,x.label,x.minutes,x.mic,x.state]));
+  const items=Array.isArray(row.items)?row.items:[],sign=JSON.stringify(items.map(x=>[x.title,x.label,x.minutes,x.time,x.mic,x.state]));
   if(line.dataset.sign!==sign){
    line.dataset.sign=sign;
    line.replaceChildren(...items.map(x=>{
@@ -395,7 +395,7 @@ export async function createFloatingHome(opts={}){
     const meta=el("span",null,"vz-set-meta");
     if(x.mic){const mic=glyphOf("\ue326");mic.dataset.mic="";meta.append(mic,el("span","마이크","vz-visually-hidden"));}
     const word=el("em",STATE_WORD[x.state]||"");if(x.state==="left")word.className="vz-visually-hidden";
-    meta.append(el("span",(x.minutes||0)+"분"),word);
+    meta.append(el("span",x.time||(x.minutes||0)+"분"),word);
     li.append(copy,meta);return li;
    }));
   }

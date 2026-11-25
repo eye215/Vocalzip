@@ -132,7 +132,9 @@ V.practiceSetEntry=()=>{
     }
     const run=D.runsOn(V.db,V.today()).at(-1);
     if(run){
-      const items=run.dailySet.items.map(x=>({id:x.id,title:shortTitle(x),label:D.labelOf(x),minutes:Math.round(x.minutes),mic:!!x.mic,state:x.state==='done'?'done':x.state==='skipped'?'skipped':'left'}));
+      // Under a minute is said in seconds ("40초"), not rounded to "0분" (2026-11-25: a 30-second measure read as 0분).
+      const timeOf=x=>{const sec=Math.round(Number(x.seconds??Number(x.minutes)*60)||0);return sec>0&&sec<60?sec+'초':Math.round(Number(x.minutes)||sec/60)+'분';};
+      const items=run.dailySet.items.map(x=>({id:x.id,title:shortTitle(x),label:D.labelOf(x),minutes:Math.round(x.minutes),time:timeOf(x),mic:!!x.mic,state:x.state==='done'?'done':x.state==='skipped'?'skipped':'left'}));
       const n=items.filter(x=>x.state==='done').length,minutes=Math.round(Number(run.dailySet.minutes??run.manualMinutes??run.minutes)||0);
       // Stopped part-way and saved: said as it is, not as finished.
       const said=items.some(x=>x.state==='left')?n+' / '+items.length+' · '+minutes+'분':'오늘 연습 끝 · '+minutes+'분';
