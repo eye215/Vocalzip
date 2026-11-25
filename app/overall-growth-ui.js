@@ -90,7 +90,8 @@ function metricCard(m,{scope='overall',tag='article',cls='growth-stat'}={}){
  }else{
   const shown=m.compared&&m.after!=null?m.after:m.current;
   number=fmt(shown,m);
-  const own=scope==='monthly'?'이번 달 유효 측정 '+m.currentSongs+'개':'최근 분석 기준 · '+m.currentSongs+'곡';
+  // Not compared yet: a plain mean of whatever was sung, so it moves with the songs (2026-11-25) — said so.
+  const own=scope==='monthly'?'이번 달 부른 곡 평균 '+m.currentSongs+'개 · 곡에 따라 달라요':'최근 분석 기준 · '+m.currentSongs+'곡';
   // The big number is an average of the compared songs' latest takes on the comparison basis — say which basis.
   const basis=m.basis==='phrases'?'같은 프레이즈 기준 · ':m.basis==='whole'?'녹음 전체 기준 · ':'';
   sub=m.compared&&m.after!=null?(m.id==='phrase'?'같은 프레이즈 지속시간 · '+afterLabel:m.id==='high'?'같은 고음 구간 흔들림 · '+afterLabel:basis+'비교한 '+m.compared+'곡의 '+afterLabel+' 평균'):
@@ -172,12 +173,12 @@ function trends(report,selected){
   '<button type="button" data-overall-metric="'+m.id+'" class="'+(m.id===metric.id?'active':'')+'" aria-pressed="'+(m.id===metric.id)+'">'+esc(m.title)+'</button>').join('')+'</div>'+
  targetRow(metric,pts)+
  (better?'<p class="growth-trend-dir" data-overall-direction><i class="ph ph-'+better[0]+'" aria-hidden="true"></i>'+better[1]+'</p>':'')+
- (pts.length?'<p class="small muted">달마다 녹음한 곡이 다를 수 있어요. 점 높이는 곡 전체 측정값의 월 평균이며 실력 향상 판정이 아니에요.'+(report.excludedFromTrend?' 이전 분석(v'+(metric.trendVersion===2?1:2)+') 녹음 '+report.excludedFromTrend+'개는 분석 방식이 달라 그래프에서 뺐어요.':'')+'</p>'+
+ (pts.length?'<p class="small muted" data-overall-basis>'+(pts.some(p=>p.adjusted)?'곡마다 그 곡의 평소 값과 견줘서 곡 영향을 뺐어요. 높은 곡을 많이 부른 달도 그 곡 기준으로 봐요. 두 달 이상 부른 곡만 써요.':'달마다 녹음한 곡이 다를 수 있어요. 점 높이는 곡 전체 측정값의 월 평균이며 실력 향상 판정이 아니에요.')+(report.excludedFromTrend?' 이전 분석(v'+(metric.trendVersion===2?1:2)+') 녹음 '+report.excludedFromTrend+'개는 분석 방식이 달라 그래프에서 뺐어요.':'')+'</p>'+
  '<div class="growth-chart growth-line" role="group" aria-label="월별 측정값 꺾은선 그래프" data-overall-line style="--growth-point-count:'+n+'">'+
   '<svg class="growth-line-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">'+lines+(target!=null&&pts.length?'<line class="growth-target-line" data-growth-target-line x1="0" x2="100" y1="'+y(target).toFixed(2)+'" y2="'+y(target).toFixed(2)+'"/>':'')+'</svg>'+shown.map(({month,p})=>{
   const label='<small>'+esc(month.slice(5))+'월</small>';
   if(!p)return '<span class="growth-chart-gap" data-overall-gap="'+esc(month)+'" aria-label="'+esc(month)+' 값 없음"><span class="growth-chart-track"></span>'+label+'</span>';
-  return '<button type="button" class="growth-chart-point'+(p.songs<2?' is-small':'')+'" data-overall-month="'+esc(p.month)+'" data-overall-value="'+esc(fmt(p.value,metric))+'" data-overall-count="'+p.songs+'" aria-label="'+esc(p.month)+' '+esc(fmt(p.value,metric))+' '+p.songs+'곡" title="'+esc(p.month)+' '+esc(fmt(p.value,metric))+'"><span class="growth-chart-track"><i class="growth-line-dot" style="top:'+y(p.value).toFixed(2)+'%"></i></span>'+label+'</button>';
+  return '<button type="button" class="growth-chart-point'+(p.songs<2?' is-small':'')+'" data-overall-month="'+esc(p.month)+'" data-overall-value="'+esc(fmt(p.value,metric))+'" data-overall-count="'+p.songs+'"'+(p.adjusted?' data-overall-adjusted="1"':'')+' aria-label="'+esc(p.month)+' '+esc(fmt(p.value,metric))+' '+p.songs+'곡" title="'+esc(p.month)+' '+esc(fmt(p.value,metric))+'"><span class="growth-chart-track"><i class="growth-line-dot" style="top:'+y(p.value).toFixed(2)+'%"></i></span>'+label+'</button>';
  }).join('')+'</div>'+
  (small||gaps?'<p class="growth-line-legend small muted">'+(small?'<span><i class="growth-line-key is-small"></i>속이 빈 점은 한 곡만으로 낸 달</span>':'')+(gaps?'<span><i class="growth-line-key is-gap"></i>값이 없는 달은 선을 잇지 않아요</span>':'')+'</p>':'')+
  '<p class="small muted">그래프의 점을 누르면 해당 월의 수치와 사용된 곡 수를 확인할 수 있어요.</p>'+
@@ -315,7 +316,7 @@ function bindChart(host,report){
   V.sheet({title:btn.dataset.overallMonth+' 측정 기록',
    body:'<div class="growth-chart-dialog"><p><strong>'+esc(metric?.title||'측정 결과')+'</strong></p>'+
     '<p class="growth-chart-value">'+esc(btn.dataset.overallValue)+'</p>'+
-    '<p>분석된 곡 '+esc(btn.dataset.overallCount)+'곡의 월별 평균값이에요.</p>'+
+    (btn.dataset.overallAdjusted?'<p>두 달 이상 부른 곡 '+esc(btn.dataset.overallCount)+'곡을 그 곡의 평소 값과 견줘서 낸 값이에요. 곡 난이도 영향을 뺐어요.</p>':'<p>분석된 곡 '+esc(btn.dataset.overallCount)+'곡의 월별 평균값이에요.</p>')+
     '<p class="small muted">해당 달의 값은 녹음한 곡 구성이 달라질 수 있어 다른 달과의 단순 비교로 성장 여부를 확정할 수 없어요.</p></div>',
    variant:'compact'});
  });

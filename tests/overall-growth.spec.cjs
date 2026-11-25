@@ -82,3 +82,15 @@ test('same-day takes: the later recording (created) is the latest take, not the 
   assert.equal(metric.pairs[0].state,'better');
  }
 });
+test('monthly trend: song choice is taken out — each song against its own usual, so a month of harder songs does not read as worse',()=>{
+ // s1 is an easy song (about 10 cent), s2 a hard one (about 40). Both get 4 cent better from one month to the next.
+ // Plain monthly means would read 12 → 25 → 38 (worse every month) only because s2 came in.
+ const r=make([clip('a','s1','2026-09-03',12),clip('b','s1','2026-10-03',8),clip('c','s2','2026-10-05',42),clip('d','s2','2026-11-03',38)]);
+ const t=r.metrics.find(x=>x.id==='intonation').trend;
+ assert.deepEqual(t.map(x=>[x.month,x.value,x.songs,x.adjusted]),[['2026-09',27,1,true],['2026-10',25,2,true],['2026-11',23,1,true]]);
+ // A song sung in one month only says nothing about change; with no song sung twice the plain mean stays.
+ const one=make([clip('e','s1','2026-09-03',12),clip('f','s2','2026-10-03',40)]).metrics.find(x=>x.id==='intonation').trend;
+ assert.deepEqual(one.map(x=>[x.month,x.value,x.adjusted]),[['2026-09',12,false],['2026-10',40,false]]);
+ const mixed=make([clip('g','s1','2026-09-03',12),clip('h','s1','2026-10-03',8),clip('i','s3','2026-11-03',60)]).metrics.find(x=>x.id==='intonation').trend;
+ assert.deepEqual(mixed.map(x=>x.month),['2026-09','2026-10']);   // 11월 has only s3 (sung once): left out
+});
