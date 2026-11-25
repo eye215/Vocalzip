@@ -84,6 +84,27 @@ function stampedText(before, after) {
   // Everything else (settings, deleted, deletedAt …) is read after stamping, which may have just changed it.
   return storeText(Object.keys(after).map(key => parts.has(key) ? {key, rows:parts.get(key)} : {key, whole:text(after[key])}));
 }
+VZ.change = (mutate, {silent} = {}) => {
+  if(accountFrozen)return false;
+  let before = null;
+  try {
+    before = snapshot(db);
+    mutate(db);
+    window.VzipArchive?.reconcile(db);
+    const stored = stampedText(before, db);
+    if(window.VzipAccountScope)localStorage.setItem('vzip_account_dirty','1');
+    localStorage.setItem(KEY, stored);
+  } catch (error) {
+    // Back to the state before the change, rebuilt from its text (the store is JSON: this is what a reload would read).
+    if (before) db = JSON.parse(storeText(before));
+    saveFailed(error, {silent});
+    return false;
+  }
+  writing = true;
+  try { window.dispatchEvent(new CustomEvent('vzip:data-changed', {detail:{source:'v6'}})); } finally { writing = false; }
+  if (!silent) VZ.render();
+  return true;
+};
 /** 저장 실패 안내 (2026-11-25: "저장하지 못했어요" kept coming back on 내 곡 with no way to tell why). Says which of the
  * two it is — this device's app storage is full (with how much the app keeps here and its largest part), or the change
  * itself failed (with the error) — and says it once a minute, not on every automatic save. Nothing is deleted or sent. */
@@ -108,27 +129,6 @@ function saveFailed(error, {silent} = {}) {
   lastSaveNote = {text, at:now};
   VZ.toast(text, 'error');
 }
-VZ.change = (mutate, {silent} = {}) => {
-  if(accountFrozen)return false;
-  let before = null;
-  try {
-    before = snapshot(db);
-    mutate(db);
-    window.VzipArchive?.reconcile(db);
-    const stored = stampedText(before, db);
-    if(window.VzipAccountScope)localStorage.setItem('vzip_account_dirty','1');
-    localStorage.setItem(KEY, stored);
-  } catch (error) {
-    // Back to the state before the change, rebuilt from its text (the store is JSON: this is what a reload would read).
-    if (before) db = JSON.parse(storeText(before));
-    saveFailed(error, {silent});
-    return false;
-  }
-  writing = true;
-  try { window.dispatchEvent(new CustomEvent('vzip:data-changed', {detail:{source:'v6'}})); } finally { writing = false; }
-  if (!silent) VZ.render();
-  return true;
-};
 function reload() { db = read(); VZ.softRender(); }
 window.addEventListener('vzip:data-changed', () => { if (!writing) reload(); });
 window.addEventListener('storage', e => { if (e.key === (window.VzipAccountScope?.key(KEY)||KEY)) reload(); });
