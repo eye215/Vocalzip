@@ -28,3 +28,5 @@ body[data-vz-route="guided-practice"]{background:#0b0911;color:#f7f5fc;color-sch
 
 /* v5 (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): every tap target is at least 44px. */
 .gp-feedback button{min-height:44px}
+/* 숙제 › 연습 기록 (1.0 점검): a quieter twin of 따라 하기 on the same row. */
+.item button.vz-task-log{border:0;font-family:inherit;cursor:pointer;background:#fff;box-shadow:inset 0 0 0 1px var(--line,#E4E7EC);margin-right:6px}

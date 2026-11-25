@@ -16,7 +16,7 @@ VZ.taskRow = t => {
   const lesson = VZ.taskLessons(t).map(id => VZ.db.lessons.find(l => l.id === id)).filter(Boolean)[0];
   const tally = VZ.taskTally(t), practiced = tally.sessions;
   const period = VZ.taskPeriod(t), late = VZ.taskOverdue(t);
-  return '<div class="item ' + (done ? 'done' : '') + '"><button type="button" class="check" role="checkbox" aria-checked="' + done + '" data-task-check="' + esc(t.id) + '" aria-label="' + esc(t.title) + ' 완료"><i class="ph' + (done ? '-fill ph-check-circle' : ' ph-circle') + '"></i></button><button type="button" class="item-main" data-task="' + esc(t.id) + '" style="border:0;background:none;text-align:left;padding:0;min-height:44px"><span class="item-title" style="display:block">' + esc(t.title) + '</span><span class="item-sub" style="display:flex;align-items:center;gap:6px"><span class="ellipsis" style="min-width:0">' + esc([period ? '기간 ' + period : '', VZ.songTitle(VZ.taskSongId(t)), t.source==='ai-candidate'?'AI 후보에서 직접 추가':'', !period && lesson ? VZ.dateLabel(lesson.date) + ' 레슨' : '', practiced ? tally.reps + '회 했어요' : ''].filter(Boolean).join(' · ') || '연결 없음') + '</span>' + (late ? '<span class="badge warn" style="flex:none">기간 지남</span>' : '') + '</span></button>' + (done ? '' : '<a class="vz-task-start" href="#/guided-practice/' + encodeURIComponent('homework:' + t.id) + '" aria-label="' + esc(t.title) + ' 따라 하기">따라 하기</a>') + '</div>';
+  return '<div class="item ' + (done ? 'done' : '') + '"><button type="button" class="check" role="checkbox" aria-checked="' + done + '" data-task-check="' + esc(t.id) + '" aria-label="' + esc(t.title) + ' 완료"><i class="ph' + (done ? '-fill ph-check-circle' : ' ph-circle') + '"></i></button><button type="button" class="item-main" data-task="' + esc(t.id) + '" style="border:0;background:none;text-align:left;padding:0;min-height:44px"><span class="item-title" style="display:block">' + esc(t.title) + '</span><span class="item-sub" style="display:flex;align-items:center;gap:6px"><span class="ellipsis" style="min-width:0">' + esc([period ? '기간 ' + period : '', VZ.songTitle(VZ.taskSongId(t)), t.source==='ai-candidate'?'AI 후보에서 직접 추가':'', !period && lesson ? VZ.dateLabel(lesson.date) + ' 레슨' : '', practiced ? tally.reps + '회 했어요' : ''].filter(Boolean).join(' · ') || '연결 없음') + '</span>' + (late ? '<span class="badge warn" style="flex:none">기간 지남</span>' : '') + '</span></button>' + (done ? '' : '<button type="button" class="vz-task-start vz-task-log" data-task-log="' + esc(t.id) + '" aria-label="' + esc(t.title) + ' 연습 기록">기록</button><a class="vz-task-start" href="#/guided-practice/' + encodeURIComponent('homework:' + t.id) + '" aria-label="' + esc(t.title) + ' 따라 하기">따라 하기</a>') + '</div>';
 };
 document.addEventListener('click', e => {
   const c = e.target.closest('[data-task-check]');
@@ -28,6 +28,9 @@ document.addEventListener('click', e => {
       VZ.toast(done ? '숙제를 완료했어요.' : '숙제를 다시 진행 중으로 바꿨어요.');
     return;
   }
+  // 숙제 › 연습 기록: the practice sheet with this homework's song and "했어요" filled in (1.0 점검).
+  const log = e.target.closest('[data-task-log]');
+  if (log) { VZ.practiceSheet({homeworkId:log.dataset.taskLog}); return; }
   const b = e.target.closest('[data-task]');
   if (b) { const t = VZ.db.assignments.find(x => x.id === b.dataset.task); if (t) VZ.taskSheet({task:t}); }
 });

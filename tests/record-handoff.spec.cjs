@@ -152,6 +152,10 @@ test('녹음 저장 → 오늘 이 곡 연습: the take counts at once, one tap 
   await expect(min).toHaveText('30분');
   await expect(block).toContainText('직접 적은 시간이에요');
   await expect(block.locator('[data-rec-min="30"]')).toHaveAttribute('aria-pressed', 'true');
+  // The record screen has no bottom menu: its toast shows at the top, not over the card's buttons (1.0 walkthrough).
+  const toast = page.locator('.toast').last(), card = await block.boundingBox();
+  await expect(toast).toBeVisible();
+  expect((await toast.boundingBox()).y + (await toast.boundingBox()).height).toBeLessThan(card.y);
   await expect.poll(rows).toEqual([expect.objectContaining({minutes:30, source:'manual', media:1})]);   // the automatic row went
   const id = (await rows())[0].id;
   await block.locator('[data-rec-min="20"]').click();

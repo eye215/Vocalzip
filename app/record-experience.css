@@ -120,3 +120,6 @@ body.vz-record-mode [data-review] .card>.btn-row{position:sticky;bottom:calc(10p
 .rec-practice-chips button{min-height:44px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(255,255,255,.06);color:inherit;font:inherit;font-size:15px;font-weight:600;cursor:pointer;}
 .rec-practice-chips button[aria-pressed=true]{border-color:#8B5CF6;background:#7A32F5;color:#fff;}
 .rec-practice-more{justify-self:start;display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0;border:0;background:none;color:#C9B0FF;font:inherit;font-size:14px;font-weight:600;cursor:pointer;}
+/* 녹음 화면에는 아래 메뉴가 없어서, 아래쪽 안내 메시지가 '새 녹음'·저장 버튼 위에 떠요 (1.0 점검). Here it shows at the top,
+   over the timer, instead. */
+body.vz-record-mode .toast{top:calc(env(safe-area-inset-top) + 12px);bottom:auto}
