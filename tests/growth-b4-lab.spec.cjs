@@ -76,9 +76,12 @@ test('오늘 › 연습하기: one section with the three things you do — the 
   await expect(row(page, 'voice-check')).toHaveAccessibleName('매일 보이스 체크, 오늘 아직 · 30초 · 연속 3일, 30초 체크 시작하기');
   // Compact, 44px targets, an icon each, inside the screen.
   // Read in one go: home may be drawn again when the recordings arrive, and a row read one by one could be gone in between.
-  for (const b of await section(page).locator('[data-row]').evaluateAll(els => els.map(e => { const r = e.getBoundingClientRect(); return {h:r.height, l:r.left, r:r.right, icon:e.querySelector('.vz-ui-icon').textContent.length}; }))) {
-    expect(b.h).toBeGreaterThanOrEqual(44); expect(b.l).toBeGreaterThanOrEqual(0); expect(b.r).toBeLessThanOrEqual(390); expect(b.icon).toBe(1);
-  }
+  // Retried as a whole: a read that lands mid-redraw sees the old, detached rows at 0px (CI, 2026-11-25).
+  await expect(async () => {
+    for (const b of await section(page).locator('[data-row]').evaluateAll(els => els.map(e => { const r = e.getBoundingClientRect(); return {h:r.height, l:r.left, r:r.right, icon:e.querySelector('.vz-ui-icon').textContent.length}; }))) {
+      expect(b.h).toBeGreaterThanOrEqual(44); expect(b.l).toBeGreaterThanOrEqual(0); expect(b.r).toBeLessThanOrEqual(390); expect(b.icon).toBe(1);
+    }
+  }).toPass({timeout:5000});
   // Two rows of 48px under the card; the card itself is a line per step and its button.
   // Measured in one read and retried: home may be drawn again in between, and a box read from a replaced node is null.
   await expect.poll(() => section(page).evaluate(s => { const c = s.querySelector('[data-row="practice-set"]'); return c ? s.getBoundingClientRect().height - c.getBoundingClientRect().height : null; })).toBeLessThanOrEqual(210);
