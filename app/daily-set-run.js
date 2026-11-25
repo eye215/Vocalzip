@@ -67,6 +67,8 @@ async function openMic(){
     let lastIdx=null;
     return {ctx,
       read(){grab();return V.guidedDetectPitch(data,ctx.sampleRate);},
+      /** The level (RMS) of the window read last: why a note was not heard (too quiet, or nothing at all). */
+      level(){let q=0;for(let i=0;i<data.length;i++)q+=data[i]*data[i];return Math.sqrt(q/data.length);},
       /** The pitch of the last ~43 ms with its time on this context's clock: {t, hz|null} (비브라토 needs a short window). */
       pitch(){const end=grab(),sr=ctx.sampleRate,n=Math.min(data.length,2048);return {t:end-n/2/sr,hz:V.guidedDetectPitch(data.subarray(data.length-n),sr)||null};},
       /** The level of every 5 ms since the last call: [{t (its end, s), rms, d}] (호흡 · 리듬). */
@@ -187,13 +189,13 @@ const ENGINES={
       return {mode:'hold',...(mic()?{}:{timer:true}),parts:out.length,notes:out.slice(),...(mic()?{holdSeconds:Math.round(out.reduce((n,x)=>n+Math.min(need,x.held||0),0)*10)/10,
         accuracy:sung>0?Math.round(inside/sung*100):null}:{}),...(measures.length?{measures}:{})};
     };
-    const paint=cents=>{
+    const paint=(cents,hint='')=>{
       setDots(r,i,out.length);text(r.q('[data-run-note]'),D.noteName(notes[i]));
       if(phase==='listen'){needle(null);meter(0);r.word('들어 보세요','wait');r.sub((i+1)+' / '+notes.length+' · '+D.noteName(notes[i])+(e.vowels?' · “'+D.syllableOf(e,i)+'”':''));return;}
       if(phase==='cheer'){needle(0);meter(1);r.word(mic()?'좋아요!':'다음 음으로 가요','exact');return;}
       if(!mic()){meter(1-left/(need+2));needle(null);r.word('“'+(D.syllableOf?.(e,i)||e.syllable)+'” 이어요','go');r.sub((i+1)+' / '+notes.length+' · '+Math.max(0,Math.ceil(left))+'초 · 마이크 없이 타이머로 해요');return;}
       const w=D.word(cents,tol);needle(cents);meter(h.held/need);r.word(w.text,w.key);
-      r.sub((cents==null?'':(cents>0?'+':'')+cents+' cent · ')+h.held.toFixed(1)+' / '+need+'초');
+      r.sub(hint||(cents==null?'':(cents>0?'+':'')+cents+' cent · ')+h.held.toFixed(1)+' / '+need+'초');
     };
     return {say:()=>e.text,
       stage:()=>'<div class="dset-tuner"><div class="dset-target"><small>지금 음</small><strong data-run-note>'+esc(D.noteName(notes[0]))+'</strong><button type="button" class="dset-chip" data-run-again><i class="ph ph-speaker-high" aria-hidden="true"></i>음 다시 듣기</button></div>'+
@@ -206,14 +208,14 @@ const ENGINES={
       start(){i=0;out.length=0;h=D.holdStart();tried=0;phase='listen';left=LISTEN;const rule=r.q('[data-run-rule]');if(rule)rule.hidden=!mic();play();paint(null);},
       resume(){h=D.holdStart();tried=0;phase='listen';left=LISTEN;play();paint(null);},
       tick(dt){
-        if(phase==='listen'){left-=dt;if(left<=0){phase='sing';left=need+2;}return paint(null);}
+        if(phase==='listen'){left-=dt;if(left<=0){phase='sing';left=need+2;r.quietFor=0;}return paint(null);}
         if(phase==='cheer'){left-=dt;if(left<=0)return next();return paint(0);}
         if(!mic()){left-=dt;if(left<=0){phase='cheer';left=CHEER;r.cue(1);}return paint(null);}
-        const heard=r.mic.read(),cents=centsFrom(heard,notes[i]);
+        const heard=r.mic.read(),cents=centsFrom(heard,notes[i]),hint=r.hush(heard,dt);
         D.holdTick(h,cents,dt,{tolerance:tol,need,octave:octaveFrom(heard,notes[i])});tried+=dt;
         if(h.ok){phase='cheer';left=CHEER;r.cue(1);return paint(0);}
         if(tried>=TRY_SECONDS)return next();
-        paint(cents);
+        paint(cents,hint);
       },
       result};
   },
@@ -653,6 +655,16 @@ function mount(host,ctx){
   r.say=value=>text(r.q('[data-run-say]'),value);
   r.word=(value,key)=>{const el=r.q('[data-run-word]');if(el){text(el,value);el.dataset.tone=key||'';}};
   r.sub=value=>text(r.q('[data-run-sub]'),value);
+  /** 소리 안내 (2026-11-25: a measure that heard nothing just ran out): after 2 s of the singer's turn with no note
+   * heard, say why — nothing reaches the mic, the voice is too quiet, or it is there but not one clear note. '' while
+   * a note is heard. Call with the reading (null = none) every tick of the singing part; r.quietFor=0 when it starts. */
+  r.quietFor=0;
+  r.hush=(heard,dt)=>{
+    if(heard){r.quietFor=0;return '';}
+    r.quietFor+=dt;if(r.quietFor<2||!r.mic)return '';
+    const level=r.mic.level?.()||0;
+    return level<.0015?'소리가 안 들려요 · 폰 아래쪽 마이크를 막지 않았는지 봐 주세요':level<.004?'소리가 작게 들려요 · 조금 더 크게 불러 보세요':'음이 또렷하게 안 잡혀요 · “음~”처럼 한 음으로 길게 내 보세요';
+  };
   r.audio=audioSession;
   r.tone=(midi,delay,dur)=>{r.tones||=tones();const t=r.tones;if(!t)return;if(t.ctx.state==='running')t.play(midi,delay,dur);else t.ctx.resume?.().then(()=>{if(r.tones===t&&!r.dead)t.play(midi,delay,dur);}).catch(()=>{});};
   r.cue=(high=0)=>{try{navigator.vibrate?.(60);}catch{}if(r.tones?.ctx.state==='running')r.tones.play(high?84:79,0,.12,.07);};
