@@ -64,6 +64,13 @@ test('live pitch detection finds a sung note and rejects silence',()=>{
  const V=setup(),sampleRate=48000,frame=Float32Array.from({length:4096},(_,i)=>.25*Math.sin(2*Math.PI*440*i/sampleRate));
  assert.ok(Math.abs(V.guidedDetectPitch(frame,sampleRate)-440)<2);
  assert.equal(V.guidedDetectPitch(new Float32Array(4096),sampleRate),null);
+ // A note sung at arm's length (no automatic gain): about −41 dBFS (RMS .009) is read; the old floor (.012) refused it.
+ const far=Float32Array.from({length:4096},(_,i)=>.0127*Math.sin(2*Math.PI*330*i/sampleRate)+.0035*Math.sin(2*Math.PI*660*i/sampleRate));
+ assert.ok(Math.abs(V.guidedDetectPitch(far,sampleRate)-330)<2);
+ // A quiet room (RMS ≈ .002) stays silent; louder noise without a period is not a note either.
+ let seed=7;const noise=a=>Float32Array.from({length:4096},()=>{seed=(seed*16807)%2147483647;return (seed/2147483647-.5)*a;});
+ assert.equal(V.guidedDetectPitch(noise(.007),sampleRate),null);
+ assert.equal(V.guidedDetectPitch(noise(.2),sampleRate),null);
 });
 test('solfege text becomes scale intervals inside the observed range',()=>{
  const V=setup(),range={low:46,high:81};

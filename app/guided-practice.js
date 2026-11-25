@@ -62,10 +62,15 @@ function scaleFromText(text,range){
 }
 V.guidedScaleFromText=scaleFromText;
 // YIN-style normalized difference: use the first strong period, not the loudest harmonic.
-function detectPitch(frame,sampleRate){
+// The quietest frame read (RMS of the raw signal): the mic is opened without automatic gain, so an iPhone held at
+// arm's length gives about −45…−35 dBFS for a sung note. The old −38 dBFS (.012) read that as silence, and a hold
+// restarted after 0.3 s of "silence" — the phone had to be right at the mouth (owner, 2026-11-25). −48 dBFS keeps
+// a quiet room out; noise without a clear period is still refused by the YIN threshold below.
+const MIN_RMS=.004;
+function detectPitch(frame,sampleRate,minRms=MIN_RMS){
   const length=frame.length,half=Math.floor(length/2),minLag=Math.max(2,Math.floor(sampleRate/1000)),maxLag=Math.min(half-1,Math.ceil(sampleRate/95));
   let power=0;for(let i=0;i<length;i++)power+=frame[i]*frame[i];
-  if(Math.sqrt(power/length)<.012)return null;
+  if(Math.sqrt(power/length)<minRms)return null;
   const difference=new Float32Array(maxLag+1),normalized=new Float32Array(maxLag+1);
   for(let lag=1;lag<=maxLag;lag++){
     let sum=0;for(let i=0;i<half;i++){const delta=frame[i]-frame[i+lag];sum+=delta*delta}

@@ -43,7 +43,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/practice-set-model.test.cjs tests/daily-set-model.test.cjs tests/daily-measure-model.test.cjs tests/levels-model.test.cjs tests/roadmap-model.test.cjs tests/recording-time-model.test.cjs tests/goal-routines.test.cjs tests/practice-time.test.cjs
+      - run: node --test tests/practice-set-model.test.cjs tests/daily-set-model.test.cjs tests/daily-measure-model.test.cjs tests/levels-model.test.cjs tests/roadmap-model.test.cjs tests/recording-time-model.test.cjs tests/guided-practice.spec.cjs tests/goal-routines.test.cjs tests/practice-time.test.cjs
       # 오늘의 연습: the set list and the person's own steps (practice-set), the card, the doing screen, 고르기 and the takes (daily-set).
       # 단계: the line on 오늘, the 단계 page, the step a finished set earns, the kept rows through a sync (levels).
       # 호흡 · 리듬 · 비브라토 · 스케일 · 사이렌 · 맨 위 음: the measuring exercises on the doing screen and what they write for 단계 (daily-set-measure).
