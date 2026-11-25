@@ -88,6 +88,9 @@ function fromHomework(db, {today} = {}) {
   const R = dep.review();
   const open = R ? R.context(db || {}, {today, start:today}).homework : [];
   const doneToday = new Set(live(db, 'dailyGoals').filter(g => g.date === today && g.source === 'homework' && g.completed === true).map(g => g.sourceId));
+  // A practice record of today that says the homework was done (연습 기록 › "숙제 했나요? 했어요", a finished 오늘의 연습,
+  // 따라 하기) counts as done for today too: it is not offered again first in today's set (1.0 점검, 2026-11-24).
+  for (const p of live(db, 'practices')) if (p.date === today) for (const id of list(p.completed)) doneToday.add(id);
   return open.filter(t => !doneToday.has(t.id)).map((t, i) => item('homework', {id:t.id, title:t.title, why:dueText(t.dueDate, today), songId:t.songId,
     due:t.dueDate || '', action:{kind:'homework', assignmentId:t.id, ...(t.songId ? {songId:t.songId} : {})}, links:['assignment:' + t.id], order:i}));
 }

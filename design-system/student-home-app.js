@@ -41,7 +41,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   * then the next lesson; with nothing at all, setting today's goals. */
  const dday=date=>{const n=V.daysBetween(today(),date);return n===0?'D-day':n>0?'D-'+n:'';};
  function nowCard(s,songs){
-  const l=s.lesson,lessonToday=l&&V.daysBetween(today(),l.date)===0,homework=s.recommendationCandidates.find(t=>t.source==='homework');
+  const l=s.lesson,lessonToday=l&&V.daysBetween(today(),l.date)===0,doneToday=new Set((V.db.practices||[]).filter(p=>p&&p.date===today()&&!(V.db.deleted?.practices||[]).includes(p.id)).flatMap(p=>Array.isArray(p.completed)?p.completed:[])),homework=s.recommendationCandidates.find(t=>t.source==='homework'&&!doneToday.has(t.sourceId)); // a homework already done today is not "오늘 해 볼 숙제" (1.0 점검)
   const lessonCard=title=>({kind:'lesson',title:title+(l.title||'보컬 레슨'),badge:lessonToday?(l.startTime||'오늘'):dday(l.date),line:lessonToday?[l.place,l.teacher].filter(Boolean).join(' · ')||'레슨 준비하기':lessonDay(l.date)+(l.startTime?' '+l.startTime:''),label:'다음 레슨 보기',action:()=>nav('#/lesson/'+encodeURIComponent(l.id))});
   if(lessonToday)return lessonCard('오늘 ');
   if(homework)return {kind:'homework',title:homework.title,badge:'숙제',line:'오늘 해 볼 숙제예요',label:'숙제 '+homework.title+' 보기',action:()=>nav('#/homework')};
