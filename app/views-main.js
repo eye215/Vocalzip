@@ -161,12 +161,17 @@ VZ.recPracticeBlock = (card, {songId, date, mediaId}) => {
   // The take's length counts as soon as the list has it (app/recording-time.js runs after a list read).
   Promise.resolve(M.list?.()).catch(() => {}).then(() => VZ.recordingTime?.run?.()).then(paint, paint);
 };
-VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = null, preset = null} = {}) => {
+VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = null, preset = null, homeworkId = ''} = {}) => {
   const db = VZ.db, p = practice;
-  const mode = p?.practiceMode || (songId || !p ? 'song' : 'training');
+  // 숙제 › 연습 기록 (1.0 점검): opened from a homework row, the sheet starts on that homework's song (or its training)
+  // with "했어요" already chosen for it.
+  const task = homeworkId ? db.assignments.find(t => t.id === homeworkId) : null, taskSong = task ? VZ.taskSongId(task) || '' : '';
+  if (task && !p && !songId) songId = taskSong;
+  const mode = p?.practiceMode || (task && !p && !taskSong ? 'training' : songId || !p ? 'song' : 'training');
   // 숙제 체크: homework whose period covers the practice date (plus any this record already has) is asked about.
-  const tasksFor = day => db.assignments.filter(t => p?.completed?.includes(t.id) || VZ.taskInPeriod?.(t, day));
+  const tasksFor = day => db.assignments.filter(t => p?.completed?.includes(t.id) || t.id === task?.id || VZ.taskInPeriod?.(t, day));
   const hw = new Map((p?.completed || []).map(id => [id, {did:true, reps:Number(p.assignmentReps?.[id]) || 1, note:p.assignmentNotes?.[id] || ''}]));
+  if (task && !hw.has(task.id)) hw.set(task.id, {did:true, reps:1, note:''});
   const cats = db.categories;
   const catOpts = '<option value="">분류 선택</option>' + cats.map(c => '<option value="' + esc(c.id) + '"' + (p?.categoryId === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '<option value="__new">+ 새 분류 추가</option>';
   // 트레이닝 분류 3단계: 분류 › 세부 항목 › 세부 항목 2. Each level can add a new entry that is kept for next time.
@@ -177,7 +182,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
   let draft = null;
   VZ.sheet({title:p ? '연습 기록 수정' : '연습 기록', onClose:() => draft?.discard(), body:'<form id="practice-log">' +
     '<div class="vz-library-tabs vz-practice-tabs"><div class="lib-seg" role="group" aria-label="연습 종류"><button type="button" data-mode="song" aria-pressed="' + (mode === 'song') + '">곡 연습</button><button type="button" data-mode="training" aria-pressed="' + (mode === 'training') + '">보컬 트레이닝</button></div></div>' +
-    '<div data-song-part>' + VZ.songSelect('song', p?.songId || songId) + '</div>' +
+    '<div data-song-part>' + VZ.songSelect('song', p?.songId || songId) + '<div class="vz-practice-same" data-same-day hidden></div></div>' +
     '<div data-train-part><label class="field"><span>훈련 내용</span><select name="recommendation" data-recommendation><option value="">다음 연습 또는 직접 입력 선택</option><option value="__custom">직접 입력</option></select></label><div class="vz-practice-recommendation" data-recommendation-info hidden></div><div data-custom-training hidden>' + level('분류', 'category', catOpts, '새 분류 이름 (예: 고음)') + level('세부 항목', 'detail', '', '새 세부 항목 (예: 립트릴)') + level('세부 항목 2 <span class="small muted">(선택)</span>', 'detail2', '', '새 항목 (예: 저음 5도)') + '</div></div>' +
     '<label class="field vz-practice-date"><span>기록 날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(p?.date || date) + '"></label>' +
     '<div class="vz-practice-time"><label for="vz-practice-minutes">연습 시간 <span class="req">*</span></label><div class="vz-practice-time-value"><button type="button" data-minute-step="-5" aria-label="연습 시간 5분 줄이기"><i class="ph ph-minus" aria-hidden="true"></i></button><div><input id="vz-practice-minutes" type="number" name="minutes" inputmode="numeric" min="1" max="1440" required value="' + initialMinutes + '" aria-label="연습 시간(분)"><span>분</span></div><button type="button" data-minute-step="5" aria-label="연습 시간 5분 늘리기"><i class="ph ph-plus" aria-hidden="true"></i></button></div><div class="vz-practice-minutes" role="group" aria-label="연습 시간 빠른 선택">' + quick + '</div></div>' +
@@ -255,7 +260,8 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
         const previous = recSelect.value;
         recSelect.innerHTML = '<option value="">다음 연습 또는 직접 입력 선택</option>' + recommendations.map(t => '<option value="' + esc(t.id) + '">' + esc(t.title) + ' · ' + (t.source === 'lesson' ? '레슨 숙제' : '분석 추천') + '</option>').join('') + '<option value="__custom">직접 입력</option>';
         const savedId = p?.recommendationSource && p?.recommendationSourceId ? p.recommendationSource + ':' + p.recommendationSourceId : '';
-        recSelect.value = previous === '__custom' || recommendations.some(t => t.id === previous) ? previous : recommendations.some(t => t.id === savedId) ? savedId : p ? '__custom' : '';
+        const wanted = task && !taskSong ? 'lesson:' + task.id : '';
+        recSelect.value = previous === '__custom' || recommendations.some(t => t.id === previous) ? previous : recommendations.some(t => t.id === savedId) ? savedId : recommendations.some(t => t.id === wanted) ? wanted : p ? '__custom' : '';
         if (!recommendations.length && !p) recSelect.value = '__custom';
         applyRecommendation(recommendations.find(x => x.id === recSelect.value));
         if (recSelect.value === '__custom') customTraining.hidden = false;
@@ -295,6 +301,25 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
         hw.set(item.dataset.hwId, st);
       });
       form.date.addEventListener('change', () => { drawHw(); drawRecommendations(); }); drawHw();
+      // 같은 날 같은 곡 (1.0 점검: 20분 + 15분이 한 번의 연습이었을 수 있어요): a new record for a song that already has time
+      // that day says so, and one tap opens that record instead (with this homework answered "했어요") — nothing is merged
+      // or changed unasked; saving here still adds a separate record.
+      const sameHost = el.querySelector('[data-same-day]');
+      const drawSame = () => {
+        const sid = current === 'song' ? form.elements.song?.value || '' : '';
+        const gone = new Set((VZ.db.deleted?.practices || []).map(String));
+        const rows = p || !sid || sid === '__new' ? [] : (VZ.db.practices || []).filter(x => x && x.date === form.date.value && x.songId === sid && x.practiceMode !== 'training' && x.practiceTimeSource !== 'unconfirmed' && !gone.has(String(x.id)) && VZ.practiceMinutes(x) > 0);
+        const mine = rows.filter(x => x.practiceTimeSource !== 'recording'), use = mine.length ? mine : rows;
+        sameHost.hidden = !use.length;
+        if (!use.length) { sameHost.innerHTML = ''; return; }
+        const when = form.date.value === VZ.today() ? '오늘' : VZ.dateLabel(form.date.value);
+        const total = use.reduce((n, x) => n + VZ.practiceMinutes(x), 0);
+        sameHost.innerHTML = '<p><i class="ph ph-info" aria-hidden="true"></i><span>' + esc(when + ' 이 곡 연습이 이미 ' + VZ.minutes(total) + (mine.length ? '' : ' (녹음 길이로)') + ' 기록돼 있어요. 같은 연습이면 새로 적지 말고 그 기록을 고쳐요.') + '</span></p>' +
+          (use.length === 1 ? '<button type="button" class="chip" data-same-open>그 기록 고치기' + (task ? ' · 숙제 함께' : '') + '</button>' : '');
+        sameHost.querySelector('[data-same-open]')?.addEventListener('click', () => { close(); VZ.practiceSheet({practice:use[0], homeworkId:task?.id || ''}); });
+      };
+      form.elements.song?.addEventListener('change', drawSame); form.date.addEventListener('change', drawSame);
+      el.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', drawSame)); drawSame();
       const syncMinutes = () => el.querySelectorAll('[data-min]').forEach(b => b.setAttribute('aria-pressed', String(Number(form.minutes.value) === Number(b.dataset.min))));
       el.querySelectorAll('[data-min]').forEach(b => b.onclick = () => { form.minutes.value = b.dataset.min; syncMinutes(); });
       el.querySelectorAll('[data-minute-step]').forEach(b => b.onclick = () => { form.minutes.value = Math.max(1, Math.min(1440, (Number(form.minutes.value) || 0) + Number(b.dataset.minuteStep))); syncMinutes(); });

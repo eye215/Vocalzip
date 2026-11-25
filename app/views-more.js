@@ -169,7 +169,7 @@ VZ.route('library', {title:'내 곡', tab:'songs', noSettings:true, actions:() =
     const list = media.filter(m => (lib.kind === 'all' || (lib.kind === 'video') === M.isVideo(m)) && (lib.category === 'all' || M.recordingCategory(m) === lib.category) &&
       (!lib.song || (lib.song === '__none' ? !VZ.song(m.songId) : m.songId === lib.song)) && (!lib.month || (M.dateOf(m)||'').slice(0,7)===(lib.month==='this'?VZ.ymd(new Date()).slice(0,7):lib.month)) && (!q || (M.label(m) + ' ' + (m.review || '') + ' ' + VZ.songTitle(m.songId)).toLowerCase().includes(q)));
     drawn = list;
-    VZ.collectionCount?.(media.length,'개');
+    VZ.collectionCount?.('녹음 ' + media.length,'개'); // next to the 내 곡 heading: say what is counted (1.0 점검: '내 곡 1개' read as one song)
     status();
     if (!list.length) { l.innerHTML = VZ.empty('waveform', media.length ? '조건에 맞는 파일이 없어요.' : '아직 저장된 녹음이 없어요.', media.length ? '<button type="button" class="btn sm secondary" data-reset>필터 초기화</button>' : '<a class="btn sm" href="#/record">녹음하기</a>'); l.querySelector('[data-reset]')?.addEventListener('click', () => { Object.assign(lib, {kind:'all', category:'all', song:'', month:'', q:''}); VZ.render(); }); return; }
     // Newest recording month first; each month shows how many files and how long.

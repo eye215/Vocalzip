@@ -463,6 +463,43 @@ test('Homework has a period; each practice in it asks whether it was done, how m
   await expect(sheet(page)).toContainText('세 번째에 고음이 편해짐');
 });
 
+test('Homework row 기록 opens the practice sheet on its song with 했어요, and says when that song already has time that day', async ({page}) => {
+  await boot(page, {media:false, seed:{categories:[], songs:[{id:'s1', title:'곡'}, {id:'s2', title:'다른 곡'}], lessons:[],
+    assignments:[{id:'a1', title:'2절 고음 5회', songId:'s1', startDate:day(-1), dueDate:day(3), status:'active'}],
+    practices:[{id:'p0', date:day(0), minutes:20, manualMinutes:20, practiceTimeSource:'manual', practiceMode:'song', songId:'s1', technique:[], mediaIds:[], completed:[], memo:''}], comparisonReports:[]}});
+  await page.goto('/#/homework');
+  await page.getByRole('button', {name:'2절 고음 5회 연습 기록'}).click();
+  const s = sheet(page);
+  await expect(s.locator('[name=song]')).toHaveValue('s1');
+  await expect(s.locator('[data-hw-id="a1"] [data-hw-did="1"]')).toHaveAttribute('aria-pressed', 'true');
+  // 20분 is already logged for this song today: said before a second record is added, with a way to that record.
+  const same = s.locator('[data-same-day]');
+  await expect(same).toBeVisible();
+  await expect(same).toContainText('오늘 이 곡 연습이 이미 20분 기록돼 있어요');
+  // Another song: nothing logged, no note.
+  await s.locator('[name=song]').selectOption('s2');
+  await expect(same).toBeHidden();
+  await s.locator('[name=song]').selectOption('s1');
+  await same.getByRole('button', {name:'그 기록 고치기 · 숙제 함께'}).click();
+  // The existing record opens with the homework answered; saving keeps one record of 20분 with the homework on it.
+  await expect(sheet(page).locator('[data-same-day]')).toBeHidden();
+  await expect(sheet(page).locator('[name=minutes]')).toHaveValue('20');
+  await expect(sheet(page).locator('[data-hw-id="a1"] [data-hw-did="1"]')).toHaveAttribute('aria-pressed', 'true');
+  await sheet(page).getByRole('button', {name:'수정 저장'}).click();
+  const ps = (await data(page)).practices;
+  expect(ps).toHaveLength(1);
+  expect(ps[0]).toMatchObject({id:'p0', minutes:20, songId:'s1', completed:['a1'], assignmentReps:{a1:1}});
+  await expect(page.locator('[data-task="a1"]')).toContainText('1회 했어요');
+  // Saving a new record from the row instead adds a separate one (nothing is merged unasked).
+  await page.getByRole('button', {name:'2절 고음 5회 연습 기록'}).click();
+  await sheet(page).locator('[name=minutes]').fill('15');
+  await sheet(page).getByRole('button', {name:'연습 기록 저장'}).click();
+  const after = (await data(page)).practices;
+  expect(after).toHaveLength(2);
+  expect(after[1]).toMatchObject({minutes:15, songId:'s1', completed:['a1']});
+  expect(page.__errors).toEqual([]);
+});
+
 test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pauses on expired login, retries only failures, resumable', async ({page}) => {
   test.setTimeout(180000);
   await boot(page, {media:false});
@@ -1217,6 +1254,7 @@ test('Library filters, edit and play; compare A/B with memo saved in v5 report s
   await boot(page);
   await page.goto('/#/library');
   await expect(page.locator('[data-media]')).toHaveCount(2);
+  await expect(page.locator('[data-collection-count]')).toHaveText('녹음 2개');   // not "내 곡 2개" (that reads as two songs)
   await page.getByRole('group', {name:'녹음 유형별 보기'}).getByRole('button', {name:'레슨 녹음', exact:true}).click();
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await page.locator('[data-media] [data-toggle]').click();
