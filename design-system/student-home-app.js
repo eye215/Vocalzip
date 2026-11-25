@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=jrn-20261124';
+import {createFloatingHome} from './student-home-html.js?v=pick2-20261125';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -73,6 +73,13 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   return rows;
  }
  /** Up to three recent songs: the latest practised song first, then by recording activity. */
+ /* 오늘 부를 곡 (app/song-pick-model.js) in the 최근 곡 place: up to three of my songs with the reason for today. Without
+  * the model (an old cached script) the recent songs stay. */
+ function todayPicks(s,files){
+  const P=window.VzipSongPick;if(!P)return recentSongs(s,files);
+  const media=(files||[]).map(m=>({songId:m?.songId,date:V.media?.dateOf?.(m)||''}));
+  return P.pick(V.db,{today:today(),media}).map(x=>({id:x.songId,title:x.title,reason:x.reason,extra:x.extra}));
+ }
  function recentSongs(s,files){
   const activity=V.songActivity(files),ids=[...activity.keys()].filter(id=>V.song(id)).sort((a,b)=>activity.get(b).localeCompare(activity.get(a)));
   if(s.recent?.song?.id)ids.unshift(s.recent.song.id);
@@ -208,7 +215,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const refreshHome=()=>{
     refreshWeek();if(!root?.isConnected)return;
     const fresh=state(files),list=recentSongs(fresh,files),next=nowCard(fresh,list);
-    root.updateRecent(list);root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());
+    root.updateRecent(todayPicks(fresh,files));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());
    };
    const goalOf=id=>(V.db.dailyGoals||[]).find(g=>g?.id===id);
    const backToGoal=id=>setTimeout(()=>root?.focusGoal?.(id),0);
@@ -224,8 +231,9 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    };
    try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,todayPractice:V.todayPractice?.()||null,goals:s.goals.map(g=>({...g,routineInfo:V.routineInfo?.(g)||null,time:V.goalTime?.(g)||null})),onGoalRecord:id=>timeSheet(id,false),
     // Mic on an unfinished goal row: the recorder carries the goal (and its song); saving there offers the goal as done.
-    onGoalMic:id=>{const g=goalOf(id);nav('#/record?goal='+encodeURIComponent(id)+(g?.songId&&V.song(g.songId)?'&song='+encodeURIComponent(g.songId):''));},onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),recentSongs:songs,
-    onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),onWeek:()=>nav('#/calendar'),onDay:calendar,onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
+    onGoalMic:id=>{const g=goalOf(id);nav('#/record?goal='+encodeURIComponent(id)+(g?.songId&&V.song(g.songId)?'&song='+encodeURIComponent(g.songId):''));},onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),recentSongs:todayPicks(s,files),
+    onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),
+    onRandomSong:()=>{const one=window.VzipSongPick?.random?.(V.db,{today:today(),media:(V.media.cached()||[]).map(m=>({songId:m?.songId,date:V.media?.dateOf?.(m)||''}))});if(!one)return;V.toast('오늘은 '+one.title+'!');nav('#/record?song='+encodeURIComponent(one.songId));},onWeek:()=>nav('#/calendar'),onDay:calendar,onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
     practice:practiceRows(),level:levelLine(),onLevel:()=>nav('#/levels'),onGoals:planSheet,onDailyRecommendation:()=>nav('#/practice-review?mode=today'),onWeeklyReview:()=>nav('#/practice-review'),onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
@@ -262,7 +270,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     const recommendations=await V.guidedRecommendations({date:today(),media}).catch(()=>[]);
     if(root.isConnected&&generation===mediaGeneration)root.updateRecommendations(recommendations);
     const fresh=state(files),list=recentSongs(fresh,media),next=nowCard(fresh,list);
-    root.updateRecent(list);root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());
+    root.updateRecent(todayPicks(fresh,media));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());
    };
    const checkDate=()=>{if(root.isConnected&&today()!==lastDate){lastDate=today();V.softRender();}};
    const visible=()=>{if(document.visibilityState==='visible'){checkDate();if(root.isConnected)refreshMedia();}};

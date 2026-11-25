@@ -467,21 +467,35 @@ test('needs-attention summary row appears only when server analysis needs a chec
  await expect(attention).toHaveCount(0);await expect(rows).toHaveCount(3);
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
-test('recent songs show at most three pills, latest practice first, each opening that song',async({page})=>{
- const value=seed();
- value.songs.push(...['s2','s3','s4','s5'].map((id,i)=>({id,title:'최근 곡 '+(i+2)})));
- value.practices.push(...[['s2','2026-11-03'],['s3','2026-11-02'],['s4','2026-11-01'],['s5','2026-10-30']].map(([songId,date])=>({id:'p-'+songId,date,manualMinutes:10,songId,practiceMode:'song'})));
+test('오늘 부를 곡: at most three of my songs with the reason for today, each opening that song to record',async({page})=>{
+ // The 최근 곡 place now picks songs for today (app/song-pick-model.js, owner 2026-11-25: "부를 노래 골라 주는 것도").
+ const value=seed();value.assignments=[];value.performances=[];
+ value.lessons=[{...value.lessons[0],songId:'s2',songIds:['s2']}];
+ value.songs.push(...['s2','s3','s4','s5'].map((id,i)=>({id,title:'곡 '+(i+2)})));
+ value.practices=[['s1',TODAY],['s3','2026-10-01'],['s4','2026-11-02']].map(([songId,date])=>({id:'p-'+songId,date,manualMinutes:10,songId,practiceMode:'song'}));
  await boot(page,value);const before=await db(page);
  const pills=page.locator('.vz-recent-pill');
- await expect(page.locator('.vz-recent-heading')).toHaveText('최근 곡');
- await expect(pills).toHaveCount(3);await expect(pills.locator('span')).toHaveText(['This Is the Moment','최근 곡 2','최근 곡 3']);
- for(const pill of await pills.all())expect((await pill.boundingBox()).height).toBeGreaterThanOrEqual(44);
- await page.locator('.vz-student-home').evaluate(host=>host.updateRecent([1,2,3,4,5].map(n=>({id:'s'+n,title:'곡 '+n}))));
+ await expect(page.locator('.vz-recent-heading')).toHaveText('오늘 부를 곡');
+ // Lesson song first, then the one not sung for longest, then one never sung; the song sung today is left out.
  await expect(pills).toHaveCount(3);
- await page.evaluate(()=>VZ.render());await ready(page);await expect(pills.locator('span')).toHaveText(['This Is the Moment','최근 곡 2','최근 곡 3']);
- await page.getByRole('button',{name:'최근 곡 2 연습하기',exact:true}).click();await expect(page).toHaveURL(/#\/record\?song=s2$/);
- await expect(page.locator('[data-song-name]')).toHaveText('최근 곡 2');
- const after=await db(page);for(const key of ['songs','practices','dailyGoals'])expect(after[key]).toEqual(before[key]);
+ await expect(pills.locator('.vz-pick-words>span')).toHaveText(['곡 2','곡 3','곡 5']);
+ await expect(pills.locator('.vz-pick-why')).toHaveText(['레슨 D-2 · 아직 안 불러 봤어요','34일 동안 안 불렀어요','아직 안 불러 봤어요']);
+ for(const pill of await pills.all())expect((await pill.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ // Drawn again (e.g. after a recording): still at most three.
+ await page.locator('.vz-student-home').evaluate(host=>host.updateRecent([1,2,3,4,5].map(n=>({id:'s'+n,title:'곡 '+n,reason:'이유 '+n}))));
+ await expect(pills).toHaveCount(3);
+ await page.evaluate(()=>VZ.render());await ready(page);await expect(pills.locator('.vz-pick-words>span')).toHaveText(['곡 2','곡 3','곡 5']);
+ await page.getByRole('button',{name:'곡 3 연습하기',exact:true}).click();await expect(page).toHaveURL(/#\/record\?song=s3$/);
+ await expect(page.locator('[data-song-name]')).toHaveText('곡 3');
+ // Singing a song moves it out of today's picks (곡 2 sung today: 곡 4, sung 2 days ago, comes in).
+ await page.goto('/#/home');await ready(page);
+ await page.evaluate(day=>VZ.change(d=>{d.practices.push({id:'p-s2-today',date:day,manualMinutes:10,minutes:10,songId:'s2',practiceMode:'song'});}),TODAY);
+ await expect(pills.locator('.vz-pick-words>span')).toHaveText(['곡 3','곡 5','곡 4']);
+ await expect(pills.nth(2).locator('.vz-pick-why')).toHaveText('2일 전에 불렀어요');
+ // 랜덤: one of my songs not sung today, straight to recording it.
+ await page.getByRole('button',{name:'아무 곡이나 랜덤으로 고르기',exact:true}).click();
+ await expect(page).toHaveURL(/#\/record\?song=s[345]$/);
+ const after=await db(page);for(const key of ['songs','dailyGoals'])expect(after[key]).toEqual(before[key]);
 });
 test('goal editor saves only user entered plans and personal goals',async({page})=>{
  await boot(page);await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});

@@ -76,6 +76,14 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-recent-pill span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 #vocalzip-refined-preview .vz-recent-pill .vz-ui-icon{flex:none;font-size:18px;color:var(--vz-color-accent,#7A32F5);}
 #vocalzip-refined-preview .vz-recent-pill:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;}
+#vocalzip-refined-preview .vz-pick-words{display:grid;min-width:0;text-align:left;}
+#vocalzip-refined-preview .vz-pick-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+#vocalzip-refined-preview .vz-pick-head .vz-recent-heading{flex:1;}
+#vocalzip-refined-preview .vz-pick-random{flex:none;min-height:36px;margin:0 0 8px;padding:0 14px;border:0;border-radius:999px;background:var(--vz-color-accent-soft,#F1EAFF);color:var(--vz-color-accent,#7A32F5);font:inherit;font-size:14px;font-weight:700;cursor:pointer;}
+#vocalzip-refined-preview .vz-pick-random::before{content:"🎲 ";}
+#vocalzip-refined-preview .vz-pick-words>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#vocalzip-refined-preview .vz-pick-why{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:16px;font-weight:500;color:var(--vz-color-ink-muted,#667085);}
+#vocalzip-refined-preview .vz-recent-pill.vz-pick-pill{min-height:56px;border-radius:18px;padding:8px 16px 8px 14px;}
 #vocalzip-refined-preview .vz-goal-list>[hidden]{display:none;}
 #vocalzip-refined-preview .vz-goal-more{display:block;width:100%;min-height:44px;margin:4px 0 0;border:0;border-radius:14px;background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);font:inherit;font-size:13px;font-weight:600;cursor:pointer;}
 #vocalzip-refined-preview .vz-week{touch-action:pan-y;}
@@ -548,9 +556,14 @@ export async function createFloatingHome(opts={}){
  host.updateWeek(opts.week||{});if(opts.thisWeek)host.updateThisWeek(opts.thisWeek);
  host.updateRecent=(songs,onOpen=opts.onRecentSong)=>{
   const list=(Array.isArray(songs)?songs:[]).slice(0,3);recentWrap.replaceChildren();recentWrap.hidden=!list.length;if(!list.length)return;
-  recentWrap.append(el("h3","최근 곡","vz-recent-heading"));
+  // 오늘 부를 곡 (app/song-pick-model.js): each pill says why that song today; songs without a reason are the old 최근 곡.
+  const picked=list.some(song=>song.reason);recentWrap.setAttribute("aria-label",picked?"오늘 부를 곡":"최근 곡");
+  const head=el("div",null,"vz-pick-head");head.append(el("h3",picked?"오늘 부를 곡":"최근 곡","vz-recent-heading"));
+  // 랜덤 (owner, 2026-11-25): one of my songs at random, straight to recording it.
+  if(picked&&opts.onRandomSong){const r=el("button","랜덤","vz-pick-random");r.type="button";r.setAttribute("aria-label","아무 곡이나 랜덤으로 고르기");r.onclick=()=>opts.onRandomSong();head.append(r);}
+  recentWrap.append(head);
   const pills=el("div",null,"vz-recent-pills");
-  for(const song of list){const b=el("button",null,"vz-recent-pill");b.type="button";b.append(glyph(""),el("span",song.title||"곡"));b.setAttribute("aria-label",(song.title||"곡")+" 연습하기");b.onclick=()=>onOpen?.(song);pills.append(b);}
+  for(const song of list){const b=el("button",null,"vz-recent-pill"+(song.reason?" vz-pick-pill":""));b.type="button";const words=el("span",null,"vz-pick-words");words.append(el("span",song.title||"곡"));if(song.reason)words.append(el("small",song.reason+(song.extra?" · "+song.extra:""),"vz-pick-why"));b.append(glyph(""),words);b.setAttribute("aria-label",(song.title||"곡")+" 연습하기");if(song.reason){const why=words.lastChild;why.id="vz-pick-why-"+pills.childElementCount;b.setAttribute("aria-describedby",why.id);}b.onclick=()=>onOpen?.(song);pills.append(b);}
   recentWrap.append(pills);
  };
  host.updateRecent(opts.recentSongs);
