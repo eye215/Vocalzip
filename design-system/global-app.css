@@ -92,6 +92,7 @@ body:not(.vz-home-mode) .vz-collection-record i { font-size:22px; }
 body:not(.vz-home-mode) .vz-collection-record:active { filter:brightness(.9); transform:scale(.98); }
 body.vz-record-mode .vz-collection-record,
 body[data-vz-route="vocal-lab"] .vz-collection-record,
+body[data-vz-route="growth-song"] .vz-collection-record,
 body[data-vz-route="lab-reports"] .vz-collection-record,
 body[data-vz-route="song-suggest"] .vz-collection-record,
 body:has(.vz-recording-page) .vz-collection-record,

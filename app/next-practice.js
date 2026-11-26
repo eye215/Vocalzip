@@ -79,8 +79,8 @@ function goOf(it) {
     case 'goal': case 'routine': return {href:'#/home', label:'오늘 목표에서 하기'};
     case 'ai-draft': {
       const ref = a.ref?.kind;
-      if (ref === 'overall-ai') return {href:'#/growth-flow?period=all', label:'AI 코치 보기'};
-      if (ref === 'monthly-ai') return {href:'#/growth-flow?period=month', label:'AI 코치 보기'};
+      if (ref === 'overall-ai') return {href:'#/vocal-growth?period=all', label:'AI 코치 보기'};
+      if (ref === 'monthly-ai') return {href:'#/vocal-growth?period=month', label:'AI 코치 보기'};
       return {href:a.href || '#/practice-review', label:ref === 'ai-review' ? 'AI 초안 보기' : '곡 분석에서 보기'};
     }
     default: return null;

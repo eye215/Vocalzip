@@ -54,6 +54,13 @@
 // ONE list (VZ.nextPractice, [data-np-top]: left out here, it has its own spec) and fold the report's own picks under
 // "이 리포트 측정으로 고른 연습 n개" / "이 달 측정으로 고른 연습 n개" (added); 월별's link "노래 연습실에서 연습하기" left.
 // #560 (오늘의 연습 AI 청취 · ① 보이스 체크): the listening-evidence line says "…녹음이나 오늘의 연습 녹음에…" and practiceSet is one step more (8개 · 약 29분).
+// 큰 정리 3번 (2026-11-27) moved screens only, no number: 전체 · 월별 리포트 and 주간 요약 are the report of 성장 › 나 under
+// its period switch (주 · 월 · 전체 with ‹ ›), at #/vocal-growth?period=all | month&month= | week&week=. Read there, the
+// report has no page head, period tabs, month picker or week arrows of its own (나's switch is above it): those
+// strings — the first 7 of 전체 (VOCAL.zip · GROWTH … 주간 요약), the first 10 + one per month of 월별 (… 분석 월, the
+// month options) and the first 6 of 주간 (기간 … the week and its badge) — are cut from the pinned values when comparing,
+// and nothing else. labStates is compared by key: 기록's groups are in the order 지난 리포트 · 소리 깊이 보기 · 기준 now.
+// The snapshot file is byte-for-byte what it was.
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
@@ -85,22 +92,21 @@ async function boot(page) {
   await page.evaluate(rows => { window.vzipCloudSignedIn = () => false; window.vzipReadMedia = async () => rows.map(r => ({...r})); VZ.media.invalidate(); }, MEDIA);
 }
 const go = async (page, hash, mark) => { await page.evaluate(h => { location.hash = h; }, hash); await expect(page.locator(mark).first()).toBeVisible(); };
-async function collect(page) {
+async function collect(page, monthKeys) {
   const out = {};
   await boot(page);
-  // 전체 분석: the screen, and the model the 보컬 분석 tab shares.
-  await go(page, '#/growth-flow?period=all', '[data-overall-body]');
-  out.overallScreen = await page.locator('[data-growth]').evaluate(texts());
+  // 전체 리포트 (성장 › 나 › 전체): the report, and the model the 보컬 분석 tab shares.
+  await go(page, '#/vocal-growth?period=all', '[data-gm-report="all"] [data-overall-body]');
+  out.overallScreen = await page.locator('[data-gm-report="all"]').evaluate(texts());
   out.overallModel = await page.evaluate(async () => JSON.parse(JSON.stringify(VZ.growthModel(await VZ.media.list()).overall)));
   out.songTakeIds = await page.evaluate(async () => VZ.growthModel(await VZ.media.list()).songItems.map(m => m.id));
-  // 월별 분석: each month it offers, with the plans and their outcome previews.
-  await page.locator('[data-growth-mode="monthly"]').click();
-  await expect(page.locator('[data-growth-select]')).toBeVisible();
+  // 월별 리포트 (성장 › 나 › 월, ‹ › to each month the report used to offer), with the plans and their outcome previews.
   out.monthly = {};
-  for (const month of await page.locator('[data-growth-select] option').evaluateAll(els => els.map(e => e.value))) {
-    await page.locator('[data-growth-select]').selectOption(month);
-    await expect(page.locator('[data-growth-select]')).toHaveValue(month);
-    out.monthly[month] = await page.locator('[data-growth]').evaluate(texts());
+  for (const month of monthKeys) {
+    await go(page, '#/vocal-growth?period=month&month=' + month, '[data-gm-label]');
+    await expect(page.locator('[data-gm-label]')).toContainText(month.slice(0, 4) + '년 ' + Number(month.slice(5)) + '월');
+    await expect(page.locator('[data-gm-report="month"] [data-month-section="history"]')).toBeAttached();
+    out.monthly[month] = await page.locator('[data-gm-report="month"]').evaluate(texts());
   }
   out.monthlyArchive = await page.evaluate(() => (VZ.db.monthlyGrowthReports || []).map(r => ({...r, created:undefined, updatedAt:undefined})).sort((a, b) => a.month.localeCompare(b.month)));
   // 계획 결과: the report the app would save for every plan that has ended, from the takes the month view passes on.
@@ -111,9 +117,9 @@ async function collect(page) {
   // 주간 요약: six weeks, and the 홈 row.
   out.weekly = {};
   for (const week of ['2026-11-09', '2026-11-02', '2026-10-26', '2026-10-19', '2026-09-28', '2026-08-10']) {
-    await go(page, '#/growth-flow?period=week&week=' + week, '[data-weekly-summary] .ws-week');
-    await expect(page.locator('[data-weekly-summary]')).toHaveAttribute('data-week', week);
-    out.weekly[week] = await page.locator('[data-weekly-summary]').evaluate(texts());
+    await go(page, '#/vocal-growth?period=week&week=' + week, '[data-gm-report="week"]');
+    await expect(page.locator('[data-gm-report="week"]')).toHaveAttribute('data-week', week);
+    out.weekly[week] = await page.locator('[data-gm-report="week"]').evaluate(texts());
   }
   out.weeklyHomeRow = await page.evaluate(() => { const r = VZ.weeklySummaryHomeRow?.(); return r ? {label:r.label, value:r.value, aria:r.aria} : null; });
   // 보컬 분석 · 보컬 트레이닝 tabs.
@@ -151,8 +157,9 @@ for (const [zone, label] of [['Asia/Seoul', 'Korea time'], ['UTC', 'UTC']]) test
   test.use({timezoneId:zone, locale:'ko-KR', viewport:{width:390, height:844}});
   test('every growth number and verdict text is what it was before the data-structure cleanup', async ({page}) => {
     test.setTimeout(120000);
-    const got = JSON.parse(JSON.stringify(await collect(page)));   // as the snapshot file stores it
     const stored = fs.existsSync(FILE) ? JSON.parse(fs.readFileSync(FILE, 'utf8')) : {};
+    const months = Object.keys(stored[zone]?.monthly || {'2026-11':0, '2026-10':0, '2026-09':0, '2026-08':0});
+    const got = JSON.parse(JSON.stringify(await collect(page, months)));   // as the snapshot file stores it
     if (process.env.UPDATE_GROWTH_SNAPSHOT) {
       stored[zone] = got;
       fs.writeFileSync(FILE, JSON.stringify(stored, null, 1) + '\n');
@@ -160,8 +167,14 @@ for (const [zone, label] of [['Asia/Seoul', 'Korea time'], ['UTC', 'UTC']]) test
       return;
     }
     expect(stored[zone], 'snapshot for ' + zone).toBeTruthy();
-    // Section by section, so a difference names the screen it is on.
-    for (const key of Object.keys(stored[zone])) expect(got[key], key).toEqual(stored[zone][key]);
+    // Section by section, so a difference names the screen it is on. The reports' own page head, period tabs, month
+    // picker and week arrows are 나's period switch now (큰 정리 3번): cut from the pinned values, nothing else is.
+    const n = Object.keys(stored[zone].monthly).length, byKey = list => list.slice().sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    const was = {...stored[zone], overallScreen:stored[zone].overallScreen.slice(7),
+      monthly:Object.fromEntries(Object.entries(stored[zone].monthly).map(([k, v]) => [k, v.slice(10 + n)])),
+      weekly:Object.fromEntries(Object.entries(stored[zone].weekly).map(([k, v]) => [k, v.slice(6)])), labStates:byKey(stored[zone].labStates)};
+    const now = {...got, labStates:byKey(got.labStates)};
+    for (const key of Object.keys(was)) expect(now[key], key).toEqual(was[key]);
     expect(Object.keys(got).sort()).toEqual(Object.keys(stored[zone]).sort());
   });
 });

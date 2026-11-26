@@ -1,9 +1,10 @@
-// 성장 개편 안 B, phase 2 — 성장 › 이번 달 (app/growth-month.js) in the real app, with the invented data set of
+// 성장 › 나 (app/growth-month.js) in the real app — the report of one period (큰 정리 3번) — with the invented data set of
 // tests/growth-characterization.fixture.cjs (Friday 2026-11-13, Korea) plus a homework and a 레슨 지적 체크:
-//   ⓐ 한 것 · ⓑ 달라진 것 (전체 · 곡별, 연습 녹음 포함, 지표 자세히) · ⓒ 다음 연습 · ⓓ 지난 흐름 보기, the period switch
-//   (주간 · 월별 · 전체, kept on the device), the old addresses leading into the new tabs, 뒤로, phone and iPad widths.
-// The switch OFF must show 결과 리포트's numbers: 지표 자세히 (월별) is compared with the pinned snapshot
-// (tests/growth-characterization.snapshot.json), and 지표 자세히 (전체) with 지난 흐름 › 전체 분석 on the same data.
+//   ⓐ 한 것 · ⓑ 달라진 것 (one line; 곡마다 자세히 folded: 전체 · 곡별, 연습 녹음 포함) · the period's report (주: 다음 연습 and
+//   주간 요약 · 월: 월별 리포트 · 전체: 전체 리포트), the period switch (주 · 월 · 전체, kept on the device) with ‹ ›, the old
+//   addresses (#/growth-flow, #/growth-changes, #/weekly-summary …) leading into 나 at their period, 뒤로, phone and iPad.
+// The switch OFF must show 결과 리포트's numbers: the 월 report is compared with the pinned snapshot
+// (tests/growth-characterization.snapshot.json).
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
 require('./legacy-session-mode.cjs')(test);
@@ -53,11 +54,12 @@ const overflow = page => page.evaluate(() => ({wide:document.documentElement.scr
 test.use({timezoneId:'Asia/Seoul', locale:'ko-KR'});
 test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
 
-test('나 for 월별 (the default): 큰 단계 · 기본기 8, one line of change, what to practise next, what was done, 지난 흐름 — each says what it compares', async ({page}) => {
+test('나 for 월 (the default): 단계 in one row, what was done, one line of change with 곡마다 자세히, then the month report', async ({page}) => {
   await boot(page);
   await expect(page.locator('.growth-top-tabs a')).toHaveText(['나', '곡', '기록']);
   await expect(page.locator('[data-gm-period="month"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 11월');
+  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 11월 이번 달');
+  await expect(page.locator('[data-gm-move="1"]')).toBeDisabled();            // nothing after this month
   // ⓐ 한 것: entered minutes only (30+20+15+8+12+3×0.5), days with entered time, recordings of November.
   await expect(section(page, 'done').locator('h2')).toHaveText('이번 달에 한 것');
   await expect(page.locator('[data-gm-basis="done"]')).toHaveText('이번 달 기록 · 지난달과 비교: 연습 0분 · 0일');
@@ -82,13 +84,13 @@ test('나 for 월별 (the default): 큰 단계 · 기본기 8, one line of chang
   await expect(page.locator('.lv-tile')).toHaveCount(8);
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/vocal-growth$/);
-  // ONE line of what changed (지난달과 비교, same song), with the two takes one tap away; the full card is its own page.
+  // ONE line of what changed (지난달과 비교, same song), with the two takes one tap away; 곡마다 자세히 opens the full card here.
   await expect(page.locator('[data-gme-line]')).toHaveText(/^\S.* · \S/);
-  await expect(page.locator('[data-gme-listen]')).toHaveAttribute('href', /^#\/vocal-lab\//);
-  await expect(section(page, 'changes')).toHaveCount(0);
+  await expect(page.locator('[data-gme-listen]')).toHaveAttribute('href', /^#\/growth-song\//);
+  await expect(page.locator('[data-gm-changes-fold]')).not.toHaveAttribute('open', '');
   await page.locator('[data-gme-changes]').click();
-  await expect(page).toHaveURL(/#\/growth-changes$/);
-  await expect(page.locator('#top h1')).toHaveText('달라진 것');
+  await expect(page.locator('[data-gm-changes-fold]')).toHaveAttribute('open', '');
+  await expect(page).toHaveURL(/#\/vocal-growth$/);
   // 달라진 것 자세히: last month's latest take vs this month's, same song, method and version.
   await expect(page.locator('[data-gm-basis="changes"]')).toHaveText('지난달과 비교 · 같은 곡을 같은 방법·같은 분석 버전으로 잰 녹음끼리');
   await expect(page.locator('[data-growth-changes] [data-gc-song]').first()).toBeVisible();
@@ -99,9 +101,16 @@ test('나 for 월별 (the default): 큰 단계 · 기본기 8, one line of chang
   await expect(s2.locator('[data-gc-play]')).toHaveCount(2);                          // listen to both
   await expect(s2.locator('[data-listen-open]')).toHaveText('들어 보고 평가');
   await expect(s2.locator('[data-gc-between] summary')).toContainText('그 사이에 한 것');
-  await page.locator('[data-back]').click();
-  await expect(page).toHaveURL(/#\/vocal-growth$/);
-  // 다음 연습: homework first, then the missed lesson point, 기본기, the measured ones and the plans; top three and 더 보기.
+  await expect(page.locator('[data-gm-detail]')).toHaveCount(0);            // switch off: the report below has the measures
+  // The month report under it: 월별 리포트 as it was (이달의 변화 · 6가지 지표 · AI 월간 종합 · 다음 연습 · 지난 기록).
+  const report = page.locator('[data-gm-report="month"]');
+  await expect(report.locator('[data-month-section="results"] .growth-metric')).toHaveCount(6);
+  await expect(report.locator('[data-monthly-ai]')).toBeVisible();
+  await expect(report.locator('[data-month-section="practice"] h2').first()).toHaveText('다음 연습');
+  await expect(report.locator('[data-month-section="practice"] [data-np-all]')).toHaveAttribute('href', '#/next-practice');
+  await expect(page.locator('[data-gm-flow], [data-growth-select], .growth-page-header')).toHaveCount(0);
+  // 다음 연습 of 나 itself (주: the month and 전체 reports carry their own): homework first, then the missed lesson point, 기본기, the measured ones and the plans; top three and 더 보기.
+  await page.locator('[data-gm-period="week"]').click();
   await expect(page.locator('[data-gm-basis="next"]')).toContainText('오늘 기준');
   const items = section(page, 'next').locator(':scope > .gm-next > .gm-next-item');
   await expect(items).toHaveCount(3);
@@ -131,26 +140,19 @@ test('나 for 월별 (the default): 큰 단계 · 기본기 8, one line of chang
   const goals = await page.evaluate(() => VZ.db.dailyGoals.filter(g => g.date === VZ.today() && g.sourceId === 'overall-growth').map(g => g.id));
   expect(goals).toHaveLength(1);
   expect(goals[0]).toMatch(/^overall-growth:2026-11-13:/);
-  // 지난 흐름 → the former 월별 분석 with its AI coach (also in 기록); 뒤로 returns to 나.
-  await expect(page.locator('[data-gm-flow]')).toContainText('달마다의 흐름 · 지난달과 같은 곡끼리 비교');
-  await expect(page.locator('[data-gm-week-ai]')).toHaveCount(0);
-  await page.locator('[data-gm-flow]').click();
-  await expect(page).toHaveURL(/#\/growth-flow\?period=month$/);
-  await expect(page.locator('#top h1')).toHaveText('지난 흐름');
-  await expect(page.locator('[data-growth-select]')).toHaveValue('2026-11');
-  await expect(page.locator('[data-monthly-ai]')).toBeVisible();
-  await page.locator('[data-back]').click();
-  await expect(page).toHaveURL(/#\/vocal-growth$/);
-  await expect(section(page, 'done')).toBeVisible();
+  // 주 has no AI 종합 (the coach server takes a month or the whole record), said in one line.
+  await expect(page.locator('[data-gm-week-ai]')).toContainText('주간 AI 종합은 아직 없어요');
+  await expect(page.locator('[data-monthly-ai], [data-overall-ai]')).toHaveCount(0);
 });
 
-test('period switch: 주간 · 월별 · 전체 change every block and are kept on the device; 주간 has no AI coach', async ({page}) => {
+test('period switch 주 · 월 · 전체 and ‹ ›: each period shows its own report, the address says it, and it is kept', async ({page}) => {
   await boot(page);
-  await expect(section(page, 'next')).toBeVisible();
+  await expect(page.locator('[data-gm-period]')).toHaveText(['주', '월', '전체']);
+  // 주: this week, then the week before with ‹ — 주간 요약 of that week, under 한 것 and 달라진 것.
   await page.locator('[data-gm-period="week"]').click();
   await expect(page.locator('[data-gm-period="week"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page).toHaveURL(/#\/vocal-growth$/);                    // the period is not an address
-  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 11월 9일 – 15일');
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=week$/);       // replaced, not added to the history
+  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 11월 9일 – 15일 이번 주');
   await expect(section(page, 'done').locator('h2')).toHaveText('이번 주에 한 것');
   // The same numbers as 주간 요약 of that week (pinned in the snapshot: 연습 시간 52분, 연습한 날 4).
   const week = SNAPSHOT.weekly['2026-11-09'];
@@ -158,71 +160,88 @@ test('period switch: 주간 · 월별 · 전체 change every block and are kept 
   await expect(tile(page, 'minutes')).toHaveText('52분');
   await expect(tile(page, 'days')).toHaveText(week[week.indexOf('연습한 날') + 1] + '일');
   await expect(page.locator('[data-gm-basis="done"]')).toHaveText('이번 주 기록 · 지난주와 비교: 연습 35분 · 3일');
-  await expect(page.locator('[data-gm-flow]')).toHaveAttribute('href', '#/growth-flow?period=week');
-  // 달라진 것 자세히 follows the same period (kept on the device).
+  const weekly = page.locator('[data-gm-report="week"]');
+  await expect(weekly).toHaveAttribute('data-week', '2026-11-09');
+  await expect(weekly.locator('[data-ws-minutes]')).toHaveText('52분');
+  await expect(weekly.locator('.ws-week, [data-ws-tab]')).toHaveCount(0);      // 나's switch and ‹ › are its controls
+  await expect(page.locator('[data-gm-move="1"]')).toBeDisabled();
+  await page.locator('[data-gm-move="-1"]').click();
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=week&week=2026-11-02$/);
+  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 11월 2일 – 8일');
+  await expect(section(page, 'done').locator('h2')).toHaveText('그 주에 한 것');
+  await expect(page.locator('[data-gm-basis="done"]')).toHaveText(/^그 주 기록 · 지난주와 비교: /);
+  await expect(weekly).toHaveAttribute('data-week', '2026-11-02');
+  const before = SNAPSHOT.weekly['2026-11-02'];
+  await expect(weekly.locator('[data-ws-minutes]')).toHaveText(before[before.indexOf('연습 시간') + 1]);
+  await expect(page.locator('[data-gm-move="1"]')).toBeEnabled();
+  // 곡마다 자세히 follows the period.
   await page.locator('[data-gme-changes]').click();
   await expect(page.locator('[data-gm-basis="changes"]')).toHaveText(/^지난주와 비교 · /);
-  await page.locator('[data-gm-detail] > summary').click();
-  await expect(page.locator('[data-gm-detail] [data-ws-section="growth"]')).toBeVisible();   // 주간 요약's 성장 card
-  await page.locator('[data-back]').click();
+  await page.locator('[data-gm-move="1"]').click();
+  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 11월 9일 – 15일 이번 주');
+  // 월: November, then October with ‹ — 월별 리포트 of that month, the same numbers as pinned.
+  await page.locator('[data-gm-period="month"]').click();
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=month$/);
+  await expect(page.locator('[data-gm-basis="changes"]')).toHaveText(/^지난달과 비교 · /);
+  await page.locator('[data-gm-move="-1"]').click();
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=month&month=2026-10$/);
+  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 10월');
+  await expect(section(page, 'done').locator('h2')).toHaveText('그 달에 한 것');
+  const pinned = SNAPSHOT.monthly['2026-10'], from = pinned.indexOf('이달의 변화'), to = pinned.indexOf('AI 월간 종합 코치');
+  const results = page.locator('[data-gm-report="month"] [data-month-section="results"]');
+  await expect(results).toBeVisible();
+  expect(await results.evaluate(texts())).toEqual(pinned.slice(from, to));
+  // 전체: no arrows; 전체 리포트.
   await page.locator('[data-gm-period="all"]').click();
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=all$/);
+  await expect(page.locator('[data-gm-move]')).toHaveCount(0);
+  await expect(page.locator('[data-gm-label]')).toHaveText('지금까지 전체');
   await expect(section(page, 'done').locator('h2')).toHaveText('지금까지 한 것');
-  await expect(page.locator('[data-gm-flow]')).toHaveAttribute('href', '#/growth-flow?period=all');
-  await page.locator('[data-gme-changes]').click();
   await expect(page.locator('[data-gm-basis="changes"]')).toHaveText(/^처음과 최근 비교 · /);
-  // 전체 compares 처음·최근 (no period): the same song lines as 지난 흐름 › 전체 분석's 무엇이 달라졌나.
-  await expect(page.locator('[data-growth-changes] [data-gc-song]').first()).toBeVisible();
-  const allLines = await lines(page);
-  await page.locator('[data-back]').click();
+  await expect(page.locator('[data-gm-report="all"] [data-overall-body] .growth-stats-grid .growth-stat')).toHaveCount(6);
+  await expect(page.locator('[data-gm-report="all"] [data-overall-ai]')).toBeVisible();
+  await expect(page.locator('[data-gm-week-ai]')).toHaveCount(0);
+  // Kept on the device: a reload opens 전체 again.
   await reload(page);
   await expect(page.locator('[data-gm-period="all"]')).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('[data-gm-flow]').click();
-  await expect(page.locator('[data-overall-body]')).toBeVisible();
-  await expect(page.locator('[data-growth-changes] [data-gc-song]').first()).toBeVisible();
-  expect(await lines(page)).toEqual(allLines);
-  // 지난 흐름 › 주간: no AI coach, said in one line.
-  await page.locator('.growth-weekly-tab').click();
-  await expect(page.locator('[data-flow-week-ai]')).toContainText('주간 AI 코치는 아직 없어요');
-  await expect(page.locator('[data-monthly-ai], [data-overall-ai]')).toHaveCount(0);
+  await expect(page.locator('[data-gm-report="all"] [data-overall-body]')).toBeVisible();
 });
 
-test('연습 녹음 포함: off by default (결과 리포트 numbers, as pinned), on adds 연습실 · 트레이닝 takes, and is kept', async ({page}) => {
-  await boot(page, {hash:'#/growth-changes'});   // 달라진 것 자세히 (성장 v2: 나 says it in one line)
+test('연습 녹음 포함: off by default (the report shows 결과 리포트 numbers, as pinned), on adds 연습실 · 트레이닝 takes, and is kept', async ({page}) => {
+  await boot(page, {hash:'#/growth-changes'});   // the old 달라진 것 자세히 → 나 with 곡마다 자세히 open
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=month&changes=1$/);
+  await expect(page.locator('[data-gm-changes-fold]')).toHaveAttribute('open', '');
   const toggle = page.locator('[data-gm-practice]');
   await expect(toggle).not.toBeChecked();
   await expect(page.locator('[data-gm-practice-note]')).toHaveText('곡 녹음만 견줘요. 노래 연습실·트레이닝 연습 녹음은 빼요.');
-  // 지표 자세히 (월별), switch off: exactly what 월별 분석 says for November in the pinned snapshot.
+  // The month report, switch off: exactly what 월별 분석 says for November in the pinned snapshot; no 지표 자세히 twice.
   const pinned = SNAPSHOT.monthly['2026-11'], from = pinned.indexOf('이달의 변화'), to = pinned.indexOf('AI 월간 종합 코치');
   expect(from).toBeGreaterThan(0);
-  const detail = page.locator('[data-gm-detail] .gm-detail-body');
-  await page.locator('[data-gm-detail] > summary').click();
-  expect(await detail.evaluate(texts())).toEqual(pinned.slice(from, to));
+  const results = page.locator('[data-gm-report="month"] [data-month-section="results"]');
+  await expect(results).toBeVisible();
+  expect(await results.evaluate(texts())).toEqual(pinned.slice(from, to));
+  await expect(page.locator('[data-gm-detail]')).toHaveCount(0);
+  await expect(page.locator('[data-growth-changes] [data-gc-song]').first()).toBeVisible();
   const offLines = await lines(page);
   await toggle.check();
   await expect(page.locator('[data-gm-practice-note]')).toContainText('노래 연습실·트레이닝 연습 녹음도 넣어 견줘요');
-  // Home (s5) gets its 연습실 (er) and 트레이닝 (et) takes of November: this month's 음정 정확도 is not the pinned one.
+  // Home (s5) gets its 연습실 (er) and 트레이닝 (et) takes of November: 지표 자세히 · 연습 녹음 포함 says the month with them;
+  // the report under it stays 결과 리포트's.
   await page.locator('[data-gm-detail] > summary').click();
   const on = await page.locator('[data-gm-detail] .gm-detail-body').evaluate(texts());
   expect(on).not.toEqual(pinned.slice(from, to));
+  expect(await results.evaluate(texts())).toEqual(pinned.slice(from, to));
   expect(await page.evaluate(() => localStorage.getItem('vzip:growth-practice'))).toBe('1');
   await reload(page);
   await expect(page.locator('[data-gm-practice]')).toBeChecked();
   await page.locator('[data-gm-practice]').uncheck();
   await expect(page.locator('[data-growth-changes] [data-gc-song]').first()).toBeVisible();
   expect(await lines(page)).toEqual(offLines);
-  await page.locator('[data-gm-detail] > summary').click();
-  expect(await page.locator('[data-gm-detail] .gm-detail-body').evaluate(texts())).toEqual(pinned.slice(from, to));
-  // 지표 자세히 (전체), switch off: the six cards of 지난 흐름 › 전체 분석, word for word.
-  await page.locator('[data-gm-period="all"]').click();
-  await page.locator('[data-gm-detail] > summary').click();
-  const mine = await page.locator('[data-gm-detail] .growth-metrics').evaluate(texts());
-  await page.locator('[data-gm-flow]').click();
-  await expect(page.locator('[data-overall-body]')).toBeVisible();
-  expect(await page.locator('[data-overall-body] .growth-stats-grid').evaluate(texts())).toEqual(mine);
+  await expect(page.locator('[data-gm-detail]')).toHaveCount(0);
 });
 
-test('전체 · 곡별 ▾ narrows 달라진 것 and 지표 자세히 to one song, is kept, and is shared with 지난 흐름 › 월별', async ({page}) => {
-  await boot(page, {hash:'#/growth-changes'});   // 달라진 것 자세히 (성장 v2: 나 says it in one line)
+test('전체 · 곡별 ▾ opens the chosen song on its own screen, at this month for 월별', async ({page}) => {
+  await boot(page, {hash:'#/vocal-growth?period=month&changes=1'});   // 나 › 곡마다 자세히
   await expect(page.locator('[data-growth-changes] [data-gc-song]').first()).toBeVisible();
   await expect(page.locator('[data-gm-scope="all"]')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('[data-gm-scope="song"]').click();
@@ -230,48 +249,87 @@ test('전체 · 곡별 ▾ narrows 달라진 것 and 지표 자세히 to one son
   await expect(choices.first()).toBeVisible();
   await expect(page.locator('.sheet [data-mbs-song="s5"]')).toContainText('지난달 녹음과 견줄 수 있어요');
   await page.locator('.sheet [data-mbs-song="s5"]').click();
-  await expect(page.locator('[data-gm-scope="song"]')).toHaveText('Home');
-  await expect(page.locator('[data-gm-scope="song"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('[data-growth-changes] [data-gc-song]')).toHaveCount(1);
-  expect(await lines(page)).toEqual(['s5']);
-  await expect(page.locator('[data-growth-changes] [data-gc-group="tasks"]')).toHaveCount(0);   // not per song
-  await page.locator('[data-gm-detail] > summary').click();
-  await expect(page.locator('[data-gm-detail] .growth-section h2')).toHaveText('이달의 변화 · Home');
-  await reload(page);
-  await expect(page.locator('[data-gm-scope="song"]')).toHaveText('Home');
-  // The same choice in 지난 흐름 › 월별 분석 (claude/monthly-by-song).
-  await page.locator('[data-gm-flow]').click();
-  await expect(page.locator('[data-mbs-scope="song"]')).toHaveText('Home');
+  // 곡 하나 (큰 정리 2번): the song's own screen at this month's chip, with that month's line for the song.
+  await expect(page).toHaveURL(/#\/growth-song\/s5\?month=2026-11$/);
+  await expect(page.locator('[data-gsp-period="month"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-song-section="changes"] [data-growth-changes] [data-gc-song]')).toHaveCount(1);
+  await expect(page.locator('[data-song-month-detail] .growth-section h2')).toHaveText('이달의 변화 · Home');
+  // 뒤로: 나 at the month, 곡마다 자세히 open, every song again.
   await page.locator('[data-back]').click();
-  await page.locator('[data-gm-scope="all"]').click();
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=month&changes=1$/);
   await expect(page.locator('[data-gm-scope="all"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-growth-changes] [data-gc-song]')).toHaveCount(3);
-  // A song without a take in the period: 전체 with a note, the choice kept.
-  // The stored choice is read when the tab is drawn: draw it again (before, this only passed when a late list event
-  // happened to redraw the tab after the line below — it failed about one run in six).
-  await page.evaluate(() => localStorage.setItem('vzip:monthly-growth-song', 's3'));
-  await reload(page);
-  await expect(page.locator('[data-gm-section="changes"]')).toBeVisible();
-  await page.locator('[data-gm-period="week"]').click();
-  await expect(page.locator('[data-gm-song-fallback]')).toHaveText('Memory 녹음이 이 기간에는 없어 전체를 보여 드려요.');
+});
+
+test('AI 종합 (월 · 전체) asks first and says what is sent: no request before 보내기, none after 취소', async ({page}) => {
+  await boot(page);
+  await page.evaluate(() => { window.__calls = []; window.vzipCloudSignedIn = () => true; window.vzipCloudUserId = () => 'u'; window.vzipCloudSessionId = () => 's';
+    window.vzipCloudCoach = async input => { window.__calls.push(input.mode + ':' + input.month); return {mode:input.mode, month:input.month, note:'요약: ' + input.mode + ' 결과예요.\n좋아진 점: 음정\n보완할 점: 호흡\n다음 연습: 롱톤'}; }; });
+  const calls = () => page.evaluate(() => window.__calls.slice());
+  const sheet = page.locator('.sheet');
+  // 월: 취소 sends nothing.
+  const month = page.locator('[data-gm-report="month"] [data-monthly-ai-run]');
+  await month.click();
+  await expect(sheet).toContainText('AI 월간 종합 받기');
+  await expect(sheet).toContainText('2026년 11월 측정 요약 — 곡 녹음 14개, 분석 가능 11개');
+  await expect(sheet).toContainText('저장된 AI 청취 코멘트');
+  await expect(sheet).toContainText('원본 음원은 보내지 않으며');
+  expect(await calls()).toEqual([]);
+  await sheet.locator('[data-close]').first().click();
+  await expect(sheet).toHaveCount(0);
+  await page.waitForTimeout(300);
+  expect(await calls()).toEqual([]);
+  // …보내기 sends it once; the saved result shows.
+  await month.click();
+  await sheet.locator('[data-ok]').click();
+  await expect.poll(calls).toEqual(['monthly:2026-11']);
+  await expect(page.locator('[data-gm-report="month"] [data-monthly-ai]')).toContainText('monthly 결과예요');
+  // 전체: the same.
+  await page.locator('[data-gm-period="all"]').click();
+  const all = page.locator('[data-gm-report="all"] [data-overall-ai-run]');
+  await all.click();
+  await expect(sheet).toContainText('AI 전체 종합 받기');
+  await expect(sheet).toContainText('음역·최고음·고음·파사지오 값은 보내지 않아요');
+  await expect(sheet).toContainText('기존 AI 청취 코멘트');
+  await sheet.locator('[data-close]').first().click();
+  await page.waitForTimeout(300);
+  expect(await calls()).toEqual(['monthly:2026-11']);
+  await all.click();
+  await sheet.locator('[data-ok]').click();
+  await expect.poll(calls).toEqual(['monthly:2026-11', 'overall:all']);
+  await expect(page.locator('[data-gm-report="all"] [data-overall-ai]')).toContainText('overall 결과예요');
+  await page.evaluate(() => { window.vzipCloudSignedIn = () => false; });
 });
 
 /** To 오늘 without a document load: WebKit reloads on goto() to the URL it is already on, and the in-page fixtures would be gone. */
 const toHome = async page => { await page.evaluate(() => { if (location.hash !== '#/home') location.hash = '#/home'; }); await expect(page).toHaveURL(/#\/home$/); };
 test('older addresses lead into the new tabs, and 뒤로 is what it was', async ({page}) => {
   await boot(page, {hash:''});
-  for (const [from, to] of [['#/vocal-growth?mode=monthly', /#\/growth-flow\?period=month$/], ['#/weekly-summary?week=2026-11-02', /#\/growth-flow\?period=week&week=2026-11-02$/],
-    ['#/weekly-summary', /#\/growth-flow\?period=week$/], ['#/growth', /#\/vocal-growth$/], ['#/vocal-training', /#\/home$/], ['#/vocal-growth/training', /#\/home$/],   // practice is on 오늘 › 연습하기 (phase 4)
-   
-    ['#/vocal-growth/analysis', /#\/vocal-analysis$/], ['#/vocal-growth?gc=s2', /#\/growth-flow\?period=all$/]]) {
+  // 큰 정리 3번: 지난 흐름 (#/growth-flow), 달라진 것 자세히 (#/growth-changes) and 주간 요약 are 나 at that period now; the
+  // older addresses that led to them lead there in turn.
+  for (const [from, to] of [['#/vocal-growth?mode=monthly', /#\/vocal-growth\?period=month$/], ['#/weekly-summary?week=2026-11-02', /#\/vocal-growth\?period=week&week=2026-11-02$/],
+    ['#/weekly-summary', /#\/vocal-growth\?period=week$/], ['#/growth', /#\/vocal-growth$/], ['#/vocal-training', /#\/home$/], ['#/vocal-growth/training', /#\/home$/],   // practice is on 오늘 › 연습하기 (phase 4)
+    ['#/growth-flow?period=week&week=2026-11-02', /#\/vocal-growth\?period=week&week=2026-11-02$/], ['#/growth-flow?period=month', /#\/vocal-growth\?period=month$/],
+    ['#/growth-flow?period=month&month=2026-10', /#\/vocal-growth\?period=month&month=2026-10$/], ['#/growth-flow?period=all', /#\/vocal-growth\?period=all&changes=1$/],
+    ['#/growth-flow', /#\/vocal-growth\?period=all&changes=1$/], ['#/growth-changes', /#\/vocal-growth\?period=\w+&changes=1$/],
+    ['#/vocal-growth/analysis', /#\/vocal-analysis$/], ['#/vocal-growth?gc=s2', /#\/vocal-growth\?period=all(&gc=s2)?$/]]) {
     await toHome(page);
     await page.evaluate(h => { location.hash = h; }, from);
     await expect(page, from).toHaveURL(to);
     await page.goBack();                                              // replaced: 뒤로 does not bounce back into it
     await expect(page, from).toHaveURL(/#\/home$/);
   }
+  // Each lands on its period: the week, the month, 전체.
   await toHome(page); await page.evaluate(() => { location.hash = '#/weekly-summary?week=2026-11-02'; });
-  await expect(page.locator('[data-weekly-summary] [data-ws-range]')).toHaveText('2026년 11월 2일 – 8일');
+  await expect(page.locator('[data-gm-period="week"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 11월 2일 – 8일');
+  await expect(page.locator('[data-gm-report="week"]')).toHaveAttribute('data-week', '2026-11-02');
+  await toHome(page); await page.evaluate(() => { location.hash = '#/growth-flow?period=month&month=2026-10'; });
+  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 10월');
+  await expect(page.locator('[data-gm-report="month"] [data-month-section="results"]')).toBeVisible();
+  await toHome(page); await page.evaluate(() => { location.hash = '#/growth-flow?period=all'; });
+  await expect(page.locator('[data-gm-period="all"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-gm-report="all"] [data-overall-body]')).toBeVisible();
   await toHome(page); await page.evaluate(() => { location.hash = '#/vocal-growth?gc=s2'; });
   try { await expect(page.locator('[data-gc-song="s2"]').first()).toBeInViewport({timeout:15000}); }
   catch (e) { // say what the screen showed instead (CI artifacts cannot be read)
@@ -295,14 +353,14 @@ test('older addresses lead into the new tabs, and 뒤로 is what it was', async 
   await expect(page.locator('.v-nav a[data-nav="growth"]')).toHaveAttribute('aria-current', 'page');
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/vocal-growth$/);
-  // Tabs replace the address; 이번 달 → 지난 흐름 → 뒤로 → 이번 달 → 뒤로 leaves 성장.
+  // Tabs and periods replace the address; 나 → 주 → ‹ → 곡 → 나 → 뒤로 leaves 성장 in one step.
   await toHome(page); await page.evaluate(() => { location.hash = '#/vocal-growth'; });
+  await page.locator('[data-gm-period="week"]').click();
+  await page.locator('[data-gm-move="-1"]').click();
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=week&week=2026-11-02$/);
   await page.locator('.growth-top-tabs a').nth(1).click();
   await expect(page).toHaveURL(/#\/vocal-analysis$/);
   await page.locator('.growth-top-tabs a').nth(0).click();
-  await page.locator('[data-gm-flow]').click();
-  await expect(page).toHaveURL(/#\/growth-flow\?period=/);
-  await page.goBack();
   await expect(page).toHaveURL(/#\/vocal-growth$/);
   await page.goBack();
   await expect(page).toHaveURL(/#\/home$/);
@@ -315,13 +373,13 @@ test('phone 390 × 844: one column, 44px targets, nothing wider than the screen'
   await expect(section(page, 'line')).toBeVisible();
   for (const period of ['week', 'month', 'all']) {
     await page.locator('[data-gm-period="' + period + '"]').click();
-    await expect(section(page, 'next')).toBeVisible();
+    await expect(page.locator('[data-gm-report="' + period + '"] > *').first()).toBeVisible();
     expect(await overflow(page), period).toEqual({wide:false, over:0});
-    const col = await page.evaluate(() => [...document.querySelectorAll('[data-gm-section]')].map(e => Math.round(e.getBoundingClientRect().left)));
+    const col = await page.evaluate(() => [...document.querySelectorAll('.gm-grid > [data-gm-section]')].filter(e => e.getBoundingClientRect().width).map(e => Math.round(e.getBoundingClientRect().left)));
     expect(new Set(col).size, period).toBe(1);
   }
   await page.locator('[data-gm-period="month"]').click();
-  for (const sel of ['[data-gm-period]', '[data-gme-lv]', '[data-gme-listen]', '[data-gme-changes]', '.gm-next-actions > *', '[data-gm-flow]', '.growth-top-tabs a']) {
+  for (const sel of ['[data-gm-period]', '[data-gm-move]', '[data-gme-lv]', '[data-gme-listen]', '[data-gme-changes]', '.gm-next-actions > *', '.growth-top-tabs a']) {
     for (const el of await page.locator(sel).all()) { const b = await el.boundingBox(); if (b && b.height) expect(b.height, sel).toBeGreaterThanOrEqual(44); }
   }
   if (SHOTS) await page.screenshot({path:path.join(SHOTS, 'growth-month-390x844.png'), fullPage:false});

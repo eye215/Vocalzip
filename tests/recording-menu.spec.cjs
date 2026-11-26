@@ -93,7 +93,7 @@ test('Each item does what it did: 정보 수정, 곡 지정 (title follows the s
   await expect(page.getByRole('dialog', {name:'공유 링크'})).toBeVisible();
   await close(page);
   await more.click(); await menu(page).locator('[data-act=analyze]').click();
-  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?selection=1/);
+  await expect(page).toHaveURL(/#\/growth-song\/s1\?selection=1/);
 
   // 파일 삭제: the same confirmation as before; 취소 keeps the file, 파일 영구 삭제 removes it.
   more = await SCREENS['전체 녹음'](page, 'row-import');
@@ -165,16 +165,16 @@ for (const [width, height] of [[834, 1194], [1280, 900]]) test('Tablet ' + width
   }
 });
 
-test('An old #/recording/<id> link of a recording with a song opens 곡 분석 on that take; without a song it stays the playback page', async ({page}) => {
+test('An old #/recording/<id> link of a recording with a song opens the song growth screen on that take; without a song it stays the playback page', async ({page}) => {
   await open(page);
   await fresh(page, '#/recording/row-song-s1');
-  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?a=row-song-s1$/);
+  await expect(page).toHaveURL(/#\/growth-song\/s1\?a=row-song-s1$/);
   await expect(page.locator('.vl-player-title strong')).toHaveText('유형 row-song-s1');
   // A 트레이닝 practice take of the song (연습 녹음 포함 off): the same take opens, not the newest song take.
   expect(await page.evaluate(() => window.VZ.growthSong?.practice?.())).toBeFalsy();
   await page.evaluate(() => { window.__rows['row-practice-training'].songId = 's1'; window.__upd['row-practice-training'] = '2026-11-10T09:00:00Z'; window.VZ.media.invalidate(); });
   await fresh(page, '#/recording/row-practice-training');
-  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?a=row-practice-training$/);
+  await expect(page).toHaveURL(/#\/growth-song\/s1\?a=row-practice-training$/);
   await expect(page.locator('.vl-player-title strong')).toHaveText('유형 row-practice-training');
   // 뒤로 does not come back to the old link (replace).
   await page.goBack();

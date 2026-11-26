@@ -722,7 +722,8 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     // The page header already says 곡 상세: the card shows the title, 작품 / 아티스트 and the totals.
     return '<div class="song-head vz-song-detail-hero"><strong class="vz-song-detail-title">' + esc(s.title) + '</strong><span class="vz-song-detail-sub" data-song-show' + (s.show ? '' : ' hidden') + '>' + esc(s.show || '') + '</span><span class="vz-song-detail-summary" data-summary></span>' +
       // UI 정리 3차: how the song is going (성장 › 곡 하나), one tap from the song — in the card's corner, so the tabs stay high.
-      '<a class="vz-song-hero-btn" href="#/growth-song/' + encodeURIComponent(s.id) + '" data-song-hero-growth><i class="ph ph-chart-line-up" aria-hidden="true"></i>성장 보기</a></div>' +
+      // 큰 정리 2번: the song's growth in ONE line — its 한마디 (the verdict every 성장 screen shares) · 성장 보기 › (the song screen).
+      '<a class="vz-song-hero-btn" href="#/growth-song/' + encodeURIComponent(s.id) + '" data-song-hero-growth><i class="ph ph-chart-line-up" aria-hidden="true"></i><span data-song-growth-word hidden></span><span>성장 보기</span><i class="ph ph-caret-right" aria-hidden="true"></i></a></div>' +
       '<div data-repertoire></div><div data-score-points></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
   },
   async mount(main, r) {
@@ -929,7 +930,10 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       if (!held) refresh(); else if (cur) head(cur);
     };
     window.addEventListener('vzip:data-changed', songSynced);
-    media = (await M.list().catch(() => [])).filter(m => m.songId === s.id);
+    const all = await M.list().catch(() => []);
+    media = all.filter(m => m.songId === s.id);
+    // 한마디 of the one-line growth link (read-only, the same verdict as 성장 › 곡).
+    try { const word = main.querySelector('[data-song-growth-word]'), v = VZ.growthSong?.of(all, s.id)?.now; if (word && v?.word && v.state !== 'none') { word.textContent = v.word + ' · '; word.dataset.state = v.state; word.hidden = false; const link = word.parentElement, sum = main.querySelector('[data-summary]'); if (sum && link.offsetWidth) sum.style.paddingRight = (link.offsetWidth + 16) + 'px'; } } catch (error) { console.error(error); }
     if (body.isConnected && !selectionTouched) { VZ.mediaSelection?.clear(); draw(); }
     if (await M.fillDurations(media) && body.isConnected && !selectionTouched && !body.querySelector('.media-open:not([hidden])')) { VZ.mediaSelection?.clear(); draw(); }
   }});

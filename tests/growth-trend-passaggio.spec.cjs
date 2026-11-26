@@ -125,7 +125,7 @@ test.describe('phone 375', () => {
     await noOverflow(page);
     await shot(page, '[data-growth-metric="passaggio"]', 'phone-375-passaggio-recurring-and-hold.png');
     // 월별 분석: the month shown — one or two takes of a song in a month are too few, and it says so.
-    await page.locator('[data-growth-mode="monthly"]').click();
+    await page.locator('[data-gm-period="month"]').click();
     const month = page.locator('[data-growth-metric="passaggio"]');
     await month.locator('summary').click();
     await expect(month.locator('.growth-song-rows li p').first()).toHaveText('세부 측정이 있는 믿을 만한 녹음이 5개는 있어야 해요 (지금 2개)');

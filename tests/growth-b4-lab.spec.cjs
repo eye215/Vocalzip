@@ -197,14 +197,14 @@ test('old addresses: #/vocal-training and #/vocal-growth/training land on 오늘
     await homeLit(page);
   };
   for (const old of ['#/vocal-training', '#/vocal-growth/training']) {
-    await to(page, '#/vocal-growth');
+    await to(page, '#/vocal-growth?period=week');                     // 나 › 주 carries 다음 연습 (큰 정리 3번)
     await expect(page.locator('[data-gm-section="next"]')).toBeVisible();
     await to(page, old);
     await shown();
     await page.goBack();                                              // replaced: 뒤로 does not bounce back into the old address
-    await expect(page).toHaveURL(/#\/vocal-growth$/);
+    await expect(page).toHaveURL(/#\/vocal-growth\?period=week$/);
   }
-  // 이번 달 › 다음 연습: one line where the practice entries used to be reached from 성장.
+  // 나 › 다음 연습: one line where the practice entries used to be reached from 성장.
   const line = page.locator('[data-gm-section="next"] [data-gm-today]');
   await expect(line).toHaveText('연습은 오늘 탭에서 해요');
   expect((await line.boundingBox()).height).toBeGreaterThanOrEqual(44);
@@ -223,7 +223,7 @@ test('old addresses: #/vocal-training and #/vocal-growth/training land on 오늘
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => scrollY)).toBe(0);
   // Every other old address keeps working (tests/growth-month.spec.cjs and tests/growth-unify.spec.cjs follow each one).
-  for (const [from, url] of [['#/growth', /#\/vocal-growth$/], ['#/vocal-growth/analysis', /#\/vocal-analysis$/], ['#/weekly-summary', /#\/growth-flow\?period=week$/], ['#/vocal-growth?mode=monthly', /#\/growth-flow\?period=month$/]]) {
+  for (const [from, url] of [['#/growth', /#\/vocal-growth$/], ['#/vocal-growth/analysis', /#\/vocal-analysis$/], ['#/weekly-summary', /#\/vocal-growth\?period=week$/], ['#/vocal-growth?mode=monthly', /#\/vocal-growth\?period=month$/]]) {
     await to(page, '#/songs'); await to(page, from);
     await expect(page, from).toHaveURL(url);
   }
@@ -242,8 +242,8 @@ test('one name per thing: 다음 연습 · 녹음 분석 · 곡 분석 — the o
   await check('오늘', '.vz-student-home [data-home-practice]');
   await row(page, 'roadmap').click();
   await check('내 로드맵', '[data-roadmap]');
-  await to(page, '#/vocal-growth');
-  expect(await check('이번 달', '[data-gm-section="next"]')).toContain('다음 연습');
+  await to(page, '#/vocal-growth?period=week');
+  expect(await check('나 · 주', '[data-gm-section="next"]')).toContain('다음 연습');
   await to(page, '#/growth-flow?period=all');
   const overall = await check('지난 흐름 전체', '[data-overall-body]');
   expect(overall).toContain('다음 연습');
@@ -251,16 +251,17 @@ test('one name per thing: 다음 연습 · 녹음 분석 · 곡 분석 — the o
   await expect(page.locator('.vc-entry')).toHaveCount(0);
   await expect(page.locator('[data-growth-anchor="practice"] h2')).toHaveText('다음 연습');
   await to(page, '#/growth-flow?period=month');
-  expect(await check('지난 흐름 월별', '[data-growth-select]')).toContain('다음 연습');
+  expect(await check('나 · 월', '[data-gm-report="month"] [data-month-section="results"]')).toContain('다음 연습');
   await expect(page.locator('[data-monthly-jump="practice"]')).toHaveText('다음 연습');
   await expect(page.locator('.vc-entry')).toHaveCount(0);
   await to(page, '#/growth-flow?period=week');
-  await check('지난 흐름 주간', '[data-weekly-summary] .ws-week');
+  await check('나 · 주간 요약', '[data-gm-report="week"] .ws-card');
   await to(page, '#/vocal-analysis');
   await check('곡', '[data-hub-song]');
   await to(page, '#/vocal-lab/s1');
   await check('곡 분석', '[data-song-section="changes"]');
-  await expect(page.locator('#top h1')).toHaveText('곡 분석');
+  await expect(page).toHaveURL(/#\/growth-song\/s1$/);          // 곡 분석 is the song screen (큰 정리 2번)
+  await expect(page.locator('#top h1')).toHaveText('곡');
   await to(page, '#/growth-lab');
   await check('연구소', '[data-lab-tool="reports"]');
   await to(page, '#/growth-ear');

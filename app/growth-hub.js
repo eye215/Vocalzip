@@ -1,9 +1,11 @@
 /* 성장 (#385 통합, then 성장 개편 안 B — scratchpad GROWTH_B_PLAN, phases 2–4): one 성장 menu with three tabs.
- *   이번 달  #/vocal-growth — app/growth-month.js: 한 것 · 달라진 것 · 다음 연습 · 지난 흐름 보기 (주간·월별·전체 inside).
- *            지난 흐름 (#/growth-flow?period=week|month|all) is its sub-page: the former 결과 리포트 screens, unchanged.
+ *   나       #/vocal-growth — app/growth-month.js: the report of one period (주 · 월 · 전체 with ‹ ›; 큰 정리 3번): 한 것 ·
+ *            달라진 것 (곡마다 자세히 folded) · that period's 주간 요약 / 월별 / 전체 리포트. #/growth-flow?period=… and
+ *            #/growth-changes (the former sub-pages) lead there.
  *   곡       #/vocal-analysis — the songs with an analysed take, each with ONE word (좋아진 방향 · 비슷함 · 판정 보류 ·
  *            녹음 하나 …) from the verdict every 성장 screen shares (VZ.growthSong below, app/growth-song-model.js), then
- *            곡 하나 (#/vocal-lab/<songId>, app/vocal-lab.js): 이 곡의 변화 · 약한 곳 · 두 녹음 비교 · 깊이 보기
+ *            곡 하나 (#/growth-song/<songId>, app/vocal-lab.js + app/growth-song-page.js; #/vocal-lab/<id> leads there):
+ *            기간 · 한마디 · 처음 vs 최근 · 녹음 타임라인 · 약한 곳 · 다음 연습 · 들어 본 평가와 두 녹음 비교 · 깊이 보기
  *   연구소   #/growth-lab — app/growth-lab.js: the second-tier tools (소리 깊이 보기 · 기록·기준), each with its state
  * The things you DO (오늘 연습 세트 · 매일 보이스 체크 · 노래 연습실 · 보컬 트레이닝) are on 오늘 › 연습하기
  * (design-system/student-home-app.js); their screens belong to the 오늘 tab.
@@ -48,7 +50,7 @@ document.addEventListener('click', ev => {
 // link, a fresh window): the 성장 tab it belongs to instead of 오늘 — a song's screens → 곡, the deep tools → 연구소,
 // anything else → 이번 달. With a history it is the ordinary 뒤로 (app/core.js). The practice screens (보이스 체크,
 // 노래 연습실, 연습 세트, 따라 하기) belong to 오늘, where the ordinary 뒤로 already leads.
-const HOME_OF = {'vocal-lab':'#/vocal-analysis', analysis:'#/vocal-analysis', 'lab-reports':'#/growth-lab', 'voice-path':'#/growth-lab',
+const HOME_OF = {'vocal-lab':'#/vocal-analysis', 'growth-song':'#/vocal-analysis', analysis:'#/vocal-analysis', 'lab-reports':'#/growth-lab', 'voice-path':'#/growth-lab',
   'precision-measurement':'#/growth-lab', 'precision-report':'#/growth-lab', 'growth-ear':'#/growth-lab', 'growth-basis':'#/growth-lab'};
 document.addEventListener('click', ev => {
   if (!ev.target.closest?.('[data-back]') || history.length > 1) return;
@@ -95,11 +97,12 @@ V.growthSong = {
     return out;
   },
   of(items, songId, practice) { return V.growthSong.verdicts(items, practice).get(songId) || null; },
-  /** 지난달 대비 for one song (this month against the latest take before it), or null when there is no such pair. */
-  month(items, songId, practice = V.growthSong.practice()) {
+  /** 지난달 대비 for one song (this month against the latest take before it), or null when there is no such pair.
+   * span {from, to}: another month (곡 하나's 지난달 chip) compared the same way; this month when left out. */
+  month(items, songId, practice = V.growthSong.practice(), span = null) {
     const S = window.VzipGrowthSong, GM = window.VzipGrowthMonth, x = V.growthSong.of(items, songId, practice);
     if (!S || !GM || !x) return null;
-    try { const p = GM.period('month', todayOf()); return S.month({...x.args, period:{from:p.from, to:p.to}}); } catch (error) { console.error(error); return null; }
+    try { const p = span || GM.period('month', todayOf()); return S.month({...x.args, period:{from:p.from, to:p.to}}); } catch (error) { console.error(error); return null; }
   }
 };
 /** The one word of a song row — 좋아진 방향 · 아쉬운 방향 · 엇갈림 · 비슷함 · 판정 보류 · 녹음 하나 · 분석 전: a state, never a score. */
@@ -168,7 +171,7 @@ async function mountAnalysis(host) {
   };
   const waitingRow = s => {
     const t = bySong.get(s.id), part = [t.practice ? '연습 ' + t.practice + '개' : '', t.video ? '영상 ' + t.video + '개' : ''].filter(Boolean).join(' · ');
-    return row('#/vocal-lab/' + encodeURIComponent(s.id), 'waveform', s.title, '녹음 ' + t.count + '개' + (part ? ' (' + part + ' 포함)' : '') + (t.latest ? ' · 최근 ' + shortDate(t.latest) : ''),
+    return row('#/growth-song/' + encodeURIComponent(s.id), 'waveform', s.title, '녹음 ' + t.count + '개' + (part ? ' (' + part + ' 포함)' : '') + (t.latest ? ' · 최근 ' + shortDate(t.latest) : ''),
       ' data-hub-song="' + e(s.id) + '" data-hub-state="none"', chip('none', '분석 전'));
   };
   // 연습: a 연습실 · 트레이닝 연습 recording of a song. 영상: a video.

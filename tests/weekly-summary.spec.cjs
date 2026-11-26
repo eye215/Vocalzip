@@ -107,10 +107,11 @@ test('home shows 지난주 요약 on Monday and opens the seeded week; reading i
   await expect(row).toContainText('연습 1시간 · 3일');
   const before = await page.evaluate(() => ({db:JSON.stringify(VZ.db),writes:window.__serverWrites.length}));
   await row.click();
-  await expect(page).toHaveURL(/#\/growth-flow\?period=week&week=2026-11-09$/);   // 지난 흐름 › 주간 (성장 개편 phase 2)
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=week&week=2026-11-09$/);   // 성장 › 나, 주 · 지난주 (큰 정리 3번)
   const s = summary(page);
-  await expect(s.locator('[data-ws-range]')).toHaveText('2026년 11월 9일 – 15일');
-  await expect(s.locator('.ws-week-label small')).toHaveText('지난주');
+  await expect(page.locator('[data-gm-period="week"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 11월 9일 – 15일');
+  await expect(s).toHaveAttribute('data-week', '2026-11-09');
   await expect(s.locator('[data-ws-minutes]')).toHaveText('1시간');               // 30 + 20 + 10: never recording length
   await expect(s.locator('[data-ws-days]')).toContainText('3');
   await expect(s.locator('.ws-compare')).toContainText('지난주보다 +45분');
@@ -137,42 +138,45 @@ test('home shows 지난주 요약 on Monday and opens the seeded week; reading i
   await expect(page.locator('.vz-summary-row[data-row=weekly]')).toHaveCount(0);
 });
 
-test('previous / next week, empty week and the 성장 tab entry',async({page})=>{
+test('previous / next week with the ‹ › of 나, empty week and the old addresses',async({page})=>{
   await boot(page,{hash:'#/growth-flow?period=all'});
-  await page.locator('.growth-weekly-tab').click();
-  await expect(page).toHaveURL(/#\/growth-flow\?period=week$/);
-  await expect(page.locator('[data-flow-week-ai]')).toContainText('주간 AI 코치는 아직 없어요');
-  const s = summary(page);
-  await expect(s.locator('[data-ws-range]')).toHaveText('2026년 11월 16일 – 22일');
-  await expect(s.locator('.ws-week-label small')).toHaveText('이번 주');
-  await expect(s.locator('[data-ws-move="1"]')).toBeDisabled();
-  await s.locator('[data-ws-move="-1"]').click();
-  await expect(s.locator('[data-ws-range]')).toHaveText('2026년 11월 9일 – 15일');
+  await page.locator('[data-gm-period="week"]').click();
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=week$/);
+  await expect(page.locator('[data-gm-week-ai]')).toContainText('주간 AI 종합은 아직 없어요');
+  const s = summary(page), label = page.locator('[data-gm-label]'), move = d => page.locator('[data-gm-move="' + d + '"]');
+  await expect(label).toHaveText('2026년 11월 16일 – 22일 이번 주');
+  await expect(move(1)).toBeDisabled();
+  await move(-1).click();
+  await expect(label).toHaveText('2026년 11월 9일 – 15일');
   await expect(page).toHaveURL(/week=2026-11-09/);
-  await s.locator('[data-ws-move="-1"]').click();
-  await expect(s.locator('[data-ws-range]')).toHaveText('2026년 11월 2일 – 8일');
+  await expect(s).toHaveAttribute('data-week', '2026-11-09');
+  await move(-1).click();
+  await expect(label).toHaveText('2026년 11월 2일 – 8일');
   await expect(s.locator('[data-ws-minutes]')).toHaveText('15분');
-  await s.locator('[data-ws-move="-1"]').click();
-  await expect(s.locator('[data-ws-range]')).toHaveText('2026년 10월 26일 – 11월 1일');
-  await expect(s.locator('[data-ws-move="-1"]')).toBeDisabled();       // first week with a record
-  await s.locator('[data-ws-move="1"]').click();
-  await s.locator('[data-ws-move="1"]').click();
-  await s.locator('[data-ws-move="1"]').click();
-  await expect(s.locator('[data-ws-range]')).toHaveText('2026년 11월 16일 – 22일');
-  // The current week has one Monday recording only → not empty; a week with nothing is shown as empty.
-  await page.evaluate(() => {location.hash='#/weekly-summary?week=2026-10-26';});   // the old address keeps its week
-  await expect(page).toHaveURL(/#\/growth-flow\?period=week&week=2026-10-26$/);
-  await expect(s.locator('[data-ws-range]')).toHaveText('2026년 10월 26일 – 11월 1일');
+  await move(-1).click();
+  await expect(label).toHaveText('2026년 10월 26일 – 11월 1일');
+  await expect(move(-1)).toBeDisabled();       // first week with a record
+  await move(1).click();
+  await move(1).click();
+  await move(1).click();
+  await expect(label).toHaveText('2026년 11월 16일 – 22일 이번 주');
+  // The old addresses keep their week.
+  await page.evaluate(() => {location.hash='#/weekly-summary?week=2026-10-26';});
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=week&week=2026-10-26$/);
+  await expect(label).toHaveText('2026년 10월 26일 – 11월 1일');
   await expect(s.locator('[data-ws-section=recordings] .ws-chips li').first()).toHaveText('곡1');
-  await page.locator('.ws-tabs [data-ws-tab="#/growth-flow?period=month"]').click();
-  await expect(page.locator('[data-growth-mode=monthly]')).toHaveAttribute('aria-pressed','true');
+  await page.evaluate(() => {location.hash='#/growth-flow?period=week&week=2026-11-02';});
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=week&week=2026-11-02$/);
+  await expect(s).toHaveAttribute('data-week', '2026-11-02');
+  await page.locator('[data-gm-period="month"]').click();
+  await expect(page.locator('[data-gm-report="month"] [data-month-section="results"]')).toBeVisible();
 });
 
 test('empty account week renders an empty state without errors',async({page})=>{
   await boot(page,{value:{...seed(),practices:[],dailyGoals:[],lessons:[],assignments:[],songs:[{id:'s1',title:'A',created:kst('2026-01-01','10:00')}]},media:[],hash:'#/weekly-summary'});
   const s = summary(page);
   await expect(s.locator('[data-ws-empty]')).toBeVisible();
-  await expect(s.locator('[data-ws-move="-1"]')).toBeDisabled();
+  await expect(page.locator('[data-gm-move="-1"]')).toBeDisabled();
   await expect(s.locator('[data-ws-image]')).toHaveCount(0);
 });
 
@@ -181,7 +185,7 @@ test('320px: no horizontal overflow and 44px controls',async({page})=>{
   await boot(page,{hash:'#/weekly-summary?week=2026-11-09'});
   await expect(summary(page).locator('[data-ws-minutes]')).toHaveText('1시간');
   await noOverflow(page);
-  for (const selector of ['[data-ws-move="-1"]','[data-ws-move="1"]','[data-ws-image]','[data-ws-copy]','.ws-tabs button']) {
+  for (const selector of ['[data-gm-move="-1"]','[data-gm-move="1"]','[data-ws-image]','[data-ws-copy]','[data-gm-period]']) {
     const box = await page.locator(selector).first().boundingBox();
     expect(box.height, selector).toBeGreaterThanOrEqual(44);
     expect(box.width, selector).toBeGreaterThanOrEqual(44);

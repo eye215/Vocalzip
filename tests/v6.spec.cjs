@@ -197,7 +197,7 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
    VZ.media.invalidate();
  });
  await page.goto('/#/vocal-lab/s1');
- await expect(page.locator('.vl-song strong')).toHaveText('This Is the Moment');
+ await expect(page.locator('[data-gsp-hero] h2')).toHaveText('This Is the Moment');
  await expect(page.locator('.vl-player-head')).toContainText('2 / 2'); // opens with the analysed takes selected
  await labClear(page);
  await expect(page.locator('.vl-player')).toHaveCount(0);
@@ -237,6 +237,7 @@ test('Vocal lab growth AI asks the server for a measured same-song report (overa
  await labClear(page); await page.locator('.vl-dates button').first().click();
  await page.locator('.vl-dates button').nth(1).click();
  await page.locator('[data-growth-ai]').click();
+ await page.locator('.sheet [data-ok]').click();   // asked first (큰 정리 2번)
  await expect(page.locator('.vl-growth-ai-text')).toContainText('다음 연습: 같은 구간을');
  const sent = await page.evaluate(() => window.__coach);
  expect(sent.mode).toBe('overall');
@@ -302,7 +303,7 @@ test('Vocal lab shows a compact recommendation list and opens the chosen practic
  await first.locator('[data-np-add]').click();
  await expect(first.locator('[data-np-added]')).toHaveText('목표에 담김 ✓');
  expect(await page.evaluate(k=>VZ.db.dailyGoals.filter(g=>g.date===VZ.today()&&g.sourceId==='analysis:'+k&&g.songId==='s1').length,tip)).toBe(1);
- await expect(page).toHaveURL(/#\/vocal-lab\/s1$/);
+ await expect(page).toHaveURL(/#\/growth-song\/s1$/);
 });
 
 test('Vocal lab keeps the viewport on date, metric, and satisfaction selection', async ({page}) => {
@@ -1412,7 +1413,7 @@ test('Library filters, edit and play; compare A/B with memo saved in v5 report s
   // 비교 now opens 곡 하나 (the former 보컬 연구소) at 두 녹음 비교 for the two recordings: the two takes are picked in
   // the section, the table and the memo are in its panel (open).
   await page.goto('/#/compare?a=m1&b=m2');
-  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?a=m1&b=m2&compare=1$/);
+  await expect(page).toHaveURL(/#\/growth-song\/s1\?a=m1&b=m2&compare=1$/);
   const cmp = page.locator('[data-compare-panel]'), picks = page.locator('[data-song-section="compare"]');
   await expect(cmp).toHaveAttribute('open', '');
   await expect(picks.locator('[data-compare-a]')).toHaveValue('m1'); // 레슨 시범
@@ -2194,7 +2195,7 @@ test('Song detail shows real growth, recording selection and analysis handoff', 
   await expect(rowButton).toHaveAttribute('aria-expanded','true');
   await expect(page.getByRole('button', {name:'보컬 분석하기'})).toBeEnabled();
   await page.getByRole('button', {name:'보컬 분석하기'}).click();
-  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?selection=1$/);
+  await expect(page).toHaveURL(/#\/growth-song\/s1\?selection=1$/);
   await expect(page.locator('.vl-dates button[aria-pressed="true"]')).toHaveCount(2);
   await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
   expect((await page.evaluate(() => JSON.parse(sessionStorage.getItem('vocalzip-vocal-lab-selected-media-v1')))).sort()).toEqual(['m1','m2']);
@@ -3348,7 +3349,7 @@ test('AI exercise appears inline in the same card form and follow-along uses its
  await ask.click();await dialog.getByRole('button',{name:'보내기'}).click();await expect(page.locator('.vl-tip')).toHaveCount(1);
  await page.evaluate(()=>window.vzipCloudCoach=async()=>{throw Error('요청 실패 테스트');});await ask.click();await dialog.getByRole('button',{name:'보내기'}).click();await expect(page.locator('[data-ai-status]')).toHaveText('요청 실패 테스트');await expect(page.locator('.vl-tip')).toHaveCount(1);
  expect(await page.evaluate(()=>__aiInput.mode)).toBe('inline-exercise');expect(await page.evaluate(()=>__aiInput.excluded.length)).toBeGreaterThan(0);
- expect(await page.evaluate(()=>JSON.parse(__aiInput.answers[0]).displayed.map(x=>x.title))).toEqual(rowTitles);await expect(page).toHaveURL(/#\/vocal-lab\/s1$/);
+ expect(await page.evaluate(()=>JSON.parse(__aiInput.answers[0]).displayed.map(x=>x.title))).toEqual(rowTitles);await expect(page).toHaveURL(/#\/growth-song\/s1$/);
  const before=await page.evaluate(()=>VZ.db.practices.length);
  await page.goto('/#/song/s1');await page.goto('/#/vocal-lab/s1');await labClear(page); await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');
  await page.reload();await labClear(page); await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('[data-ai-status]')).toContainText('저장된 AI 추천');expect(await page.evaluate(()=>VZ.db.practices.length)).toBe(before);

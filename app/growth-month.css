@@ -65,11 +65,11 @@
   .gm-grid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);grid-template-rows:auto auto 1fr;column-gap:20px;align-items:start}
   .gm-done{grid-column:1/-1}
   .gm-tiles{grid-template-columns:repeat(6,minmax(0,1fr))}
-  .gm-changes{grid-column:1;grid-row:2/4}
+  .gme-line{grid-column:1;grid-row:2/4}
   .gm-next-box{grid-column:2;grid-row:2}
-  .gm-flow{grid-column:2;grid-row:3}
+  .gm-grid:not(:has(.gm-next-box)) .gme-line{grid-column:1/-1;grid-row:auto}
   /* 달라진 것 is the narrower column here: its groups stay one under another (결과 리포트 puts them side by side). */
-  .gm-changes .gc-groups{grid-template-columns:minmax(0,1fr)}
+  .gm-grid:has(.gm-next-box) .gm-changes .gc-groups{grid-template-columns:minmax(0,1fr)}
 }
 @media (max-width:350px){.gm-section{padding:16px 12px}.gm-tiles strong{font-size:18px}}
 @media (prefers-reduced-motion:reduce){.gm-switch input,.gm-switch input::after{transition:none}}
@@ -97,3 +97,19 @@
 .gs-play i{font-size:14px;}
 .gs-player:not(:empty){padding:0 12px 12px;}
 @media (min-width:760px){.gs-cards{grid-template-columns:repeat(2,minmax(0,1fr));}}
+/* 성장 › 나 = the report of one period (큰 정리 3번): 주 · 월 · 전체 with ‹ › beside the label, 곡마다 자세히 folded under the
+ * one line of 달라진 것, and the period's report (주간 요약 · 월별 · 전체 리포트) under the blocks. */
+.gm-step{display:flex;align-items:center;gap:4px;min-width:0}
+.gm-period button{min-width:44px}
+.gm-step .gm-label{min-width:0}
+.gm-step .gm-label small{margin-left:4px;color:var(--vz-color-accent,#7A32F5);font-size:12px;font-weight:700}
+.gm-step-btn{display:grid;place-items:center;width:44px;height:44px;flex:none;border:1px solid var(--vz-color-border,#eae3f1);border-radius:50%;background:var(--vz-color-surface,#fff);color:var(--vz-color-ink,#282033);font-size:18px;cursor:pointer}
+.gm-step-btn:disabled{opacity:.35;cursor:default}
+.gm-step-btn:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:2px}
+.gme-more{margin-top:8px}
+.gme-more>summary{list-style:none;cursor:pointer;margin:0}
+.gme-more>summary::-webkit-details-marker{display:none}
+.gme-more[open]>summary i{transform:rotate(180deg)}
+.gme-more .gm-changes{margin-top:12px}
+.gm-report{min-width:0}
+.gm-report:empty{display:none}

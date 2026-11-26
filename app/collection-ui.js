@@ -27,7 +27,7 @@ V.route('recording',{title:'녹음 재생',tab:'songs',back:true,noAutoRefresh:t
  // Old links (#/recording/<id>): a recording of a song that is still here opens in 곡 분석's player with that take
  // (?a= selects it; 곡 분석 lists 연습 takes whatever its 연습 녹음 포함 switch says). replace(), so 뒤로 skips this page.
  // No song, or the song is gone: this playback page as before.
- if(item.songId&&V.song(item.songId)&&!(V.db.deleted?.songs||[]).map(String).includes(String(item.songId))){location.replace('#/vocal-lab/'+encodeURIComponent(item.songId)+'?a='+encodeURIComponent(item.id));return;}
+ if(item.songId&&V.song(item.songId)&&!(V.db.deleted?.songs||[]).map(String).includes(String(item.songId))){location.replace('#/growth-song/'+encodeURIComponent(item.songId)+'?a='+encodeURIComponent(item.id));return;}
  host.innerHTML='<div class="list">'+V.mediaRow(item)+'</div>';V.wireMedia(host,[item]);host.querySelector('[data-toggle]').click();recordPlayer=host.querySelector('.media-open')._player;
 }});
 const floating=document.createElement('a');floating.className='vz-collection-record';floating.href='#/record';floating.setAttribute('aria-label','녹음 시작');floating.title='녹음 시작';floating.innerHTML='<i class="ph ph-microphone" aria-hidden="true"></i>';floating.addEventListener('click',e=>{if(!window.VzipRecordTransition)return;e.preventDefault();window.VzipRecordTransition.open(floating,floating.getAttribute('href'));});document.body.append(floating);

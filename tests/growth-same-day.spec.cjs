@@ -72,7 +72,7 @@ test.describe('phone 375', () => {
     expect(await arias(page)).toEqual(['10.01 · 3개 음정 안정성 ±25 cent · 그날 녹음 보기', '11.10 음정 안정성 ±17 cent 상세 보기', '11.13 · 8개 음정 안정성 ±15 cent · 그날 녹음 보기']);
     await expect(page.locator('.vl-trend .vl-plot circle.vl-dot')).toHaveCount(3);
     await expect(page.locator('[data-same-day-note]')).toContainText('하루 평균은 그날 신뢰도 높은 녹음만으로 내요');
-    await expect(page.locator('[data-same-day-note]')).toContainText('‘이 곡의 변화’와 이번 달·결과 리포트는 모든 녹음으로 계산해요');
+    await expect(page.locator('[data-same-day-note]')).toContainText('‘처음 vs 최근’과 이번 달·결과 리포트는 모든 녹음으로 계산해요');
     await expect(page.locator('[data-same-day]')).toBeFocused();
     // The values on the screen are the model's.
     const model = await page.evaluate(rows => { const G = VzipGrowthMetrics, takes = rows.map(m => ({id:m.id, a:m.analysis, date:m.recordedDate, created:m.created, ok:VZ.analysisReliable(m.analysis)}));

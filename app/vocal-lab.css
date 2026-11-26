@@ -1,10 +1,10 @@
 /* 보컬 연구소: 녹음 집중 화면의 어두운 면 + 공통 12/16/20/32 간격. */
-body[data-vz-route="vocal-lab"],body[data-vz-route="lab-reports"]{background:#0b0911;color:#f7f5fc;color-scheme:dark}
-body[data-vz-route="vocal-lab"] .v-app,body[data-vz-route="lab-reports"] .v-app{max-width:560px;min-height:100dvh;padding:max(8px,env(safe-area-inset-top)) 12px calc(32px + env(safe-area-inset-bottom));background:radial-gradient(ellipse 500px 650px at 50% 22%,#1b0e2b,#0b0911 74%)}
-body[data-vz-route="vocal-lab"] .v-nav,body[data-vz-route="lab-reports"] .v-nav{display:none}
-body[data-vz-route="vocal-lab"] .v-top,body[data-vz-route="lab-reports"] .v-top{margin-bottom:8px}
-body[data-vz-route="vocal-lab"] .v-top h1,body[data-vz-route="lab-reports"] .v-top h1{color:#f7f5fc}
-body[data-vz-route="vocal-lab"] .v-top .icon-btn,body[data-vz-route="lab-reports"] .v-top .icon-btn{color:#aaa3b7}
+body[data-vz-route="vocal-lab"],body[data-vz-route="lab-reports"],body[data-vz-route="growth-song"]{background:#0b0911;color:#f7f5fc;color-scheme:dark}
+body[data-vz-route="vocal-lab"] .v-app,body[data-vz-route="lab-reports"] .v-app,body[data-vz-route="growth-song"] .v-app{max-width:560px;min-height:100dvh;padding:max(8px,env(safe-area-inset-top)) 12px calc(32px + env(safe-area-inset-bottom));background:radial-gradient(ellipse 500px 650px at 50% 22%,#1b0e2b,#0b0911 74%)}
+body[data-vz-route="vocal-lab"] .v-nav,body[data-vz-route="lab-reports"] .v-nav,body[data-vz-route="growth-song"] .v-nav{display:none}
+body[data-vz-route="vocal-lab"] .v-top,body[data-vz-route="lab-reports"] .v-top,body[data-vz-route="growth-song"] .v-top{margin-bottom:8px}
+body[data-vz-route="vocal-lab"] .v-top h1,body[data-vz-route="lab-reports"] .v-top h1,body[data-vz-route="growth-song"] .v-top h1{color:#f7f5fc}
+body[data-vz-route="vocal-lab"] .v-top .icon-btn,body[data-vz-route="lab-reports"] .v-top .icon-btn,body[data-vz-route="growth-song"] .v-top .icon-btn{color:#aaa3b7}
 .vl{color:#f7f5fc;letter-spacing:-.02em;font-family:var(--font)}
 .vl button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .vl h2{font-size:18px;line-height:26px;font-weight:700;margin:0}
@@ -377,3 +377,32 @@ body .sheet-page.vl-observation-overlay .vl-observation-card{
 .vl-next .np-added{background:#17322a;color:#7fdcb0}
 .vl-next .np-chip{background:#2d2140;color:#e4caff}
 .vl-next-all{display:inline-flex;align-items:center;gap:4px;min-height:44px;margin-top:4px;color:#e4caff;font-size:13px;font-weight:700;text-decoration:none}
+/* 곡 하나 = the ONE song screen (#/growth-song, 큰 정리 2번): 기간 · 한마디 on top (app/growth-song-page.js), then the
+ * sections of 곡 분석 in order. The light hero and cards sit on the dark screen like the other light cards (.vl-light). */
+.vl .gsp-top{display:grid;gap:12px;padding:0;margin:0}
+.gsp-period{display:flex;flex-wrap:wrap;gap:8px}
+.gsp-period button{min-height:44px;padding:0 16px;border:1px solid #4b4056;border-radius:999px;background:#211b2b;color:#e5ddec;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.gsp-period button[aria-pressed=true]{background:#f7f5fc;border-color:#f7f5fc;color:#101828}
+.gsp-period button:focus-visible{outline:2px solid #a66aff;outline-offset:2px}
+.vl .gsp-hero h2{color:#fff}
+.vl .gsp-hero .gsp-play{min-height:44px}
+.gsp-top+.vl-part{margin-top:24px;padding-top:0;border-top:0}
+.vl-part-tag{color:#aaa3b7;font-size:12px;line-height:17px}
+.vl-heard{margin-top:12px;color:#101828;letter-spacing:normal}
+.vl-heard+[data-slot=compare]{margin-top:16px}
+.vl-heard .gsp-card{color:#101828}
+.vl [data-slot=check]:not(:empty){margin:12px 0;color:#101828;letter-spacing:normal}
+.vl-dates button{display:inline-flex;align-items:center;gap:6px}
+.vl-dot-mark{width:10px;height:10px;flex:none;border-radius:50%;border:2px solid #9f90ae;background:transparent}
+.vl-dates button[data-analysed] .vl-dot-mark{border-color:#c68eff;background:#c68eff}
+.vl-dates button[aria-pressed=true] .vl-dot-mark{border-color:#fff}
+.vl-dates button[aria-pressed=true][data-analysed] .vl-dot-mark{background:#fff}
+.vl-dates button[data-pair]::after{content:attr(data-pair);font-size:11px;font-weight:700;color:#e4caff}
+.vl-dates button[aria-pressed=true][data-pair]::after{color:#fff}
+.vl-month-detail{display:grid;gap:12px}
+.vl-month-detail .growth-section,.vl-month-detail .growth-metric{margin:0}
+.vl-growth-tools{margin-top:12px}
+.vl-growth-tools:empty{display:none}
+.vl-disclaimer{margin-top:32px}
+.vl-month-detail .growth-month-section-title h3{color:#f7f5fc}
+.vl-month-detail .growth-month-section-title small{color:#aaa3b7}

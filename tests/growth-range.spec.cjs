@@ -371,7 +371,7 @@ test.describe('phone 375', () => {
   test('월별 분석: the chosen month shows its own row (every kind counted), an empty month says so', async ({page}) => {
     await boot(page, FULL);
     await page.locator('[data-range-group="lesson"]').click();                           // the chips of 전체 do not change the month row
-    await page.locator('[data-growth-mode="monthly"]').click();
+    await page.locator('[data-gm-period="month"]').click();
     const row = page.locator('[data-range-month]');
     await expect(row).toHaveAttribute('data-range-month', '2026-11');
     const m = await modelOf(page, {all:true});
@@ -382,14 +382,14 @@ test.describe('phone 375', () => {
     await expect(row.locator('[data-range-sample]')).toHaveText('녹음 6개 (곡 녹음 3 · 보이스 체크 1 · 트레이닝 1 · 레슨 1) · 1곡 · 목소리 6분 · 최고음 3개 · 최저음 3개 이상의 녹음이 닿은 음');
     await expect(row.locator('[data-range-octave-month]')).toHaveText('한 옥타브쯤 떨어져 잠깐 잡힌 음이라 뺀 끝: 최저음 1');
     await expect(row.locator('[data-range-left]')).toHaveText('뺀 녹음 2개: 분석 전 1 · 반주 구분 약함 1');
-    await page.locator('[data-growth-select]').selectOption('2026-05');
+    await page.evaluate(h => { location.hash = h; }, '#/vocal-growth?period=month&month=2026-05');   // ‹ › of 나 (큰 정리 3번)
     await expect(row).toHaveAttribute('data-range-month', '2026-05');
     await expect(row.locator('[data-range-values]')).toHaveText('셀 수 있는 녹음이 없어요');
     await expect(row.locator('[data-range-left]')).toHaveText('뺀 녹음 1개: 신뢰도 낮음 1');
-    await page.locator('[data-growth-select]').selectOption('2026-08');
+    await page.evaluate(h => { location.hash = h; }, '#/vocal-growth?period=month&month=2026-08');   // ‹ › of 나 (큰 정리 3번)
     await expect(row.locator('[data-range-values]')).toHaveText('자주 닿은 음 G3 ~ A#4 · 주로 부른 음역 C4 ~ F4 · 안정 최고음 G4');
     await expect(row.locator('[data-range-dropped-month]')).toHaveText('검출 한계에 걸려 뺀 끝: 최고음 1');
-    await page.locator('[data-growth-select]').selectOption('2026-07');
+    await page.evaluate(h => { location.hash = h; }, '#/vocal-growth?period=month&month=2026-07');   // ‹ › of 나 (큰 정리 3번)
     await expect(row.locator('[data-range-left]')).toHaveText('뺀 녹음 1개: 평소와 다른 음역 1');   // the recording far from the usual main range
     await noOverflow(page);
     expect(page.__errors).toEqual([]);
@@ -419,7 +419,7 @@ test.describe('phone 320', () => {
     expect(await page.locator('[data-range-view]').evaluateAll(els => els.every(e => e.getBoundingClientRect().height >= 44))).toBe(true);
     await noOverflow(page); await inside(page, '[data-range-section] *');
     await page.locator('[data-range-view="flow"]').click();
-    await page.locator('[data-growth-mode="monthly"]').click();
+    await page.locator('[data-gm-period="month"]').click();
     await expect(page.locator('[data-range-month]')).toBeVisible();
     await noOverflow(page);
     expect(page.__errors).toEqual([]);

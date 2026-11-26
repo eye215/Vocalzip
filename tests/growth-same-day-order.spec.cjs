@@ -60,8 +60,8 @@ test('성장 tab: the evening take is the latest one in 전체 분석 and 월별
   await expect(into.locator('.growth-state').first()).toHaveText('좋아진 방향'); // ±20 (first take) → ±11 (evening), not → ±32
   const overall = await page.evaluate(async () => { const items = await VZ.media.list(); return window.VzipOverallGrowth.calculate(items, {getDate:VZ.media.dateOf, valid:m => VZ.analysisReliable(m.analysis)}).metrics.find(m => m.id === 'intonation').pairs[0]; });
   expect(overall).toMatchObject({firstId:'y-first', lastId:'a-evening', before:20, after:11});
-  await page.locator('[data-growth-mode="monthly"]').click();
-  await expect(page.locator('[data-growth-select]')).toHaveValue(thisMonth);
+  await page.locator('[data-gm-period="month"]').click();
+  await expect(page.locator('[data-gm-report="month"] [data-month-section="results"]')).toBeVisible();   // 나 › 월 (큰 정리 3번)
   // Last month's latest (evening, ±26) vs this month's latest (evening, ±11).
   await expect(page.locator('[data-month-section="results"] [data-growth-metric="intonation"] .growth-state').first()).toHaveText('좋아진 방향');
   await expect(page.locator('[data-month-section="results"] [data-growth-metric="intonation"]')).toContainText('±26');
