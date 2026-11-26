@@ -446,11 +446,14 @@ test('연구소 holds no practice entries; the practice screens open from 성장
   await expect(page.locator('[data-gm-today]')).toHaveText('연습은 오늘 탭에서 해요');
   await expect(page.locator('[data-gm-today]')).toHaveAttribute('href', '#/home');
   const key = await page.evaluate(async () => VZ.practiceTips(await VZ.media.list()).tips[0].key);
+  // Its old address opens 오늘의 연습 with a set of that one step; ✕ before starting goes back and keeps no set.
   await to(page, '#/guided-practice/' + encodeURIComponent('analysis:' + key));
-  await expect(page.locator('#top h1')).toHaveText('연습 따라 하기');
+  await expect(page).toHaveURL(/#\/practice-set$/);
+  await expect(page.locator('#top h1')).toHaveText('오늘의 연습');
+  await expect(page.locator('[data-pset-run]')).toBeVisible();
   await expect(page.locator('#view')).not.toContainText('연습을 찾을 수 없어요');
   await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current', 'page');
-  await page.locator('[data-back]').click();
+  await page.locator('[data-pset-run] [data-run-exit]').click();
   await expect(page).toHaveURL(/#\/vocal-growth$/);
   for (const [hash, title] of [['#/practice-set', '오늘의 연습'], ['#/voice-check', '보이스 체크'], ['#/practice-room', '노래 연습실']]) {
     await to(page, hash);

@@ -124,7 +124,7 @@ body.vz-set-run .pset-host{max-width:none;padding-bottom:0;}
 .dset-primary{min-height:60px;padding:0 16px;border:0;border-radius:18px;background:var(--vz-gradient-floating,linear-gradient(135deg,#9557FF 0%,#7A32F5 52%,#6D2BE5 100%));color:#fff;font:inherit;font-size:18px;line-height:24px;font-weight:700;letter-spacing:-.01em;box-shadow:0 8px 24px rgba(109,43,229,.28);}
 .dset-primary:active{transform:scale(.985);}
 .dset-primary:disabled{opacity:.45;}
-.dset-run[data-state=doing]:not([data-mode=free]):not([data-mode=take]) .dset-primary{background:rgba(255,255,255,.1);box-shadow:none;}
+.dset-run[data-state=doing]:not([data-mode=free]):not([data-mode=take]):not([data-finish="1"]) .dset-primary{background:rgba(255,255,255,.1);box-shadow:none;}
 .dset-second{display:flex;gap:8px;}
 .dset-second button{flex:1;min-width:0;min-height:48px;padding:0 10px;border:0;border-radius:14px;background:rgba(255,255,255,.07);color:#e9e2f5;font:inherit;font-size:15px;line-height:21px;font-weight:600;}
 .dset-second button[hidden]{display:none;}
@@ -196,3 +196,45 @@ body.vz-set-run .pset-host{max-width:none;padding-bottom:0;}
 .dset-rec-fields select,.dset-rec-fields input,.dset-tag select{width:100%;box-sizing:border-box;}
 .dset-reset{justify-self:start;}
 @media(prefers-reduced-motion:reduce){.dset-switch span,.dset-switch span::after{transition:none;}}
+
+/* 따라 하기 (mode guide): 영상 보며 하기 / 타이머로 하기, the video with the mic off, then 혼자 해 보기. */
+.dset-guide{display:grid;gap:12px;width:100%;}
+.dset-seg{display:flex;gap:8px;}
+.dset-seg button{flex:1;min-width:0;min-height:44px;padding:0 10px;border:0;border-radius:12px;background:rgba(255,255,255,.07);color:#e9e2f5;font:inherit;font-size:14px;line-height:20px;font-weight:600;}
+.dset-seg button[aria-pressed="true"]{background:#c9b2f7;color:#15111f;font-weight:700;}
+.dset-video{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#241d31;}
+.dset-video>div,.dset-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+/* Only the app's own buttons control the video: no seeking, no controls of the player. */
+.dset-video iframe{pointer-events:none;}
+.dset-video-meta{display:flex;justify-content:space-between;gap:10px;margin:0;color:#e9e2f5;font-size:13px;line-height:18px;}
+.dset-video-meta small{flex:none;color:#aaa3b7;font-size:12px;font-variant-numeric:tabular-nums;}
+.dset-guide-time{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 10px;margin:0;font-size:13px;line-height:18px;}
+.dset-guide-time b{color:#fff;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;}
+.dset-guide-time span{color:#aaa3b7;}
+.dset-guide-note{display:grid;gap:6px;padding:12px 14px;border-radius:14px;background:#241d31;}
+.dset-guide-note p{display:flex;justify-content:space-between;gap:8px;margin:0;font-size:14px;line-height:20px;}
+.dset-guide-note p span{color:#aaa3b7;font-size:13px;}
+.dset-guide-note small{color:#aaa3b7;font-size:12px;line-height:18px;word-break:keep-all;}
+.dset-guide-next{margin:0;padding:10px 14px;border:1px solid #3a2c55;border-radius:12px;color:#e9e2f5;font-size:13px;line-height:18px;}
+.dset-guide-feedback{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;color:#e9e2f5;font-size:13px;line-height:18px;}
+.dset-guide-pair{display:flex;flex-wrap:wrap;gap:6px;}
+.dset-guide-feedback .dset-chip[aria-pressed="true"]{border-color:#c9b2f7;background:rgba(201,178,247,.18);}
+.dset-guide-fallback{justify-self:start;padding:0;text-decoration:underline;text-underline-offset:3px;}
+.dset-guide-lines{display:grid;gap:6px;margin:0;padding:0 0 0 20px;color:#e9e2f5;font-size:15px;line-height:22px;word-break:keep-all;}
+.dset-guide-ref{display:grid;gap:8px;}
+.dset-guide-ref label{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#aaa3b7;font-size:13px;}
+.dset-guide-ref label span{flex:none;white-space:nowrap;}
+.dset-guide-ref label select{flex:1;min-width:0;}
+.dset-guide-ref select,.dset-metro select,.dset-metro input{min-height:44px;box-sizing:border-box;padding:0 10px;border:1px solid rgba(202,183,227,.22);border-radius:12px;background:#1c1528;color:#f7f5fc;font:inherit;font-size:15px;}
+.dset-guide-ref small{color:#aaa3b7;font-size:12px;line-height:17px;word-break:keep-all;}
+.dset-guide-finish{justify-self:center;}
+.dset-guide-finish[hidden]{display:none;}
+.dset-tuner.is-on .dset-holdbar i{background:#8fe3b0;}
+.dset-metro{display:grid;gap:10px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.05);}
+.dset-metro-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.dset-metro-bpm{display:flex;align-items:center;gap:6px;color:#aaa3b7;font-size:13px;}
+.dset-metro-bpm input{width:76px;text-align:center;}
+.dset-metro-meter{display:flex;align-items:center;gap:6px;margin-left:auto;color:#aaa3b7;font-size:13px;}
+.dset-beats{display:flex;gap:8px;}
+.dset-beats i{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.18);}
+.dset-beats i.active{background:#c9b2f7;}

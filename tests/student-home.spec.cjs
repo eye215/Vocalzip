@@ -251,7 +251,7 @@ test('empty state removes all sample data and connects songs and goal setup',asy
  await page.evaluate(day=>VZ.change(d=>{d.practices.push({id:'p-first',date:day,minutes:10,manualMinutes:10,practiceTimeSource:'manual',practiceMode:'song',songId:'s-first',technique:[],mediaIds:[],completed:[]});}),TODAY);
  await expect(page.locator('.vz-event')).toHaveAttribute('data-kind','practice');
 });
-test('지금 할 것 homework opens guided practice and the final step saves practice and goal automatically',async({page})=>{
+test('지금 할 것 homework opens 따라 하기 (a set of one step); saving it counts one practice of the homework and checks the goal',async({page})=>{
  await boot(page);
  // The open homework is also today's goal, so home shows it as the 지금 할 것 card rather than repeating it as a recommendation.
  const now=page.locator('.vz-event');
@@ -259,24 +259,26 @@ test('지금 할 것 homework opens guided practice and the final step saves pra
  await expect(page.getByRole('button',{name:'호흡을 길게 유지하기 따라 하기',exact:true})).toHaveCount(0);
  await now.click();await expect(page).toHaveURL(/#\/homework$/);
  await page.getByRole('link',{name:'호흡을 길게 유지하기 따라 하기',exact:true}).click();
- await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa1$/);
+ await expect(page).toHaveURL(/#\/practice-set$/);
+ await expect(page.locator('[data-pset-run] [data-run-count-all]')).toHaveText('1 / 1');
  await page.evaluate(()=>{const epoch=Date.now();Date.now=()=>epoch+performance.now();});
- await page.getByRole('button',{name:'연습 시작',exact:true}).click();
+ await page.getByRole('button',{name:'시작하기',exact:true}).click();
  await page.waitForTimeout(3800);
- await page.getByRole('button',{name:'연습 종료',exact:true}).click();
- await page.getByRole('button',{name:'연습 끝내기',exact:true}).click();
- await expect(page.getByRole('button',{name:'연습 기록 보기',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'다 했어요',exact:true}).click();
+ await page.locator('.pset-summary [data-save]').click();
+ await expect(page.getByRole('link',{name:'연습 기록 보기',exact:true})).toBeVisible();
  const value=await db(page);
- expect(value.practices.filter(p=>p.guidedExerciseKey==='homework:a1')).toHaveLength(1);
- expect(value.practices.at(-1).guidedSeconds).toBeGreaterThanOrEqual(3);
- const category=value.categories.find(c=>c.id===value.practices.at(-1).categoryId);
- expect(category.name).toBe('호흡');
- expect(category.items).toContain('호흡을 길게 유지하기');
+ const runs=value.practices.filter(p=>p.dailySet);
+ expect(runs).toHaveLength(1);
+ expect(runs[0].dailySet.items.map(x=>x.id)).toEqual(['guide:homework:a1']);
+ expect(runs[0].dailySet.items[0].seconds).toBeGreaterThanOrEqual(3);
  // The run counts one practice of the homework (like '숙제 했나요?'); only the homework's own check marks it done.
- expect(value.practices.at(-1)).toMatchObject({completed:['a1'],assignmentReps:{a1:1}});
+ expect(runs[0]).toMatchObject({completed:['a1'],assignmentReps:{a1:1}});
  expect(value.assignments.find(t=>t.id==='a1').status).toBe('active');
+ // The goal is checked without a row of its own: the time is in the run row only.
  expect(value.dailyGoals.find(g=>g.id==='g1').completed).toBe(true);
- await page.getByRole('button',{name:'연습 기록 보기',exact:true}).click();
+ expect(value.practices.some(p=>p.id==='goal:g1')).toBe(false);
+ await page.getByRole('link',{name:'연습 기록 보기',exact:true}).click();
  await expect(page).toHaveURL(/#\/practices$/);
 });
 test('지금 할 것 is 다음 연습 item #1 (the homework due soonest), shown once; the rest of the list is one tap away',async({page})=>{
@@ -295,14 +297,17 @@ test('지금 할 것 is 다음 연습 item #1 (the homework due soonest), shown 
  await expect(rows.locator('.np-title').first()).toHaveText('립트릴로 고음 연결하기');
  await expect(rows.nth(1).locator('.np-title')).toHaveText('호흡을 길게 유지하기');await expect(rows.nth(1).locator('[data-np-added]')).toHaveText('목표에 담김 ✓');
  await expect(rows.nth(2).locator('.np-title')).toHaveText('모음 고르게 읽기');
- await rows.first().locator('[data-np-go]').click();await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa2$/);
+ await expect(rows.first().locator('[data-np-go]')).toHaveAttribute('href','#/practice-set?guide=homework%3Aa2');
+ await rows.first().locator('[data-np-go]').click();await expect(page).toHaveURL(/#\/practice-set$/);
+ await expect(page.locator('[data-pset-run] [data-run-say]')).toHaveText('립트릴로 고음 연결하기');
  const after=await db(page);for(const key of ['assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
-test('active homework card directly opens guided practice',async({page})=>{
+test('active homework card directly opens 따라 하기 in 오늘의 연습',async({page})=>{
  await boot(page);
  await page.goto('/#/homework');
  await page.getByRole('link',{name:'호흡을 길게 유지하기 따라 하기',exact:true}).click();
- await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa1$/);
+ await expect(page).toHaveURL(/#\/practice-set$/);
+ await expect(page.locator('[data-pset-run] [data-run-say]')).toHaveText('호흡을 길게 유지하기');
 });
 test('daily time comes from onboarding/settings; tomorrow offers goals once without time input',async({page})=>{
  await phoneWidth(page); // the one-line 이번 주 row is the phone layout; tablets show the full 주간 연습 card

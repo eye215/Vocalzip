@@ -147,11 +147,15 @@ test('the practice screens belong to 오늘: opened from 연습하기 the 오늘
   await expect(page.locator('[data-roadmap]')).toBeVisible();
   await homeLit(page);
   await back();
-  // 연습 따라 하기 is still there for 오늘의 목표's suggestion.
+  // 연습 따라 하기 (its old address) opens 오늘의 연습 with a set of that one step.
   await to(page, '#/guided-practice/' + encodeURIComponent('analysis:maintain'));
-  await expect(page.locator('#top h1')).toHaveText('연습 따라 하기');
+  await expect(page).toHaveURL(/#\/practice-set$/);
+  await expect(page.locator('#top h1')).toHaveText('오늘의 연습');
+  await expect(page.locator('[data-pset-run] [data-run-say]')).toHaveText('롱톤 유지 연습');
   await homeLit(page);
-  await back();
+  // ✕ before anything counted goes back (the top bar is hidden while a step is on screen).
+  await page.locator('[data-pset-run] [data-run-exit]').click();
+  await expect(page).toHaveURL(/#\/home$/);await expect(section(page)).toBeVisible();
 });
 
 test('내 로드맵 from the analysed recordings: what to fix with its exercise (first in 오늘의 연습), all eight areas, the old 노래 연습실 submissions kept', async ({page}) => {

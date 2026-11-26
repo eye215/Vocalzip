@@ -466,3 +466,49 @@ test('곡에 적용하기 off (고르기) or covered by a homework about a song:
   assert.ok(on.practices.every(p=>!p.practiceRoom&&p.categoryLabel!=='노래 연습실'));
   assert.ok(!run.dailySet.items.filter(x=>!x.apply).some(x=>'roomTask' in x));
 });
+
+test('따라 하기 is a set of one guide step: the run row counts the homework once and checks its goal, with no goal row and no minutes twice',()=>{
+  const db=seed(),now=Date.parse(TODAY+'T12:00:00Z');
+  const step={kind:'next',source:'homework',id:'guide:homework:a1',title:'호흡을 길게 유지하기',minutes:5,assignmentId:'a1',
+    guide:{key:'homework:a1',lines:[],video:{id:'Kl85hKuMP5Y',title:'영상'},reference:null,scale:null,tuner:false,metronome:null}};
+  assert.equal(D.modeOf(step),'guide');assert.equal(D.modeOf({kind:'next',source:'homework'}),'free');
+  assert.equal(D.labelOf(step),'숙제');
+  const s=P.start([step],{id:'g-run',date:TODAY,now});
+  P.play(s,now);P.tick(s,now+90000);
+  D.finishItem(s,{state:'done',result:{mode:'guide'},now:now+90000});
+  assert.equal(s.phase,'summary');
+  const out=D.save(db,s,[],{now:now+91000});
+  const run=db.practices.find(p=>p.id==='practice-set:g-run');
+  assert.deepEqual(run.completed,['a1']);assert.deepEqual(run.assignmentReps,{a1:1});
+  assert.equal(run.minutes,1.5);assert.equal(out.goals,1);
+  assert.deepEqual(run.dailySet.items.map(x=>[x.id,x.kind,x.source,x.assignmentId,x.state,x.mode]),[['guide:homework:a1','next','homework','a1','done','guide']]);
+  assert.equal(db.dailyGoals.find(g=>g.id==='g1').completed,true);
+  assert.equal(db.practices.some(p=>p.id==='goal:g1'),false);
+  assert.equal(db.practices.length,1);
+  assert.equal(db.assignments.find(t=>t.id==='a1').status,'active');
+  assert.equal(D.isGuideRun(run),true);
+  // Saving again replaces the same row: still one practice of the homework, the same minutes.
+  D.save(db,s,[],{now:now+92000});
+  assert.equal(db.practices.length,1);assert.equal(Time.homeworkProgress(db,'a1').reps,1);
+  // Skipped: nothing is counted for the homework and the goal is not checked.
+  const other=seed(),z=P.start([{...step}],{id:'z',date:TODAY,now});
+  P.play(z,now);P.tick(z,now+30000);D.finishItem(z,{state:'skipped',now:now+30000});D.save(other,z,[],{now});
+  assert.deepEqual(other.practices[0].completed,[]);assert.equal(other.dailyGoals.find(g=>g.id==='g1').completed,false);
+  // A recommendation (no homework) checks the goal made from it by its key.
+  const rec=seed();rec.dailyGoals.push({id:'g9',date:TODAY,title:'롱톤',source:'recommendation',sourceId:'analysis:wob',completed:false,order:3});
+  const t=P.start([{kind:'next',source:'practice-tip',id:'guide:analysis:wob',title:'롱톤',minutes:5,guide:{key:'analysis:wob',lines:[],video:null}}],{id:'t',date:TODAY,now});
+  P.play(t,now);P.tick(t,now+60000);D.finishItem(t,{state:'done',result:{mode:'guide',timer:true},now:now+60000});D.save(rec,t,[],{now});
+  assert.equal(rec.dailyGoals.find(g=>g.id==='g9').completed,true);assert.equal(rec.dailyGoals.find(g=>g.id==='g1').completed,false);
+  assert.deepEqual(rec.practices[0].completed,[]);assert.equal(rec.practices[0].dailySet.items[0].timer,true);
+  // With a song: the one run row is that song's (곡별 연습량), and no second song row holds the same minutes.
+  const sg=seed(),u=P.start([{...step,songId:'s1'}],{id:'u',date:TODAY,now});
+  P.play(u,now);P.tick(u,now+120000);D.finishItem(u,{state:'done',result:{mode:'guide'},now:now+120000});D.save(sg,u,[],{now});
+  assert.equal(sg.practices.length,1);
+  assert.deepEqual([sg.practices[0].songId,sg.practices[0].practiceMode,sg.practices[0].minutes],['s1','song',2]);
+  assert.equal(sg.practices.filter(p=>p.songId==='s1').reduce((n,p)=>n+Time.actualMinutes(p),0),2);
+  assert.deepEqual(sg.practices[0].completed,['a1']);
+  // Without a song (and any full set) the row stays training with no song.
+  assert.deepEqual([run.songId,run.practiceMode],['','training']);
+  // A full set's run is not a 따라 하기.
+  assert.equal(D.isGuideRun({dailySet:{items:[{id:'ex-loosen-neck'},{id:'next-hw-a1'}]}}),false);
+});

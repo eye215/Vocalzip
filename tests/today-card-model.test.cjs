@@ -112,3 +112,20 @@ test('repeat hint: the same unplanned song or 분류 as 추가 on three days of 
 test('을/를 after a name',()=>{
   assert.deepEqual(['호흡','발성','On My Own','Defying Gravity','가사','리듬','Song 2'].map(T.object),['을','을','을','를','를','을','를']);
 });
+test('따라 하기 (a set of one step) done sits under the goal made from it; a full set run and an unfinished one stay 추가',()=>{
+  const db=seed();
+  db.dailyGoals.push({id:'g4',date:today,title:'롱톤',source:'recommendation',sourceId:'analysis:wob',completed:true,order:3});
+  const run=(id,item,extra={})=>({id:'practice-set:'+id,date:today,minutes:2,manualMinutes:2,practiceTimeSource:'practice-set',practiceSetId:id,completed:[],assignmentReps:{},
+    dailySet:{v:1,minutes:2,items:Array.isArray(item)?item:[item]},created:1,...extra});
+  db.practices.push(run('r1',{id:'guide:homework:hw1',kind:'next',source:'homework',assignmentId:'hw1',state:'done'},{completed:['hw1'],assignmentReps:{hw1:1}}),
+    run('r2',{id:'guide:analysis:wob',kind:'next',source:'practice-tip',state:'done'}),
+    run('r3',{id:'guide:analysis:into',kind:'next',source:'practice-tip',state:'skipped'}),
+    run('r4',[{id:'ex-loosen-neck',state:'done'},{id:'next-hw-hw1',assignmentId:'hw1',state:'done'}],{completed:['hw1']}));
+  const out=T.build(db,{today,songTitle});
+  assert.equal(out.plan.find(x=>x.id==='g1').minutes,14);
+  assert.equal(out.plan.find(x=>x.id==='g4').minutes,2);
+  assert.deepEqual(out.extra.filter(x=>x.kind==='set').map(x=>x.id),['set:r3','set:r4']);
+  // Every minute once: the plan rows and the 추가 rows add up to today's records.
+  const total=[...out.plan,...out.extra].reduce((n,x)=>n+x.minutes,0);
+  assert.equal(total,db.practices.filter(p=>p.date===today).reduce((n,p)=>n+Time.actualMinutes(p),0));
+});

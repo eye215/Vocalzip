@@ -8,7 +8,10 @@
  * records until the summary is saved.
  * Clock: a built-in exercise counts only while it is being done on its screen (leaving pauses it). One of the person's
  * own steps keeps the wall clock as before — other screens, another app, a locked phone, a reload; only its pause
- * button stops it — and shows as a small pill elsewhere (app/practice-set-mini.js, V.practiceSetClock). */
+ * button stops it — and shows as a small pill elsewhere (app/practice-set-mini.js, V.practiceSetClock).
+ * 따라 하기 (#/practice-set?guide=<key>[&song=<id>], VZ.guideHref; old #/guided-practice/<key> links redirect here) starts a
+ * set of ONE step (VZ.guidedStepFor, app/guided-practice.js) — a set like any other: one at a time, never while the free
+ * timer runs, saved through the same summary. */
 (()=>{
 'use strict';
 const V=window.VZ,P=window.VzipPracticeSet,D=window.VzipDailySet;
@@ -130,7 +133,8 @@ V.practiceSetEntry=()=>{
       const items=D.timeline(s.steps,s),p=D.progress(s),now=shortTitle(s.steps[s.index]);
       return {state:'live',title,line:p.done+' / '+p.total+' · 약 '+total(s.steps)+'분',label:'오늘의 연습 이어서 하기, '+p.done+' / '+p.total+', 다음 '+now,items,done:p.done,total:p.total,minutes:total(s.steps),button:'이어서 하기 · '+now};
     }
-    const run=D.runsOn(V.db,V.today()).at(-1);
+    // A 따라 하기 (a set of one step) is not today's set: the card still offers the set itself.
+    const run=D.runsOn(V.db,V.today()).filter(r=>!D.isGuideRun(r)).at(-1);
     if(run){
       // Under a minute is said in seconds ("40초"), not rounded to "0분" (2026-11-25: a 30-second measure read as 0분).
       const timeOf=x=>{const sec=Math.round(Number(x.seconds??Number(x.minutes)*60)||0);return sec>0&&sec<60?sec+'초':Math.round(Number(x.minutes)||sec/60)+'분';};
@@ -492,8 +496,21 @@ function runContext(){
       persist();syncAwake();paint();changed();
     },
     redo(){delete session.steps[session.index].result;persist();},
+    /** Keep what a step changed on itself (따라 하기: the seconds of the video watched, 타이머로 하기). */
+    save(){if(session)persist();},
     stop(){D.stop(session,Date.now());persist();syncAwake();paint();changed();},
-    exit(){V.nav('#/home');V.toast('오늘 안에 이어서 할 수 있어요.');},
+    exit(){
+      // 따라 하기 goes back to where it was pressed. Left before any second was counted, nothing was practised: the set
+      // of one step is not kept in hand (it would hold the clock for nothing).
+      if(session?.steps.length===1&&session.steps[0].guide){
+        const empty=!session.running&&!(P.elapsedNow(session,Date.now())>0);
+        if(empty){session=null;persist();syncAwake();changed();}
+        if(history.length>1)history.back();else V.nav('#/home');
+        if(!empty)V.toast('오늘 안에 이어서 할 수 있어요.');
+        return;
+      }
+      V.nav('#/home');V.toast('오늘 안에 이어서 할 수 있어요.');
+    },
     comfort:comfortNow,
     saveComfort(c){return V.change(db=>{D.savePrefs(db,{...D.prefs(db),comfort:c});},{silent:true})?comfortNow():null;},
     mic:micKnown,
@@ -543,6 +560,7 @@ function resultText(r){
   const x=r.result||{};
   if(x.mode==='hold'&&!x.timer&&Array.isArray(x.notes))return '음 '+x.notes.length+'개 중 '+x.notes.filter(n=>n.ok).length+'개'+(x.accuracy!=null?' · 맞은 시간 '+x.accuracy+'%':'');
   if(x.mode==='hold'&&x.timer)return '타이머로 했어요';
+  if(x.mode==='guide')return x.timer?'타이머로 했어요':'영상과 함께 했어요';
   if(x.mode==='breath'&&x.longestOut)return '가장 길게 '+x.longestOut+'초';
   return window.VzipDailyMeasure?.resultWords?.(x)||'';
 }
@@ -640,6 +658,31 @@ function paint(){
     host.innerHTML=planHtml();bindPlan(host);
   }
 }
+/** 따라 하기: start a set of one step for the exercise `key`, then show it at #/practice-set (the link is replaced, so 뒤로
+ * goes back to where 따라 하기 was pressed). One set at a time: a set in hand is carried on instead. */
+async function guideFrom(key,songId){
+  const host=document.querySelector('[data-pset-host]'),here=location.hash;
+  if(host)host.innerHTML='<p class="pset-help" data-pset-guide-wait>연습을 준비하고 있어요…</p>';
+  if(session){
+    const same=session.phase==='run'&&session.steps.length===1&&session.steps[0].id==='guide:'+key;
+    if(!same)V.toast('하던 오늘의 연습이 있어요. 마치거나 저장한 뒤에 따라 하기를 시작해 주세요.');
+    location.replace('#/practice-set');return;
+  }
+  // One clock at a time: 타이머만 켜기 (app/free-timer.js) would count the same minutes again.
+  if(V.freeTimer?.running?.()){V.toast('타이머가 돌아가는 중이에요. 타이머를 멈춘 뒤에 시작해 주세요.','error');location.replace('#/home');return;}
+  let step=null;
+  try{step=await V.guidedStepFor?.(key,{songId});}catch(error){console.error(error);}
+  if(location.hash!==here)return;
+  if(!step){
+    const h=document.querySelector('[data-pset-host]');
+    if(h)h.innerHTML='<section class="pset" data-pset-guide-missing><p class="pset-help">연습을 찾을 수 없어요. 다음 연습 목록에서 다시 골라 주세요.</p><a class="btn secondary block" href="#/next-practice">다음 연습 보기</a></section>';
+    return;
+  }
+  // Never over a set in hand: one may have started while the exercise was being read.
+  if(load()){location.replace('#/practice-set');return;}
+  try{startNow([step],V.today());}catch(error){V.toast(error.message||'따라 하기를 시작하지 못했어요.','error');location.replace('#/home');return;}
+  location.replace('#/practice-set');
+}
 function leaveRun(){
   runner?.destroy();runner=null;document.body.classList.remove('vz-set-run');
   const meta=document.querySelector('meta[name="theme-color"]');
@@ -647,8 +690,10 @@ function leaveRun(){
 }
 V.route('practice-set',{title:'오늘의 연습',back:true,tab:'home',noSettings:true,noAutoRefresh:true,
   render:()=>'<div class="pset-host" data-pset-host></div>',
-  mount(){
+  mount(host,r){
     load();
+    const guide=r?.query?.get('guide');
+    if(guide)return guideFrom(guide,r.query.get('song')||'');
     // Back from the recorder (or reopened after iOS reloaded the page): link the takes saved since the step opened.
     linkRecordings();
     if(!session&&saved&&saved.date!==V.today())saved=null;

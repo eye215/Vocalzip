@@ -33,6 +33,10 @@
  *                                                          ([{area, kind, value, unit, …}]) for 기본기 단계
  *   A finished goal step still writes that goal's single row 'goal:<goalId>' and a song section its own song row
  *   (app/practice-set-model.js save), so time is never counted twice and a song keeps its minutes.
+ * 따라 하기 (2026-11-26) is a set of ONE step (kind 'next', step.guide, mode 'guide'; app/guided-practice.js): saved as this
+ *   same run row — a homework step puts the assignment in completed / assignmentReps (one practice, 'N회'; never done) —
+ *   and its done step checks today's goal made from it; with a song it is that song's row (songId, practiceMode 'song').
+ *   Its step id 'guide:<key>' tells such a run (isGuideRun).
  * Time: only seconds the runner was active on a step (or minutes typed for an own step); a recording's length never. */
 (function(root,factory){
   const node=typeof module==='object'&&module.exports;
@@ -309,8 +313,11 @@ function build(db={},options={}){
 /** A step the person manages on the set screen (minutes, remove, order) — not one 고르기 or 다음 연습 puts in. */
 const isOwn=s=>!['exercise','next','take'].includes(s.kind);
 const totalMinutes=steps=>list(steps).reduce((n,s)=>n+(Number(s.minutes)||0),0);
-/** How a step is run: its exercise's mode, 'take' for the 30-second recording, 'free' (a plain timer) otherwise. */
-const modeOf=s=>s.kind==='exercise'?exercise(s.exercise)?.mode||'free':s.kind==='take'?'take':'free';
+/** How a step is run: its exercise's mode, 'take' for the 30-second recording, 'guide' for 따라 하기 (a set of one
+ * step: app/guided-practice.js VZ.guidedStepFor), 'free' (a plain timer) otherwise. */
+const modeOf=s=>s.guide&&typeof s.guide==='object'?'guide':s.kind==='exercise'?exercise(s.exercise)?.mode||'free':s.kind==='take'?'take':'free';
+/** A run row that is a 따라 하기 (a set of one step), not today's set: 오늘's 오늘의 연습 card does not read it as done. */
+const isGuideRun=row=>{const items=list(row?.dailySet?.items);return items.length===1&&String(items[0]?.id||'').startsWith('guide:');};
 const SOURCE={homework:'숙제',personal:'개인',recommendation:'추천','lesson-point':'레슨 지적'};
 const KIND={warmup:'웜업',goal:'오늘의 목표',song:'곡 구간',record:'녹음',take:'녹음'};
 /** The small word in front of a step: its group, where it came from, or its kind. */
@@ -496,22 +503,32 @@ function save(db,s,rows,{now=Date.now(),category=null}={}){
   const takes=Object.fromEntries(rest.filter(st=>st.kind==='take'&&list(st.mediaIds).length).map(st=>[st.slot,String(st.mediaIds.at(-1))]));
   const did=items.filter(x=>x.state==='done').length,whole=round3(minutes+part.minutes);
   if(!(minutes>0||media.length||did||old))return {minutes:part.minutes,goals:part.goals,rows:part.rows,runId:''};
+  // 따라 하기 checks the goal made from it, as its own screen did (a homework goal by the assignment, a recommendation
+  // by the exercise's key). Its time stays in this row only: the goal gets no row of its own, so nothing counts twice.
+  let checked=0;
+  for(const st of rest)if(st.guide&&st.done&&!st.skipped){
+    const source=st.assignmentId||st.guide.key;
+    for(const g of live(db,'dailyGoals'))if(source&&g.date===s.date&&g.sourceId===source&&g.completed!==true){g.completed=true;checked++;}
+  }
+  // 따라 하기 of a song (a homework with a song, a song's tip): the one row is that song's practice, as the old screen's
+  // row was, so 곡별 연습량 counts it. Its step keeps no row of its own (kind 'next'), so the minutes stay in this row only.
+  const guideSong=s.steps.length===1&&s.steps[0].guide&&s.steps[0].songId?String(s.steps[0].songId):'';
   const take=rest.find(st=>st.kind==='take');
-  const row={...old,id,date:s.date,minutes,manualMinutes:minutes,practiceTimeSource:'practice-set',practiceMode:'training',songId:'',
+  const row={...old,id,date:s.date,minutes,manualMinutes:minutes,practiceTimeSource:'practice-set',practiceMode:guideSong?'song':'training',songId:guideSong,
     categoryLabel:'오늘의 연습',detail:'오늘의 연습',technique:items.filter(x=>!x.row&&x.minutes>0).map(x=>({name:x.title,minutes:x.minutes})),
     memo:'[오늘의 연습] '+items.length+'개 중 '+did+'개',mediaIds:media,completed:homework,assignmentReps:Object.fromEntries(homework.map(h=>[h,1])),
     assignmentNotes:old?.assignmentNotes||{},practiceSetId:s.id,
     dailySet:{v:1,minutes:whole,items,...(Object.keys(takes).length?{recording:{songId:take?.songId||'',phrase:take?.phrase||'',beforeId:takes.before||'',afterId:takes.after||''}}:{})},
     created:old?.created||now};
   if(at<0)db.practices.push(row);else db.practices[at]=row;
-  return {minutes:whole,goals:part.goals,rows:part.rows+1,runId:id};
+  return {minutes:whole,goals:part.goals+checked,rows:part.rows+1,runId:id};
 }
 /** The sets finished on a date (newest last): the run rows. */
 const runsOn=(db,date)=>live(db,'practices').filter(p=>p.dailySet&&p.date===date).sort((a,b)=>(Number(a.created)||0)-(Number(b.created)||0));
 
 return {GROUPS,SONG,CATALOG,APPLY_TASKS,ROTATION,PERFORMANCE_DAYS,applyTask,applyInfo,restToday,nextPerformance,NEXT_MAX,NEXT_MINUTES,TAKE_SECONDS,MAX_STEPS,PREFS_ID,PREFS_KIND,groupOf,exercise,exercisesOf,
   prefs,cleanPrefs,setExercise,setGroup,savePrefs,resetPrefs,rotation,pick,dayNumber,
-  ownKey,nextItems,focusOf,ownSteps,build,isOwn,totalMinutes,modeOf,labelOf,shortTitle,timeline,progress,finishItem,stop,
+  ownKey,nextItems,focusOf,ownSteps,build,isOwn,totalMinutes,modeOf,isGuideRun,labelOf,shortTitle,timeline,progress,finishItem,stop,
   word,holdStart,holdTick,holdResult,comfort,baseNote,notesFor,noteTags,syllableOf,adapt,noteName,
   rowId,measuresOf,summary,save,runsOn};
 });

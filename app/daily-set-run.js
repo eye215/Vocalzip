@@ -6,7 +6,9 @@
  * measured:  VZ.dailySetRunner.mount(host, ctx) → {destroy()}.
  * Modes (VzipDailySet.modeOf): timed (목 풀기) · breath (호흡) · follow (the app plays a pattern, then your turn) ·
  * hold (reference note + the 연습 따라 하기 pitch reader VZ.guidedDetectPitch + hold time; a timer when the mic is not
- * available) · take (연습 전후 30초 녹음, VZ.media.capture) · free (the person's own step on the set's wall clock).
+ * available) · take (연습 전후 30초 녹음, VZ.media.capture) · free (the person's own step on the set's wall clock) ·
+ * guide (따라 하기, a set of one step: a hand-reviewed video with the mic off and the clock only while it plays, then
+ * 혼자 해 보기 on a timer with the tuner where the exercise has one; the metronome where its text names a beat).
  * The measuring exercises of 기본기 단계 (app/daily-measure-model.js has their numbers): hiss (“스~” 길게: the length of
  * one continuous hiss) · rhythm (“타” 따라 하기: listen to a bar, say it back on the next; the distance from the beat) ·
  * vibrato (롱톤 비브라토: 8 seconds, straight then vibrato on the cue) · scale (스케일 따라 부르기: hear it, sing it back
@@ -643,6 +645,239 @@ Object.assign(ENGINES,{
   }
 });
 
+/* ---------- 따라 하기: a set of ONE step (app/guided-practice.js VZ.guidedStepFor, step.guide) ---------- */
+const YT_STATE={ENDED:0,PLAYING:1,PAUSED:2,BUFFERING:3},WATCH=.8;
+/** The YouTube IFrame API, loaded once. */
+function youtube(ready){
+  if(window.YT?.Player)return ready();
+  const before=window.onYouTubeIframeAPIReady;
+  window.onYouTubeIframeAPIReady=()=>{try{before?.();}catch{}ready();};
+  if(!document.querySelector('script[data-yt-api]')){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';s.async=true;s.dataset.ytApi='';document.head.append(s);}
+}
+Object.assign(ENGINES,{
+  /* With a hand-reviewed video the step is done one of two ways:
+   *   영상 보며 하기 — the MIC IS OFF (no tuner, no recording, nothing measured). The step's clock runs only while the
+   *     video really plays: pausing, buffering, a hidden page or leaving the screen stop it. Only seconds played in
+   *     order are "watched" (a jump forward is not), and 80 % watched lets the step be finished. After the video the
+   *     same step goes on as 혼자 해 보기: the timer, with the tuner where the exercise has one.
+   *   타이머로 하기 (also 영상이 재생되지 않나요? and 맞지 않아요) — the timer; the step can be finished.
+   * Without a video it is the timer. Reference notes, 음계 듣기 and the metronome never count time. What changed on the
+   * step (seconds watched, 타이머로 하기) is kept in the running session (ctx.save) so leaving and coming back goes on. */
+  guide(r){
+    const st=r.st,g=st.guide||(st.guide={}),ctx=r.ctx;
+    const seen=new Set((Array.isArray(g.seen)?g.seen:[]).filter(Number.isInteger));
+    let part=g.video&&!g.timer&&!g.after?'video':'solo',player=null,loaded=false,last=null,clockOn=false,opening=false,h=D.holdStart();
+    let note=g.reference?(g.reference.notes.includes(g.note)?g.note:g.reference.initial):null;
+    let metro=null,metroPending=false,bpm=g.metronome?.bpm||75,beats=g.metronome?.beats||4;
+    const S=()=>window.YT?.PlayerState||YT_STATE;
+    const duration=()=>Number(g.duration)||0;
+    const watched=()=>{const d=Math.floor(duration());return d>0?Math.min(1,seen.size/d):0;};
+    const canFinish=()=>!g.video||!!g.timer||!!g.after||watched()>=WATCH;
+    const keep=()=>{g.seen=[...seen].sort((a,b)=>a-b);if(note!=null)g.note=note;ctx.save?.();};
+    /** The set's clock for this step: on only while the video plays (or the timer runs). */
+    const clock=on=>{if(on===clockOn)return;clockOn=on;if(on)ctx.start();else ctx.pause();};
+    const poll=()=>{
+      if(!player||!loaded)return;
+      let t;try{t=Number(player.getCurrentTime?.())||0;}catch{return;}
+      if(clockOn&&last!=null&&t>=last&&t-last<2.5)for(let k=Math.floor(last);k<Math.floor(t);k++)seen.add(k);
+      last=clockOn?t:null;
+    };
+    const dropPlayer=()=>{const p=player;player=null;loaded=false;last=null;if(p)setTimeout(()=>{try{p.destroy?.();}catch{}},0);};
+    const show=()=>{
+      text(r.q('[data-guide-time]'),'연습 시간 '+mmss(ctx.elapsed()));
+      if(part!=='video')return;
+      const d=duration();text(r.q('[data-guide-watch]'),'영상 '+mmss(seen.size)+' / '+(d?mmss(d):'—'));
+      const bar=r.q('[data-guide-watchbar]');if(bar)bar.style.width=Math.round(watched()*100)+'%';
+    };
+    const words=()=>{
+      if(part==='video'){
+        const left=canFinish()?'다 봤으면 끝내도 돼요':'영상을 80% 넘게 보면 끝낼 수 있어요 · 지금 '+Math.round(watched()*100)+'%';
+        if(!loaded){r.word('영상을 불러오고 있어요','wait');r.sub('영상이 재생되는 동안만 연습 시간을 세요');return;}
+        if(r.state==='doing'){r.word(clockOn?'영상을 보며 따라 해요':'영상을 기다리고 있어요',clockOn?'go':'wait');r.sub(left);return;}
+        r.word(seen.size?'이어서 볼 수 있어요':'준비되면 영상을 틀어요','wait');r.sub(seen.size?left:'영상이 재생되는 동안만 연습 시간을 세요');return;
+      }
+      if(r.state==='doing'){if(!r.mic){r.word('하고 있어요','go');r.sub(g.tuner&&!opening?'음정 바늘 없이 타이머로 해요':'');}return;}
+      r.word(g.after&&!g.solo?'이제 혼자 해 봐요':ctx.elapsed()>0?'이어서 해요':'준비되면 시작해요','wait');
+      r.sub(g.tuner?'시작하면 음정 바늘이 켜져요 · 이 화면에서만 듣고 녹음하지 않아요':'시작한 동안만 연습 시간을 세요');
+    };
+    const timeRow=line=>'<p class="dset-guide-time"><b data-guide-time>연습 시간 '+mmss(ctx.elapsed())+'</b><span>'+esc(line)+'</span></p>';
+    const seg=()=>g.video?'<div class="dset-seg" role="group" aria-label="연습 방법"><button type="button" data-guide-part="video" aria-pressed="'+(part==='video')+'">영상 보며 하기</button>'+
+      '<button type="button" data-guide-part="solo" aria-pressed="'+(part==='solo')+'">'+(g.after||watched()>=WATCH?'혼자 해 보기':'타이머로 하기')+'</button></div>':'';
+    const feedback=()=>{
+      const good=(V.db.videoFeedback||[]).some(f=>f.exerciseKey===g.key&&f.videoId===g.video.id&&f.verdict==='good');
+      return '<div class="dset-guide-feedback" data-guide-feedbacks><span>이 영상이 이 연습에 맞았나요?</span><span class="dset-guide-pair"><button type="button" class="dset-chip" data-guide-feedback="good" aria-pressed="'+good+'">맞아요</button>'+
+        '<button type="button" class="dset-chip" data-guide-feedback="bad" aria-pressed="false">맞지 않아요</button></span></div>';
+    };
+    const videoHtml=()=>'<div class="dset-video"><div id="dset-youtube"></div></div>'+
+      '<p class="dset-video-meta"><span>연습 영상 · '+esc(g.video.title)+'</span><small data-guide-watch></small></p><div class="dset-holdbar dset-watchbar" aria-hidden="true"><i data-guide-watchbar></i></div>'+
+      timeRow('영상이 재생되는 동안만 세요')+
+      '<div class="dset-guide-note" data-guide-mic-off><p><strong>마이크 꺼짐</strong><span>영상 소리가 섞이지 않게</span></p><small>영상이 나오는 동안은 재지도, 녹음하지도 않아요.'+(g.tuner?' 영상이 끝나면 ‘혼자 해 보기’에서 음정 바늘을 켜요.':'')+'</small></div>'+
+      '<p class="dset-guide-next">다음: 혼자 해 보기'+(g.tuner?' · 음정 바늘 켜짐':'')+'</p>'+feedback()+
+      '<button type="button" class="dset-quiet dset-guide-fallback" data-guide-fallback>영상이 재생되지 않나요? 타이머로 연습하기</button>';
+    const refHtml=()=>{
+      const ref=g.reference;if(!ref)return '';
+      return '<div class="dset-guide-ref"><label><span>기준음 높이</span><select data-guide-note aria-label="기준음 높이">'+ref.notes.map((n,i)=>'<option value="'+n+'"'+(n===note?' selected':'')+'>'+['낮게','보통','높게'][i]+' · '+D.noteName(n)+'</option>').join('')+'</select></label>'+
+        '<span class="dset-guide-pair"><button type="button" class="dset-chip" data-guide-ref><i class="ph ph-speaker-high" aria-hidden="true"></i>기준음 듣기</button>'+
+        (g.scale?'<button type="button" class="dset-chip" data-guide-scale><i class="ph ph-music-notes" aria-hidden="true"></i>음계 듣기</button>':'')+'</span>'+
+        '<small>'+(g.scale?'음계는 고른 높이에서 '+esc(g.scale.names.join(' '))+' 순서로 들려줘요. ':'')+'먼저 듣고 편한 높이에서 따라 불러요. 소리를 들어도 연습 시간은 세지 않아요.</small></div>';
+    };
+    const tunerHtml=()=>g.tuner?'<div class="dset-tuner" data-guide-tuner><div class="dset-track" aria-hidden="true"><i class="dset-zone"></i><i class="dset-needle" data-run-needle></i></div>'+
+      '<div class="dset-track-labels" aria-hidden="true"><span>낮음</span><span>맞음</span><span>높음</span></div><div class="dset-holdbar" aria-hidden="true"><i data-run-hold></i></div>'+
+      '<p class="dset-rule" data-guide-hold>목표음 4초 유지 · 0.0초</p></div>':'';
+    const soloHtml=()=>timeRow('시작한 동안만 세요')+(g.lines?.length?'<ol class="dset-guide-lines">'+g.lines.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>':'')+refHtml()+tunerHtml();
+    const beatsHtml=()=>Array.from({length:beats},(_,i)=>'<i data-beat="'+i+'"></i>').join('');
+    const metroHtml=()=>!metro?'':'<section class="dset-metro" aria-label="메트로놈"><div class="dset-metro-row">'+
+      '<button type="button" class="dset-chip" data-bpm-step="-5" aria-label="BPM 5 낮추기">−</button><label class="dset-metro-bpm"><input type="number" data-bpm min="40" max="240" step="1" value="'+bpm+'" aria-label="메트로놈 BPM"><span>BPM</span></label>'+
+      '<button type="button" class="dset-chip" data-bpm-step="5" aria-label="BPM 5 높이기">+</button><label class="dset-metro-meter">박자<select data-meter aria-label="메트로놈 박자">'+[2,3,4,6].map(n=>'<option value="'+n+'"'+(n===beats?' selected':'')+'>'+n+'박</option>').join('')+'</select></label></div>'+
+      '<div class="dset-beats" aria-hidden="true">'+beatsHtml()+'</div><button type="button" class="dset-chip" data-metronome aria-pressed="'+!!metro.running+'">'+(metro.running?'메트로놈 끄기':'메트로놈 켜기')+'</button>'+
+      '<p class="dset-rule">첫 박은 높은 소리로 알려줘요. 메트로놈만 켜면 연습 시간은 세지 않아요.</p><p class="dset-rule" role="status" data-metro-status></p></section>';
+    if(g.metronome&&!g.nonVocal&&window.VzipMetronome)metro=window.VzipMetronome.create({Audio:window.AudioContext||window.webkitAudioContext,
+      onBeat:i=>{if(!r.dead)r.host.querySelectorAll('[data-beat]').forEach(d=>d.classList.toggle('active',Number(d.dataset.beat)===i));},
+      onState:on=>{if(r.dead)return;const b=r.q('[data-metronome]');if(b){b.textContent=on?'메트로놈 끄기':'메트로놈 켜기';b.setAttribute('aria-pressed',String(on));}if(!on)r.host.querySelectorAll('[data-beat]').forEach(d=>d.classList.remove('active'));}});
+    const bindMetro=()=>{
+      if(!metro)return;const input=r.q('[data-bpm]'),meter=r.q('[data-meter]'),status=()=>r.q('[data-metro-status]');
+      const configure=()=>{const n=Number(input.value);if(!Number.isInteger(n)||n<40||n>240){text(status(),'BPM을 40~240 사이로 입력해 주세요.');input.value=bpm;return;}
+        bpm=n;beats=Number(meter.value);metro.configure(bpm,beats);const box=r.q('.dset-beats');if(box)box.innerHTML=beatsHtml();text(status(),'');};
+      input.onchange=configure;meter.onchange=configure;
+      r.host.querySelectorAll('[data-bpm-step]').forEach(b=>b.onclick=()=>{input.value=Math.min(240,Math.max(40,bpm+Number(b.dataset.bpmStep)));configure();});
+      r.q('[data-metronome]').onclick=async()=>{
+        if(metro.running){metro.stop();return;}if(metroPending)return;metroPending=true;
+        try{configure();r.tones?.stop();audioSession('playback');await metro.start(bpm,beats);}catch(e){if(!r.dead)text(status(),e.message);}finally{metroPending=false;}
+      };
+    };
+    const draw=()=>{const box=r.q('[data-run-stage]');if(!box||r.dead)return;box.innerHTML=api.stage();api.bind();r.say(api.say());words();show();r.paintState();};
+    const afterVideo=()=>{
+      r.stopLoop();r.state=ctx.elapsed()>0?'paused':'ready';
+      if(watched()>=WATCH){g.after=true;keep();dropPlayer();part='solo';draw();r.word('영상을 다 봤어요','exact');return;}
+      keep();words();show();r.paintState();V.toast('영상을 80% 넘게 봐야 끝낼 수 있어요. 다시 보거나 타이머로 해요.');
+    };
+    const videoState=data=>{
+      const s=S();poll();
+      if(data===s.PLAYING){
+        // Playing without being asked (the page came back, the system resumed it): it waits for the button.
+        if(r.state!=='doing'){try{player.pauseVideo();}catch{}return;}
+        clock(true);try{last=Number(player.getCurrentTime())||0;}catch{last=0;}
+      }else{
+        clock(false);last=null;
+        if(data===s.ENDED)return afterVideo();
+        if(data===s.PAUSED&&r.state==='doing')return r.pauseRun();
+      }
+      words();show();r.paintState();
+    };
+    const attach=()=>{
+      if(part!=='video'||!g.video)return;
+      youtube(()=>{
+        if(r.dead||part!=='video'||player||!document.getElementById('dset-youtube')||!window.YT?.Player)return;
+        let mine=null;
+        mine=player=new window.YT.Player('dset-youtube',{videoId:g.video.id,playerVars:{playsinline:1,controls:0,disablekb:1,fs:0,rel:0,origin:location.origin},events:{
+          onReady:e=>{if(r.dead||player!==mine)return;loaded=true;try{e.target.getIframe?.()?.setAttribute('tabindex','-1');}catch{}
+            const d=Number(e.target.getDuration?.())||0;if(d>0)g.duration=d;words();show();r.paintState();},
+          onStateChange:e=>{if(!r.dead&&player===mine)videoState(e.data);}}});
+      });
+    };
+    const switchTo=next=>{
+      if(next===part||r.dead)return;
+      if(r.state==='doing')r.pauseRun();
+      poll();clock(false);dropPlayer();
+      // 타이머로 하기 lets the step be finished without the video (as its own screen did).
+      if(next==='solo'&&!g.after)g.timer=true;
+      part=next;keep();r.stopLoop();r.state=ctx.elapsed()>0?'paused':'ready';draw();
+    };
+    const openTuner=async()=>{
+      if(opening||r.mic)return;opening=true;r.primary.disabled=true;audioSession('play-and-record');
+      try{
+        const mic=await openMic();
+        if(r.dead||r.state!=='doing'||part!=='solo'){mic.close();return;}
+        r.mic=mic;ctx.setMic('granted');h=D.holdStart();r.quietFor=0;
+      }catch{ctx.setMic('denied');audioSession('playback');if(!r.dead)r.notice?.('마이크를 쓸 수 없어서 음정 바늘 없이 타이머로 해요.');}
+      finally{opening=false;if(!r.dead){r.primary.disabled=false;words();}}
+    };
+    const result=()=>({mode:'guide',...(g.video&&!g.timer?{}:{timer:true})});
+    const api={custom:true,say:()=>D.shortTitle(st),
+      stage:()=>'<div class="dset-guide" data-guide data-part="'+part+'">'+seg()+(part==='video'?videoHtml():soloHtml())+
+        '<button type="button" class="dset-chip dset-guide-finish" data-guide-finish'+(canFinish()&&r.state!=='doing'&&ctx.elapsed()>0?'':' hidden')+'><i class="ph ph-check" aria-hidden="true"></i>다 했어요</button>'+metroHtml()+'</div>',
+      bind(){
+        r.host.querySelectorAll('[data-guide-part]').forEach(b=>b.onclick=()=>switchTo(b.dataset.guidePart));
+        r.q('[data-guide-fallback]')?.addEventListener('click',()=>switchTo('solo'));
+        r.host.querySelectorAll('[data-guide-feedback]').forEach(b=>b.onclick=()=>{
+          if(!g.video||r.dead)return;const verdict=b.dataset.guideFeedback;
+          if(!V.guidedVideoFeedback?.(g.key,g.video.id,verdict))return V.toast('저장하지 못했어요. 다시 시도해 주세요.','error');
+          if(verdict!=='bad'){b.setAttribute('aria-pressed','true');V.toast('영상 평가를 저장했어요.');return;}
+          // 맞지 않아요: this video is not offered for this exercise again, and the step goes on with the timer.
+          if(r.state==='doing')r.pauseRun();
+          poll();clock(false);dropPlayer();g.video=null;part='solo';keep();r.stopLoop();r.state=ctx.elapsed()>0?'paused':'ready';draw();
+          V.toast('이 연습에서는 해당 영상을 다시 추천하지 않을게요.');
+        });
+        r.q('[data-guide-finish]')?.addEventListener('click',()=>{if(!r.dead&&canFinish())r.complete(result());});
+        const select=r.q('[data-guide-note]');
+        if(select)select.onchange=()=>{r.tones?.stop();note=Number(select.value);h=D.holdStart();keep();};
+        const listen=play=>()=>{if(r.dead||r.state==='doing'||note==null)return;metro?.stop();audioSession('playback');r.tones?.stop();play();};
+        r.q('[data-guide-ref]')?.addEventListener('click',listen(()=>r.tone(note,.05,1.05)));
+        r.q('[data-guide-scale]')?.addEventListener('click',listen(()=>{
+          const start=g.scale.notes.reduce((a,b)=>Math.abs(b-note)<Math.abs(a-note)?b:a);
+          g.scale.offsets.forEach((o,i)=>r.tone(start+o,.05+i*.42,.37));
+        }));
+        bindMetro();attach();
+      },
+      ready:words,
+      primaryText(state){
+        r.primary.disabled=part==='video'&&!loaded&&state!=='doing';
+        // The big button is 다 했어요 while doing once the step can be finished (bright), else 잠깐 멈춤 (quiet).
+        r.host.dataset.finish=state==='doing'&&canFinish()?'1':'';
+        if(state==='doing')return canFinish()?'다 했어요':'잠깐 멈춤';
+        if(part==='video')return !loaded?'영상 불러오는 중…':seen.size?'영상 이어 보기':'영상 재생';
+        return g.after&&!g.solo?'혼자 해 보기':ctx.elapsed()>0?'계속하기':'시작하기';
+      },
+      pausable:()=>canFinish(),
+      begin(){
+        if(r.dead||r.state==='doing')return;
+        if(part==='video'){
+          if(!loaded||!player)return;
+          audioSession('playback');
+          try{if(player.getPlayerState?.()===S().ENDED)player.seekTo?.(0,true);}catch{}
+          r.state='doing';r.paintState();r.startLoop();words();
+          try{player.playVideo();}catch{}
+          return;
+        }
+        r.tones?.stop();g.solo=true;
+        r.state='doing';clock(true);h=D.holdStart();keep();
+        const finish=r.q('[data-guide-finish]');if(finish)finish.hidden=true;
+        r.paintState();r.startLoop();words();show();
+        if(g.tuner&&ctx.mic()!=='off')openTuner();
+      },
+      press(){if(canFinish())return r.complete(result());r.pauseRun();},
+      /* The runner's 잠깐 멈춤 (and a hidden page): the video pauses, the clock stops; the mic is closed by the runner. */
+      pause(){
+        if(part==='video'){poll();try{const s=player?.getPlayerState?.();if(s===S().PLAYING||s===S().BUFFERING)player.pauseVideo();}catch{}}
+        clock(false);last=null;keep();
+        const finish=r.q('[data-guide-finish]');if(finish)finish.hidden=!(canFinish()&&ctx.elapsed()>0);
+      },
+      hide(){metro?.stop();},
+      paint:()=>{show();r.q('[data-guide-part="solo"]')&&text(r.q('[data-guide-part="solo"]'),g.after||watched()>=WATCH?'혼자 해 보기':'타이머로 하기');},
+      tick(dt){
+        if(part==='video'){
+          poll();
+          // The clock follows the player itself: buffering or a stall is not playing.
+          try{if(clockOn&&player?.getPlayerState?.()!==S().PLAYING){clock(false);last=null;}}catch{}
+          words();show();r.paintState();return;
+        }
+        show();
+        if(!r.mic||note==null)return;
+        const heard=r.mic.read(),cents=centsFrom(heard,note),hint=r.hush(heard,dt);
+        D.holdTick(h,cents,dt,{tolerance:25,need:4});
+        const w=D.word(cents,25);r.word(w.text,w.key);
+        const needle=r.q('[data-run-needle]');if(needle){needle.style.left=(50+Math.max(-45,Math.min(45,(cents||0)*.9)))+'%';needle.dataset.on=cents==null?'':'1';}
+        const bar=r.q('[data-run-hold]');if(bar)bar.style.width=Math.round(Math.min(1,h.held/4)*100)+'%';
+        text(r.q('[data-guide-hold]'),'목표음 '+D.noteName(note)+' 4초 유지 · '+Math.min(4,h.best).toFixed(1)+'초');
+        r.q('[data-guide-tuner]')?.classList.toggle('is-on',h.ok);
+        r.sub(hint||(cents==null?'':(cents>0?'+':'')+cents+' cent'));
+      },
+      cancel(){poll();clock(false);last=null;keep();const p=player;player=null;loaded=false;try{p?.destroy?.();}catch{}try{metro?.destroy();}catch{}metro=null;},
+      result};
+    return api;
+  }
+});
+
 /* ---------- the screen ---------- */
 function mount(host,ctx){
   const s=ctx.session,st=s.steps[s.index],mode=D.modeOf(st),e=st.exercise?D.exercise(st.exercise):null;
@@ -691,7 +926,7 @@ function mount(host,ctx){
   const html=()=>'<header class="dset-top"><button type="button" class="dset-x" data-run-exit aria-label="나가기 · 오늘 안에 이어서 할 수 있어요"><i class="ph ph-x" aria-hidden="true"></i></button>'+
     '<ol class="dset-bar" aria-hidden="true">'+tl.map(x=>'<li class="is-'+x.state+'"></li>').join('')+'</ol><span class="dset-count"><span data-run-count-all>'+(s.index+1)+' / '+s.steps.length+'</span></span></header>'+
     (last?'<p class="dset-last" data-run-last'+(lastSkipped?' data-skipped':'')+'><i class="ph ph-'+(lastSkipped?'skip-forward':'check')+'" aria-hidden="true"></i>'+esc(last)+'</p>':'')+
-    '<p class="dset-name" data-run-name><b>'+esc(label)+'</b>'+(mode==='free'&&!task?'':'<span>'+esc(D.shortTitle(st))+'</span>')+(st.optional?'<span>선택</span>':'')+
+    '<p class="dset-name" data-run-name><b>'+esc(label)+'</b>'+((mode==='free'&&!task)||mode==='guide'?'':'<span>'+esc(D.shortTitle(st))+'</span>')+(st.optional?'<span>선택</span>':'')+
       (st.mic?'<span class="dset-badge"><i class="ph ph-microphone" aria-hidden="true"></i>마이크</span>':'')+'<span class="dset-badge">약 '+st.minutes+'분</span></p>'+
     '<h2 class="dset-say" id="pset-step-title" data-run-say></h2>'+
     '<p class="dset-why" data-run-why>'+esc(ctx.why?.(st)||st.why||'')+'</p>'+
@@ -710,8 +945,8 @@ function mount(host,ctx){
     const label=r.gate?'':r.state==='result'?'다음으로':r.engine.primaryText?.(r.state)||(r.state==='doing'?'잠깐 멈춤':r.state==='paused'?'계속하기':'시작하기');
     if(!r.gate)text(p,label);
     // 다시: once something was started. The person's own step pauses with a small button (its big one is 다 했어요).
-    redo.hidden=r.state==='ready'||mode==='take'||r.engine.wall;
-    pauseB.hidden=!(r.engine.wall&&r.state==='doing');pauseB.setAttribute('aria-label','일시정지');
+    redo.hidden=r.state==='ready'||mode==='take'||mode==='guide'||r.engine.wall;
+    pauseB.hidden=!((r.engine.wall||r.engine.pausable?.())&&r.state==='doing');pauseB.setAttribute('aria-label','일시정지');
   };
 
   /* Gates before the first start of a step: the comfortable range (once ever) and the mic (once, with why). */
@@ -751,7 +986,7 @@ function mount(host,ctx){
   }
   const noMicText=()=>mode==='hold'?'마이크를 쓸 수 없어서 타이머로 진행해요. 기기 설정에서 마이크를 허용하면 음정을 바로 알려 드려요.':
     '마이크를 쓸 수 없어서 타이머로 진행해요. 이번에는 재지 않아요. 기기 설정에서 마이크를 허용하면 기본기 단계를 잴 수 있어요.';
-  const notice=message=>{const el=r.q('[data-run-notice]')||Object.assign(document.createElement('p'),{className:'dset-notice'});el.dataset.runNotice='';el.setAttribute('role','status');el.textContent=message;r.q('[data-run-stage]').after(el);};
+  const notice=r.notice=message=>{const el=r.q('[data-run-notice]')||Object.assign(document.createElement('p'),{className:'dset-notice'});el.dataset.runNotice='';el.setAttribute('role','status');el.textContent=message;r.q('[data-run-stage]').after(el);};
   async function connectMic(){
     audioSession('play-and-record');
     try{const mic=await openMic();if(r.dead){mic.close();return false;}r.mic=mic;ctx.setMic('granted');return true;}
@@ -780,7 +1015,7 @@ function mount(host,ctx){
   }
   function pauseRun(){
     if(r.state!=='doing')return;
-    r.state='paused';ctx.pause();r.stopLoop();r.tones?.stop();r.mic?.close();r.mic=null;
+    r.state='paused';r.engine.pause?.();ctx.pause();r.stopLoop();r.tones?.stop();r.mic?.close();r.mic=null;
     r.engine.paint?.();r.paintState();r.word('잠깐 멈췄어요','wait');
   }
   r.destroy=()=>{
@@ -791,6 +1026,7 @@ function mount(host,ctx){
   };
   function hidden(ev){
     if(r.dead||(ev.type==='visibilitychange'&&!document.hidden))return;
+    if(r.engine.hide){r.engine.hide();pauseRun();return;}
     if(r.engine.custom){if(r.state==='doing'){r.engine.cancel();r.stopLoop();r.state='ready';r.paintState();r.engine.ready();r.word('화면을 벗어나서 녹음을 멈췄어요','low');}return;}
     if(!r.engine.wall)pauseRun();
   }
@@ -816,7 +1052,7 @@ function mount(host,ctx){
   r.q('[data-run-stop]').onclick=()=>{if(r.dead)return;r.dead=true;release();ctx.stop();};
   r.q('[data-run-exit]').onclick=()=>ctx.exit();
   document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',hidden);
-  r.begin=begin;
+  r.begin=begin;r.pauseRun=pauseRun;
   return r;
 }
 V.dailySetRunner={mount};

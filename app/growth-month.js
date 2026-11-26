@@ -137,7 +137,7 @@ function actionHtml(it, i) {
       const has = todayGoals().some(g => norm(g.title) === norm(a.title) || g.id === 'overall-growth:' + V.today() + ':' + a.metric);
       return '<button type="button" class="gc-chip gm-act" data-gm-goal="' + i + '"' + (has ? ' disabled' : '') + '>' + (has ? '담았어요' : '목표에 담기') + '</button>';
     }
-    case 'practice-tip': return link('#/guided-practice/' + encodeURIComponent('analysis:' + a.tipKey), '따라 하기');
+    case 'practice-tip': return link(V.guideHref ? V.guideHref('analysis:' + a.tipKey) : '#/practice-set?guide=' + encodeURIComponent('analysis:' + a.tipKey), '따라 하기');
     case 'route': return link(a.href, '열기');
     case 'goal': case 'routine': return link('#/home', '오늘 목표에서 하기');
     case 'plan': return link('#/practice-set', '오늘의 연습으로');

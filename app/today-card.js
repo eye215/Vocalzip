@@ -9,7 +9,8 @@
  * names the goal in goalId (the field the goal row already carries; link() writes it on an existing record), or — for
  * a homework goal — when it is a practice of that homework (completed / guidedExerciseKey, the rule of
  * VzipGoalRoutines.otherMinutes). Linking never adds a row or minutes: the record's own minutes move under the goal.
- * The rows of one 오늘의 연습 run (practiceSetId) are one 추가 row. Every 분 comes from the records (VzipPracticeTime). */
+ * The rows of one 오늘의 연습 run (practiceSetId) are one 추가 row — except 따라 하기 (a set of one step), whose run row
+ * belongs to the goal made from it. Every 분 comes from the records (VzipPracticeTime). */
 (function(root,factory){
   const api=factory();
   root.VzipTodayCard=api;
@@ -40,7 +41,14 @@ function goalOf(p,goals){
   const ids=new Set(goals.map(g=>g.id)),id=String(p.id||'');
   if(id.startsWith('goal:')&&ids.has(id.slice(5)))return id.slice(5);
   if(p.goalId&&ids.has(p.goalId))return p.goalId;
-  if(p.dailySet||p.practiceSetId)return '';
+  if(p.dailySet||p.practiceSetId){
+    // 따라 하기 (a set of ONE step 'guide:<key>', app/daily-set-model.js) done is a practice of the goal made from it — the
+    // goal its save checked: a homework goal by the assignment, a recommendation by the exercise's key.
+    const items=list(p.dailySet?.items),one=items.length===1?items[0]:null;
+    if(!one||!String(one.id||'').startsWith('guide:')||one.state!=='done')return '';
+    const key=String(one.id).slice(6),g=goals.find(g=>g.sourceId&&(g.source==='homework'?list(p.completed).includes(g.sourceId):g.sourceId===key));
+    return g?g.id:'';
+  }
   const hw=goals.find(g=>g.source==='homework'&&g.sourceId&&(list(p.completed).includes(g.sourceId)||p.guidedExerciseKey===g.sourceId));
   return hw?hw.id:'';
 }
