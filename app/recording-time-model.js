@@ -13,7 +13,9 @@
  *       (practiceTimeSource 'recording', fromUnconfirmed); the recordings no row holds make ONE automatic row
  *       'rec-time:<day>:<song>' with their total length (rounded up to the minute).
  *   An automatic row whose recordings are all gone goes. A row the person edited (its source is no longer
- *   'recording') is theirs and is never touched again; one they deleted is not made again. */
+ *   'recording') is theirs and is never touched again; one they deleted is not made again.
+ *   A recording that time entered on its day lists (mediaIds) — for another song or for 트레이닝, e.g. 녹음 길이로
+ *   채우기 in a 트레이닝 record, or a 목표 수행 기록 with its time — is that time already: it adds nothing on its own. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipRecordingTime=api;})(typeof self!=='undefined'?self:globalThis,()=>{
 'use strict';
 const list=v=>Array.isArray(v)?v:[];
@@ -25,6 +27,8 @@ const autoId=(date,songId)=>PREFIX+date+':'+songId;
 function plan(db={},recordings=[],{now=Date.now()}={}){
   const ps=live(db),rows=[],remove=new Set(),byId=new Map(ps.map(p=>[p.id,p])),deleted=new Set(list(db?.deleted?.practices).map(String));
   const groups=new Map();
+  // day|recording listed by time entered that day (any song or 트레이닝): counted there, not again here.
+  const taken=new Set();for(const p of ps)if(entered(p))for(const m of list(p.mediaIds))taken.add(p.date+'|'+m);
   for(const r of list(recordings)){
     if(!r||!r.id||!r.songId||!/^\d{4}-\d{2}-\d{2}$/.test(r.date||'')||!(Number(r.seconds)>0))continue;
     const k=r.date+'|'+r.songId;if(!groups.has(k))groups.set(k,{date:r.date,songId:r.songId,recs:[]});groups.get(k).recs.push(r);
@@ -45,12 +49,13 @@ function plan(db={},recordings=[],{now=Date.now()}={}){
     for(const p of mine){
       if(p.id===id)continue;
       if(!(p.practiceTimeSource==='unconfirmed'||(p.fromUnconfirmed&&p.practiceTimeSource===SOURCE)))continue;
-      const ids=list(p.mediaIds).filter(m=>secs.has(m));ids.forEach(m=>held.add(m));
-      if(!ids.length)continue;
+      const ids=list(p.mediaIds).filter(m=>secs.has(m)&&!taken.has(g.date+'|'+m));ids.forEach(m=>held.add(m));
+      if(!ids.length){const r=list(p.mediaIds).some(m=>taken.has(g.date+'|'+m))&&revert(p);if(r){delete r.fromUnconfirmed;rows.push(r);}continue;}
       const minutes=minutesOf(ids.reduce((n,m)=>n+secs.get(m),0));
       if(p.practiceTimeSource!==SOURCE||Number(p.minutes)!==minutes)rows.push({...p,practiceTimeSource:SOURCE,fromUnconfirmed:true,minutes,manualMinutes:minutes,updatedAt:now});
     }
     for(const p of mine)for(const m of list(p.mediaIds))if(p.id!==id)held.add(m);
+    for(const r of g.recs)if(taken.has(g.date+'|'+r.id))held.add(r.id);
     const free=g.recs.filter(r=>!held.has(r.id));
     if(!free.length){if(auto&&auto.practiceTimeSource===SOURCE)remove.add(id);continue;}
     if(auto&&auto.practiceTimeSource!==SOURCE)continue; // edited by the person: theirs
