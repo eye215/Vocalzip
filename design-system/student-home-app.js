@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=gear-20261126';
+import {createFloatingHome} from './student-home-html.js?v=tidy-20261126';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -60,15 +60,12 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   if(rec)return {kind:'recommend',title:rec.title,badge:'추천',line:'오늘의 연습에서 해요',label:'다음 연습 '+rec.title,action:()=>nav('#/practice-set')};
   return {kind:'record',title:'지금 녹음하기',badge:'',line:'짧게라도 한 번 불러 봐요',label:'지금 녹음하기',action:()=>nav('#/record')};
  }
- /* Home summary rows: next lesson (unless it is already the 지금 할 것 card), next stage, and a needs-attention row
-  * only when something needs attention. The 이번 주 row is painted by the home from the week data. */
+ /* Home summary rows: next lesson (unless it is already the 지금 할 것 card) and next stage. What needs a check is in the
+  * bell (attentionItems), not here, so it is not shown twice. The 이번 주 row is painted by the home from the week data. */
  function summaryRows(s,current){
   const rows=[],l=s.lesson,st=s.stage;
   if(l&&current?.kind!=='lesson')rows.push({key:'lesson',icon:'\ue34c',label:'다음 레슨',value:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),badge:dday(l.date),action:()=>nav('#/lesson/'+encodeURIComponent(l.id))});
   if(st)rows.push({key:'stage',icon:'\ue490',label:({performance:'공연',audition:'오디션'})[st.kind]||'무대',value:st.title,badge:dday(st.date),action:()=>nav('#/show/'+encodeURIComponent(st.id))});
-  const c=V.serverAnalysisCounts?.(),review=c?.song?.review||0,failed=c?(c.vocal.fail+c.song.fail):0;
-  if(review)rows.push({key:'attention',tone:'attention',icon:'\ue4e2',label:'확인 필요',value:'곡 확인 '+review+'건',action:()=>nav('#/song-suggest')});
-  else if(failed)rows.push({key:'attention',tone:'attention',icon:'\ue4e2',label:'확인 필요',value:'분석 실패 '+failed+'건',action:()=>nav('#/processing-log')});
   const weekly=V.weeklySummaryHomeRow?.();if(weekly)rows.push(weekly); // 지난주 요약 (app/weekly-summary.js), Mon–Wed only
   return rows;
  }
@@ -102,12 +99,16 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  }
  /** 큰 단계 next to the streak (app/levels.js): "Lv 3 · 이름" and how far to the next level. Read-only. */
  const levelLine=()=>V.levels?.home?.()||null;
+ /* The bell (화면 지도 정리, 2026-11-26): only what needs the person's attention. 다음 레슨 · 다음 무대 · 숙제 are already in
+  * 요약 and 지금 할 것. Counts are the server analysis ones (app/server-analysis.js); there is no kept count of failed
+  * uploads (the import hub counts them per batch only), so they are not listed. */
+ function attentionItems(){
+  const c=V.serverAnalysisCounts?.(),review=c?.song?.review||0,failed=c?(c.vocal.fail+c.song.fail):0;
+  return [review&&{key:'review',label:'곡 확인',count:review,href:'#/song-suggest'},failed&&{key:'failed',label:'분석 실패',count:failed,href:'#/processing-log'}].filter(Boolean);
+ }
  function notices(){
-  const s=state(),tasks=s.recommendationCandidates.filter(t=>t.source==='homework');
-  const content=(s.lesson?'<a class="item" href="#/lesson/'+esc(s.lesson.id)+'"><span>'+esc(dayLabel(s.lesson.date))+' · 다음 레슨</span></a>':'')+
-   (s.stage?'<a class="item" href="#/show/'+esc(s.stage.id)+'"><span>'+esc(s.stage.title)+' · '+esc(dayLabel(s.stage.date))+'</span></a>':'')+
-   tasks.map(t=>'<a class="item" href="#/homework"><span>'+esc(t.title)+'</span><small class="muted">숙제</small></a>').join('');
-  V.sheet({title:'일정과 숙제 알림',body:content?'<div class="list">'+content+'</div>':'<p class="muted">확인할 일정과 숙제가 없어요.</p>'});
+  const items=attentionItems();
+  V.sheet({title:'확인할 것',body:items.length?'<div class="list">'+items.map(i=>'<a class="item" href="'+i.href+'" data-attention="'+i.key+'"><span>'+esc(i.label)+' '+i.count+'건</span><i class="ph ph-caret-right" aria-hidden="true"></i></a>').join('')+'</div>':'<p class="muted" data-attention-empty>확인할 게 없어요</p>'});
  }
  /* 오늘 · 이번 주 row → a short sheet: today and this week against their targets, where the week target comes from
   * (with the way to change it) and the calendar. The numbers are the same ones the row shows. */
@@ -215,7 +216,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const refreshHome=()=>{
     refreshWeek();if(!root?.isConnected)return;
     const fresh=state(files),list=recentSongs(fresh,files),next=nowCard(fresh,list);
-    root.updateRecent(todayPicks(fresh,files));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());
+    root.updateRecent(todayPicks(fresh,files));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updateAlerts?.(attentionItems());root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());
    };
    const goalOf=id=>(V.db.dailyGoals||[]).find(g=>g?.id===id);
    const backToGoal=id=>setTimeout(()=>root?.focusGoal?.(id),0);
@@ -231,7 +232,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    };
    try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,todayPractice:V.todayPractice?.()||null,goals:s.goals.map(g=>({...g,routineInfo:V.routineInfo?.(g)||null,time:V.goalTime?.(g)||null})),onGoalRecord:id=>timeSheet(id,false),
     // Mic on an unfinished goal row: the recorder carries the goal (and its song); saving there offers the goal as done.
-    onGoalMic:id=>{const g=goalOf(id);nav('#/record?goal='+encodeURIComponent(id)+(g?.songId&&V.song(g.songId)?'&song='+encodeURIComponent(g.songId):''));},onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),recentSongs:todayPicks(s,files),
+    onGoalMic:id=>{const g=goalOf(id);nav('#/record?goal='+encodeURIComponent(id)+(g?.songId&&V.song(g.songId)?'&song='+encodeURIComponent(g.songId):''));},onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),alerts:attentionItems(),recentSongs:todayPicks(s,files),
     onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),
     onRandomSong:()=>{if(V.songRoulette)return V.songRoulette();const one=window.VzipSongPick?.random?.(V.db,{today:today(),media:(V.media.cached()||[]).map(m=>({songId:m?.songId,date:V.media?.dateOf?.(m)||''}))});if(!one)return;V.toast('오늘은 '+one.title+'!');nav('#/record?song='+encodeURIComponent(one.songId));},onWeek:()=>nav('#/calendar'),onDay:calendar,onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
     practice:practiceRows(),level:levelLine(),onLevel:()=>nav('#/levels'),onGoals:planSheet,onDailyRecommendation:()=>nav('#/practice-review?mode=today'),onWeeklyReview:()=>nav('#/practice-review'),onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
@@ -270,14 +271,16 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     const recommendations=await V.guidedRecommendations({date:today(),media}).catch(()=>[]);
     if(root.isConnected&&generation===mediaGeneration)root.updateRecommendations(recommendations);
     const fresh=state(files),list=recentSongs(fresh,media),next=nowCard(fresh,list);
-    root.updateRecent(todayPicks(fresh,media));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());
+    root.updateRecent(todayPicks(fresh,media));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updateAlerts?.(attentionItems());root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());
    };
    const checkDate=()=>{if(root.isConnected&&today()!==lastDate){lastDate=today();V.softRender();}};
    const visible=()=>{if(document.visibilityState==='visible'){checkDate();if(root.isConnected)refreshMedia();}};
    const timer=setInterval(checkDate,30000);
-   window.addEventListener('vzip:v6-media',refreshMedia);window.addEventListener('vzip:data-changed',practiceChanged);
+   // The bell's dot follows the server analysis counts as soon as they arrive (they load after home is drawn).
+   const alertsChanged=()=>{if(root.isConnected)root.updateAlerts?.(attentionItems());};
+   window.addEventListener('vzip:v6-media',refreshMedia);window.addEventListener('vzip:data-changed',practiceChanged);window.addEventListener('vzip:server-analysis-updated',alertsChanged);
    document.addEventListener('visibilitychange',visible);
-   stopHome=()=>{clearInterval(timer);window.removeEventListener('vzip:v6-media',refreshMedia);window.removeEventListener('vzip:data-changed',practiceChanged);document.removeEventListener('visibilitychange',visible);};
+   stopHome=()=>{clearInterval(timer);window.removeEventListener('vzip:v6-media',refreshMedia);window.removeEventListener('vzip:data-changed',practiceChanged);window.removeEventListener('vzip:server-analysis-updated',alertsChanged);document.removeEventListener('visibilitychange',visible);};
    await refreshMedia();
    if(wanted&&root.isConnected)root.showPractice();
    // A level passed since it was last kept is kept now (rare: nine times in all), so it never drops when a record is deleted.

@@ -129,6 +129,9 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-nav-item.vz-active i{color:var(--vz-color-accent);}
 #vocalzip-refined-preview .vz-floating-record i{display:block;font:normal 22px/1 "Phosphor";color:inherit;}
 #vocalzip-refined-preview .vz-header{min-height:var(--vz-touch-min);margin-bottom:8px;}
+#vocalzip-refined-preview .vz-header-actions button{position:relative;}
+#vocalzip-refined-preview .vz-bell-dot{position:absolute;top:11px;right:11px;width:8px;height:8px;border-radius:50%;background:var(--vz-color-warning,#B26A00);box-shadow:0 0 0 2px var(--vz-color-canvas,#f8f6fd);}
+#vocalzip-refined-preview .vz-bell-dot[hidden]{display:none;}
 #vocalzip-refined-preview .vz-logo{font-size:var(--vz-type-page-size);line-height:var(--vz-type-page-leading);gap:8px;}
 #vocalzip-refined-preview .vz-logo b{font-weight:700;}
 #vocalzip-refined-preview .vz-logo svg{width:28px;height:28px;}
@@ -330,7 +333,16 @@ export async function createFloatingHome(opts={}){
  const q=selector=>root.querySelector(selector);
  q("main").setAttribute("role","presentation");
  root.prepend(el("h1","홈","vz-visually-hidden"));
- q('[aria-label="알림"]').onclick=()=>opts.onNotifications?.();
+ /* 알림 = only what needs a check (곡 확인 · 분석 실패, from the app as [{key,label,count}]). A small dot on the bell
+  * when there is something; the sheet says "확인할 게 없어요" otherwise. */
+ const bell=q('[aria-label="알림"]');bell.onclick=()=>opts.onNotifications?.();
+ const bellDot=el("span",null,"vz-bell-dot");bellDot.setAttribute("aria-hidden","true");bellDot.hidden=true;bell.append(bellDot);
+ host.updateAlerts=items=>{
+  const list=Array.isArray(items)?items:[],total=list.reduce((n,i)=>n+num(i?.count),0);
+  bellDot.hidden=!total;bell.toggleAttribute("data-has-alert",!!total);
+  bell.setAttribute("aria-label",total?"알림, 확인할 것 "+total+"건":"알림");
+ };
+ host.updateAlerts(opts.alerts);
  // 설정 (화면 지도 정리 후보 5, 2026-11-26): the person icon read as "프로필" and was hard to find as the way to 설정 —
  // it is the same gear and the same name as on the other tabs now. Its action is unchanged (opts.onProfile → 설정).
  const settingsButton=q('[aria-label="프로필"]');settingsButton.setAttribute("aria-label","설정");settingsButton.title="설정";

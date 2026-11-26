@@ -451,20 +451,30 @@ test('지금 할 것 follows today\'s lesson, homework, latest song, upcoming le
  await page.evaluate(goals=>VZ.change(d=>{d.dailyGoals=goals;}),goalsBefore);
  const after=await db(page);for(const key of ['songs','performances','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
-test('needs-attention summary row appears only when server analysis needs a check',async({page})=>{
+test('the bell holds only what needs a check (곡 확인 · 분석 실패), with a dot when there is something; 요약 no longer repeats it',async({page})=>{
  await boot(page);const before=await db(page);
- const rows=page.locator('.vz-summary-row'),attention=page.locator('.vz-summary-row[data-row=attention]');
- await expect(rows).toHaveCount(3);await expect(attention).toHaveCount(0);
+ const rows=page.locator('.vz-summary-row'),bell=page.locator('.vz-header-actions button').first(),dot=page.locator('.vz-bell-dot');
+ const sheet=page.getByRole('dialog',{name:'확인할 것',exact:true});
+ // Nothing to check: no dot, and the sheet says so (다음 레슨 · 무대 · 숙제 are in 요약 and 지금 할 것, not here).
+ await expect(rows).toHaveCount(3);await expect(dot).toBeHidden();await expect(bell).toHaveAttribute('aria-label','알림');
+ await bell.click();await expect(sheet).toBeVisible();await expect(sheet).toContainText('확인할 게 없어요');
+ await expect(sheet).not.toContainText('다음 레슨');await expect(sheet).not.toContainText('숙제');
+ await page.keyboard.press('Escape');await expect(sheet).toHaveCount(0);
  const counts=(review,songFail,vocalFail)=>({vocal:{done:0,wait:0,fail:vocalFail,total:vocalFail},song:{auto:0,review,wait:0,fail:songFail,total:review+songFail}});
- for(const [value,text,route]of [[counts(2,1,0),'곡 확인 2건','song-suggest'],[counts(0,1,1),'분석 실패 2건','processing-log']]){
-  await page.evaluate(c=>{VZ.serverAnalysisCounts=()=>c;VZ.render();},value);await ready(page);
-  await expect(rows).toHaveCount(4);await expect(rows.nth(2)).toHaveAttribute('data-row','attention');
-  await expect(attention).toHaveAttribute('data-tone','attention');await expect(attention.locator('strong')).toHaveText('확인 필요');await expect(attention.locator('.vz-summary-value')).toHaveText(text);
-  await attention.click();await expect.poll(()=>new URL(page.url()).hash).toBe('#/'+route);
+ await page.evaluate(c=>{VZ.serverAnalysisCounts=()=>c;VZ.render();},counts(2,1,1));await ready(page);
+ // The same counts the 확인 필요 summary row used: shown once, in the bell — the summary keeps its three rows.
+ await expect(rows).toHaveCount(3);await expect(page.locator('.vz-summary-row[data-row=attention]')).toHaveCount(0);
+ await expect(dot).toBeVisible();await expect(bell).toHaveAttribute('aria-label','알림, 확인할 것 4건');
+ for(const [key,text,route] of [['review','곡 확인 2건','song-suggest'],['failed','분석 실패 2건','processing-log']]){
+  await bell.click();await expect(sheet).toBeVisible();
+  const item=sheet.locator('[data-attention='+key+']');await expect(item).toHaveText(text);
+  await item.click();await expect.poll(()=>new URL(page.url()).hash).toBe('#/'+route);await expect(sheet).toHaveCount(0);
   await page.goto('/#/home');await ready(page);
  }
- await page.evaluate(c=>{VZ.serverAnalysisCounts=()=>c;VZ.render();},counts(0,0,0));await ready(page);
- await expect(attention).toHaveCount(0);await expect(rows).toHaveCount(3);
+ // The counts arriving after home is drawn (the server queue loads later) put the dot on without drawing home again.
+ await page.evaluate(c=>{VZ.serverAnalysisCounts=()=>c;VZ.render();},counts(0,0,0));await ready(page);await expect(dot).toBeHidden();
+ await page.evaluate(c=>{VZ.serverAnalysisCounts=()=>c;window.dispatchEvent(new Event('vzip:server-analysis-updated'));},counts(1,0,0));
+ await expect(dot).toBeVisible();await expect(bell).toHaveAttribute('aria-label','알림, 확인할 것 1건');
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
 test('오늘 부를 곡: at most three of my songs with the reason for today, each opening that song to record',async({page})=>{

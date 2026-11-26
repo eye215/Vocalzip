@@ -10,7 +10,8 @@ const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
 const SOURCES = {
   photos:{icon:'images', title:'사진 앱 / iCloud 사진', sub:'노래·레슨 영상', accept:'video/*,.mov,.mp4,.m4v', start:'2025-12-31', end:'2026-09-13',
     tip:'사진 보관함에서 영상을 여러 개 선택하세요. 영상은 원본 음성만 추출해 저장해요.'},
-  drive:{icon:'cloud', title:'iCloud Drive', sub:'음원·영상 파일', accept:'audio/*,video/*,.m4a,.mp3,.wav,.aac,.flac,.ogg,.mov,.mp4,.m4v', start:'', end:'',
+  // .caf and .webm too: 전체 녹음's + opens this hub now (2026-11-26), and its own picker listed them.
+  drive:{icon:'cloud', title:'iCloud Drive', sub:'음원·영상 파일', accept:'audio/*,video/*,.m4a,.mp3,.wav,.aac,.caf,.flac,.ogg,.webm,.mov,.mp4,.m4v', start:'', end:'',
     tip:'파일 앱에서 폴더를 열고 여러 파일을 선택하세요.'},
   memo:{icon:'microphone', title:'음성 메모', sub:'노래 연습 녹음', accept:'audio/*,.m4a,.mp3,.wav,.aac,.caf', start:'2025-07-24', end:'today',
     tip:'음성 메모 앱에서 녹음을 선택 → 공유 → "파일에 저장"으로 한 폴더에 모은 뒤, 여기서 그 폴더의 파일을 여러 개 선택하세요.'},
