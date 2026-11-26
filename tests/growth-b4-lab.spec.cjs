@@ -94,7 +94,9 @@ test('오늘 › 오늘 연습: one card with the things you do — 오늘의 �
   await expect(page.locator('.vz-student-home .vz-pset-entry')).toHaveCount(0);
   await expect(page.locator('.vz-student-home [data-voice-check-card]')).toHaveCount(0);
   const names = await page.evaluate(() => { const text = document.querySelector('.vz-student-home').shadowRoot.querySelector('main').innerText; return ['오늘의 연습', '연습 세트', '보이스 체크', '노래 연습실', '보컬 트레이닝', '내 로드맵'].map(n => text.split(n).length - 1); });
-  expect(names).toEqual([1, 0, 1, 0, 0, 1]);
+  // 보이스 체크 twice on purpose: its own row, and the set's "시작하면: 보이스 체크 30초 → …" line that names step ①
+  // (① 보이스 체크 30초, 2026-11-26). Its time is counted once (tests/daily-set.spec.cjs).
+  expect(names).toEqual([1, 0, 2, 0, 0, 1]);
   // The 따라 하기 row (다음 연습 하나로: its item is 지금 할 것 or on #/next-practice) and AI 오늘 추천 (the end of
   // #/next-practice) are not here.
   await expect(section(page).locator('.vz-guided-item, .vz-ai-plan-actions')).toHaveCount(0);
