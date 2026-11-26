@@ -568,6 +568,45 @@ test('저장 공간 › 앱 기록 공간: what the app keeps in this browser, k
   expect(await page.evaluate(() => JSON.stringify(Object.entries(localStorage).sort()))).toBe(before);
 });
 
+test('녹음 정리: short, voiceless and many-takes-a-day recordings are shown, nothing ticked; only the ticked ones are deleted after one confirmation', async ({page}) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const put = (id, extra) => window.vzipStorePracticeMedia({id, name:id, created:Date.now() - 3 * 864e5 + (extra.at || 0), type:'audio/wav', source:'practice', songId:'s2', song:'On My Own', blob:new Blob([window.__wav], {type:'audio/wav'}), durationSeconds:60, ...extra});
+    await put('tiny', {durationSeconds:2, at:1});
+    await put('mute', {at:2, analysis:{v:2, metrics:{voicedSeconds:.5}}});
+    for (let i = 1; i <= 4; i++) await put('take' + i, {at:10 + i});
+    window.dispatchEvent(new Event('vzip:media-updated'));
+  });
+  await page.waitForTimeout(400);
+  await page.goto('/#/settings');
+  await page.locator('[data-tidy-settings]').click();
+  await expect(page).toHaveURL(/#\/library-tidy$/);
+  const group = key => page.locator('[data-tidy-group="' + key + '"]');
+  await expect(group('short')).toContainText('아주 짧은 녹음 3개');     // tiny, and the two 1-second seed takes
+  await expect(group('quiet')).toContainText('소리가 거의 없는 녹음 1개');
+  await expect(group('same')).toContainText('On My Own');
+  expect(await page.locator('[data-tidy-id]:checked').count()).toBe(0);                 // nothing ticked
+  if (process.env.TIDY_SHOT) await page.screenshot({path:process.env.TIDY_SHOT, fullPage:true});
+  const del = page.locator('[data-tidy-delete]');
+  await expect(del).toBeDisabled();
+  // tiny is short AND one of the day's takes: ticking it in one place ticks it in both.
+  await group('short').locator('[data-tidy-id="tiny"]').check();
+  expect(await page.locator('[data-tidy-id="tiny"]:checked').count()).toBe(2);
+  await expect(del).toHaveText('고른 1개 영구 삭제');
+  // Cancel: nothing is deleted.
+  await del.click();
+  await page.getByRole('dialog', {name:'녹음 영구 삭제'}).getByRole('button', {name:'취소'}).click();
+  expect((await media(page)).map(m => m.id)).toContain('tiny');
+  await del.click();
+  await page.getByRole('dialog', {name:'녹음 영구 삭제'}).getByRole('button', {name:'1개 영구 삭제'}).click();
+  await expect(page.locator('.toast')).toContainText('1개를 지웠어요.');
+  const left = (await media(page)).map(m => m.id);
+  expect(left).not.toContain('tiny');
+  for (const id of ['mute', 'take1', 'take2', 'take3', 'take4', 'm1', 'm2']) expect(left).toContain(id);
+  await expect(group('short')).toContainText('아주 짧은 녹음 2개');
+  await expect(page.locator('[data-tidy-id="tiny"]')).toHaveCount(0);
+});
+
 test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pauses on expired login, retries only failures, resumable', async ({page}) => {
   test.setTimeout(180000);
   await boot(page, {media:false});
@@ -2286,7 +2325,7 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   // 노래 연습실 opens from 오늘 › 연습하기 only (one door for the things you do), not from 설정 too.
   expect(await rows('practice')).toEqual(['하루 연습 목표 시간', '트레이닝 항목']);
   await expect(page.locator('.vz-settings a[href="#/practice-room"]')).toHaveCount(0);
-  expect((await rows('files')).filter(s => !s.startsWith('굿노트'))).toEqual(['처리 내역', '저장 공간', '녹음 찾기 (이 기기)', '내 데이터 내보내기', '기록 백업·복원']);
+  expect((await rows('files')).filter(s => !s.startsWith('굿노트'))).toEqual(['처리 내역', '저장 공간', '녹음 정리', '녹음 찾기 (이 기기)', '내 데이터 내보내기', '기록 백업·복원']);
   expect(await rows('more')).toEqual(['공유 중인 링크', '녹음 중 블루투스 시험']);
   await expect(page.locator('.vz-settings-account [data-cloud]')).toBeVisible();
   await expect(page.locator('#cloud-upload')).toBeHidden();

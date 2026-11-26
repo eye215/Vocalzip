@@ -764,3 +764,18 @@ body .sheet-page #practice-log .vz-practice-same .chip{justify-self:start;min-he
 .vz-roulette-actions{display:grid;gap:8px}
 @keyframes vz-roulette-pop{0%{transform:scale(.94)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.vz-roulette.landed .vz-roulette-window{animation:none}}
+/* 녹음 정리 (app/library-tidy.js) */
+.tidy-intro{margin-bottom:12px}
+.tidy-songless{margin-bottom:12px}
+.tidy-group{margin:0 0 18px}
+.tidy-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tidy-head .sec{margin:12px 0 4px}
+.tidy-day{font-size:14px;line-height:20px;margin:12px 0 6px;color:var(--ink)}
+.tidy-row{display:flex;align-items:flex-start;gap:8px;margin:0 0 6px}
+.tidy-pick{flex:none;display:grid;place-items:center;width:44px;min-height:52px}
+.tidy-pick input{width:22px;height:22px;accent-color:var(--accent)}
+.tidy-main{flex:1;min-width:0}
+.tidy-why{margin:2px 0 0 4px}
+.tidy-foot{position:sticky;bottom:calc(var(--nav-h) + var(--safe-b) + 8px);padding:8px 0;z-index:2}
+.tidy-head .sec .muted{margin-left:6px;font-weight:600}
+body[data-vz-route="library-tidy"] .vz-collection-record{display:none!important} /* the delete bar sits where it would */
