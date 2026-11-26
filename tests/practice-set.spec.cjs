@@ -206,7 +206,9 @@ test('the set list keeps the person\'s own steps under today\'s built-in ones; e
   await expect(page.getByRole('button',{name:'일시정지',exact:true})).toBeVisible();
   await elapse(page, 30);
   await primary(page).click();
-  await expect(run(page).locator('#pset-step-title')).toHaveText('곡에 적용하기 · This Is the Moment');await expect(run(page).locator('[data-run-name] b')).toHaveText('곡');
+  // 곡에 적용하기 says its 가사·표현 task (app/daily-set-model.js applyTask); the song stays in the name line.
+  await expect(run(page).locator('#pset-step-title')).toHaveText(require('../app/daily-set-model.js').applyTask({},TODAY).name);await expect(run(page).locator('[data-run-name] b')).toHaveText('곡');
+  await expect(run(page).locator('[data-run-name] span').first()).toHaveText('곡에 적용하기 · This Is the Moment');
   await expect(run(page).locator('[data-song-open]')).toHaveAttribute('href','#/song/s1');
   await primary(page).click();
   await elapse(page, 120);

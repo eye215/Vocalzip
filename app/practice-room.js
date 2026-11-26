@@ -24,9 +24,10 @@ window.VocalzipPracticeRoom={
 };
 window.VzipAccountScope?.beforeLeave(()=>{locked=true;frame?.contentWindow?.postMessage({type:'vocalzip:room-lock'},location.origin);});
 for(const event of ['vzip:auth-changed','vzip:data-changed'])window.addEventListener(event,()=>{if(frame?.isConnected&&!locked)frame.contentWindow?.postMessage({type:'vocalzip:room-refresh'},location.origin);});
-// 오늘 › 연습하기 opens it (성장 개편 안 B, phase 4): the bottom menu stays on 오늘 wherever it was opened from.
+// Only the past submissions and their AI comments (past=1): new tasks come from 오늘의 연습 › 곡에 적용하기
+// (app/daily-set-model.js APPLY_TASKS). Opened from 내 로드맵 and a room recording's ⋯; the bottom menu stays on 오늘.
 V.route('practice-room',{title:'노래 연습실',back:true,tab:'home',noSettings:true,noAutoRefresh:true,
- render:r=>'<iframe class="vzip-practice-room-frame" title="노래 연습실 · 과제와 제출" src="practice-room/index.html?v=16'+(r?.query?.get('result')?'&result='+encodeURIComponent(r?.query?.get('result')):'')+'" allow="microphone"></iframe>',
+ render:r=>'<iframe class="vzip-practice-room-frame" title="노래 연습실 · 지난 제출" src="practice-room/index.html?v=room2set-20261126&past=1'+(r?.query?.get('result')?'&result='+encodeURIComponent(r?.query?.get('result')):'')+'" allow="microphone"></iframe>',
  mount(host){frame=host.querySelector('iframe');V.setGuard(()=>{try{return frame?.contentWindow?.VocalzipRoomBusy?.()?'진행 중인 연습이 있어요. 제출 전 녹음은 화면을 나가면 사라져요. 나갈까요?':'';}catch{return '';}});},
  leave(){frame?.contentWindow?.postMessage({type:'vocalzip:room-lock'},location.origin);frame=null;V.setGuard(null);}
 });

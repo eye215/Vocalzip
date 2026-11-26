@@ -208,8 +208,7 @@ function recommendations(report){
  return '<section class="growth-panel"><header class="growth-panel-head"><div><p class="growth-eyebrow">NEXT PRACTICE</p><h2>다음 연습</h2></div></header>'+
  (rows.length?rows.map((m,i)=>'<article class="growth-next-item"><span class="growth-next-index">'+String(i+1).padStart(2,'0')+'</span><div><strong>'+esc(m.title)+'</strong><p>'+esc(m.practice)+'</p><small>권장 '+m.minutes+'분 · '+(m.worsened?'변화 재확인':'기초 데이터 축적')+'</small></div>'+
  '<button type="button" class="btn sm ghost" data-overall-goal="'+m.id+'">목표 담기</button></article>').join(''):
- '<p class="small muted">분석된 곡 녹음이 생기면 이곳에 다음 연습을 보여 드려요.</p>')+
- '<a class="btn block ghost" href="#/practice-room">연습실에서 시작하기</a></section>';
+ '<p class="small muted">분석된 곡 녹음이 생기면 이곳에 다음 연습을 보여 드려요.</p>')+'</section>';
 }
 function observationEvidence(){
  const entries=(V.db.practices||[]).filter(p=>{

@@ -554,7 +554,12 @@ test('곡: the set ends with 곡에 적용하기 and an optional 녹음, the doi
   await expect(count(page)).toHaveText('5 / 6');
   await expect(run(page)).toHaveAttribute('data-mode', 'free');
   await expect(run(page).locator('[data-run-name] b')).toHaveText('곡');
-  await expect(say(page)).toHaveText('곡에 적용하기 · This Is the Moment');
+  // Its 가사·표현 task (the former 노래 연습실's, by the date): the task's name big, its instruction, why it is today's.
+  const task = D.applyTask({}, TODAY);
+  await expect(run(page).locator('[data-run-name] span').first()).toHaveText('곡에 적용하기 · This Is the Moment');
+  await expect(say(page)).toHaveText(task.name);
+  await expect(run(page).locator('[data-run-why]')).toHaveText(task.text);
+  await expect(run(page).locator('[data-run-task="' + task.key + '"]')).toHaveText('가사·표현 과제 5개가 돌아가며 나와요 · 원래 노래 연습실 과제');
   await expect(run(page).locator('[data-song-open]')).toHaveText('곡 열기');
   await expect(run(page).locator('[data-song-points]')).toHaveText('레슨 지적 1개 · 부르면서 체크');
   await targets(run(page).locator('.pset-links a'));
@@ -579,7 +584,8 @@ test('곡: the set ends with 곡에 적용하기 and an optional 녹음, the doi
   await page.getByRole('button', {name:'기록 저장'}).click();
   const rows = (await db(page)).practices.filter(p => p.practiceSetId);
   expect(rows.map(p => [p.id.replace(/practice-set:[^:]+/, 'set'), p.minutes, p.practiceMode, p.songId]).sort()).toEqual([['set', 0, 'training', ''], ['set:song-s1', 1, 'song', 's1']]);
-  expect(rows.find(p => p.dailySet).dailySet.items.at(-2)).toEqual(expect.objectContaining({kind:'song', apply:true, state:'done', row:rows.find(p => p.songId).id}));
+  expect(rows.find(p => p.dailySet).dailySet.items.at(-2)).toEqual(expect.objectContaining({kind:'song', apply:true, state:'done', row:rows.find(p => p.songId).id, roomTask:task.key}));
+  expect((await db(page)).practices.some(p => p.practiceRoom || p.categoryLabel === '노래 연습실')).toBe(false); // nothing written as 노래 연습실
   // 편집 › 곡에 적용하기 › 빼기: its 녹음 goes with it, and the next sets end with the built-in groups (kept as the set).
   await page.clock.resume();
   await to(page, '#/home'); await ready(page);
@@ -656,4 +662,20 @@ test('소리 안내: on a hold, 2 s with no note heard says why — nothing reac
   await elapse(page, .5);
   await expect(sub(page)).toContainText(' / 4초');
   await expect(sub(page)).not.toContainText('소리가');
+});
+
+test('곡에 적용하기: the set list names the task; a 보이스 체크 of 목 상태 1–2 done during the set turns it into the task without singing', async ({page}) => {
+  await boot(page, seed({practices:[{id:'p0', date:'2026-11-03', minutes:10, manualMinutes:10, songId:'s1', practiceMode:'song'}],
+    performances:[{id:'pf1', title:'정기 공연', status:'preparing', start:'2026-11-20', songLinks:[{songId:'s1'}]}]}));
+  await card(page).locator('[data-set-pick]').click();
+  // A performance within 30 days: 공연 연습 녹음과 회고, named on the row.
+  await expect(page.locator('.pset-plan .pset-row').filter({hasText:'곡에 적용하기'}).locator('[data-room-task="performance"]')).toHaveText('공연 연습 녹음과 회고');
+  await page.locator('.pset-plan [data-start]').click();
+  await expect(run(page)).toBeVisible();
+  // The 목 상태 of today's 보이스 체크 (1–2) is known before 곡에 적용하기 starts: rest comes first.
+  await page.evaluate(d => VZ.change(db => { db.practices.push({id:'voice-check:t1', date:d, minutes:.5, practiceMode:'training', practiceTimeSource:'voice-check', voiceCheck:{v:1, selfRating:2, at:Date.now()}}); }, {silent:true}), TODAY);
+  await skipTo(page, 'free');
+  await expect(say(page)).toHaveText('가사의 상대와 목적 정하기');
+  await expect(run(page).locator('[data-run-why]')).toHaveText('누구에게, 무엇을 전하고 싶은지 구체적으로 적어봐요.');
+  await expect(run(page).locator('[data-run-task="reflection"]')).toHaveText('직접 남긴 불편함이나 목 상태를 우선했어요 · 소리 없이 해요');
 });

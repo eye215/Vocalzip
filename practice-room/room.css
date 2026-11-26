@@ -25,3 +25,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .coach-section h4{margin:0 0 6px;color:var(--vz-color-primary);font-size:14px;line-height:20px}
 .feedback-block .coach-section p{margin:6px 0 0;color:var(--vz-color-ink-secondary);font-size:14px;line-height:1.6;overflow-wrap:anywhere}
 .feedback-block .coach-plain{white-space:pre-line;overflow-wrap:anywhere}
+.room-moved{margin:0 0 16px;padding:12px 16px;border-radius:14px;background:var(--vz-color-accent-soft);color:var(--vz-color-ink-secondary);font-size:14px;line-height:21px;word-break:keep-all}
+.room-moved .text-link{min-height:44px;margin:0 0 0 4px;font-size:14px;font-weight:600}
+.room-tabs button[hidden]{display:none}
+.recommendation+.room-moved{margin-top:12px}
