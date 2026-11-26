@@ -203,11 +203,13 @@ function coachCard(){
  '<p class="small muted">버튼을 눌렀을 때만 음정 정확도·음정 안정성·호흡 유지의 비교 결과(판정 보류 포함)와 기존 AI 코멘트 최대 5건을 전송해요. 음역·최고음·고음·파사지오 값은 보내지 않아요. 원본 음성은 전송하지 않아요. 새로운 녹음을 AI가 직접 듣는 분석이 아닙니다.</p>'+
  '<button type="button" class="btn block" data-overall-ai-run>'+aiRunLabel()+'</button><p role="status" class="small muted" data-overall-ai-state></p></section>';
 }
+/** 다음 연습: the first three of the ONE list (VZ.nextPractice, app/next-practice.js) and 다음 연습 전체 보기; this
+ * report's own picks (from its measurements, with their 목표 담기) folded under it. */
 function recommendations(report){
  const rows=report.recommendations;
- return '<section class="growth-panel"><header class="growth-panel-head"><div><p class="growth-eyebrow">NEXT PRACTICE</p><h2>다음 연습</h2></div></header>'+
- (rows.length?rows.map((m,i)=>'<article class="growth-next-item"><span class="growth-next-index">'+String(i+1).padStart(2,'0')+'</span><div><strong>'+esc(m.title)+'</strong><p>'+esc(m.practice)+'</p><small>권장 '+m.minutes+'분 · '+(m.worsened?'변화 재확인':'기초 데이터 축적')+'</small></div>'+
- '<button type="button" class="btn sm ghost" data-overall-goal="'+m.id+'">목표 담기</button></article>').join(''):
+ return '<section class="growth-panel"><header class="growth-panel-head"><div><p class="growth-eyebrow">NEXT PRACTICE</p><h2>다음 연습</h2></div></header>'+(V.nextPractice?.topHtml?.({limit:3})||'')+
+ (rows.length?'<details class="growth-own-picks" data-growth-own-picks><summary>이 리포트 측정으로 고른 연습 '+rows.length+'개</summary>'+rows.map((m,i)=>'<article class="growth-next-item"><span class="growth-next-index">'+String(i+1).padStart(2,'0')+'</span><div><strong>'+esc(m.title)+'</strong><p>'+esc(m.practice)+'</p><small>권장 '+m.minutes+'분 · '+(m.worsened?'변화 재확인':'기초 데이터 축적')+'</small></div>'+
+ '<button type="button" class="btn sm ghost" data-overall-goal="'+m.id+'">목표 담기</button></article>').join('')+'</details>':
  '<p class="small muted">분석된 곡 녹음이 생기면 이곳에 다음 연습을 보여 드려요.</p>')+'</section>';
 }
 function observationEvidence(){
@@ -267,6 +269,7 @@ function bind(host,report,{rerender,ownerIdentity}={}){
   bindChart(host,report);
  };
  wireTrend();
+ V.nextPractice?.bindTop?.(host.querySelector('[data-growth-anchor="practice"]'));
  host.querySelectorAll('[data-overall-goal]').forEach(btn=>btn.onclick=()=>{
   const m=report.metrics.find(x=>x.id===btn.dataset.overallGoal);if(!m)return;
   const date=V.today(),id='overall-growth:'+date+':'+m.id;

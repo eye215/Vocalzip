@@ -80,11 +80,13 @@ function rowsHtml(rows) {
  const card=window.VzipOverallGrowthUI?.metricCard;
  return '<div class="growth-metrics">'+rows.map(({agg})=>card?card(agg,{scope:'monthly',cls:'card growth-metric'}):'').join('')+'</div>';
 }
+/** 다음 연습: the first three of the ONE list (VZ.nextPractice, app/next-practice.js) and 다음 연습 전체 보기; this month's
+ * own rule-based picks (from its measurements, with their 오늘의 목표에 추가) folded under it. */
 function prescriptions(rows){
  const judged=rows.filter(r=>r.d.judged&&r.d.practice);
  const ranked=judged.filter(r=>r.c?.state==='worse').concat(judged.filter(r=>r.c&&r.c.state!=='worse')).concat(judged.filter(r=>!r.c&&r.current.value!=null));
  const chosen=ranked.slice(0,3);
- return '<section class="card growth-section"><h2>다음 연습</h2>'+(chosen.length?'<p class="small muted">실측 변화에 기반해 규칙으로 고른 연습이에요. AI 청취 진단이나 의학적 판단이 아니에요.</p>'+chosen.map((r,i)=>'<div class="growth-task"><span class="growth-task-number">'+(i+1)+'</span><div><strong>'+e(r.d.title)+'</strong><p>'+e(r.d.practice)+'</p><p class="small muted">권장 '+r.d.minutes+'분 · '+(r.c?.state==='worse'?'전월 대비 악화된 지표':r.c?'유지·강화':'비교 데이터 부족')+'</p><button type="button" class="btn sm ghost" data-growth-goal="'+r.d.id+'">오늘의 목표에 추가</button></div></div>').join('')+'<a class="btn block" href="#/practice-room">노래 연습실에서 연습하기</a>':'<p>분석된 녹음이 쌓이면 우선 연습 과제를 제안할게요.</p>')+'</section>';
+ return '<section class="card growth-section"><h2>다음 연습</h2>'+(V.nextPractice?.topHtml?.({limit:3})||'')+(chosen.length?'<details class="growth-own-picks" data-growth-own-picks><summary>이 달 측정으로 고른 연습 '+chosen.length+'개</summary><p class="small muted">실측 변화에 기반해 규칙으로 고른 연습이에요. AI 청취 진단이나 의학적 판단이 아니에요.</p>'+chosen.map((r,i)=>'<div class="growth-task"><span class="growth-task-number">'+(i+1)+'</span><div><strong>'+e(r.d.title)+'</strong><p>'+e(r.d.practice)+'</p><p class="small muted">권장 '+r.d.minutes+'분 · '+(r.c?.state==='worse'?'전월 대비 악화된 지표':r.c?'유지·강화':'비교 데이터 부족')+'</p><button type="button" class="btn sm ghost" data-growth-goal="'+r.d.id+'">오늘의 목표에 추가</button></div></div>').join('')+'</details>':'<p>분석된 녹음이 쌓이면 우선 연습 과제를 제안할게요.</p>')+'</section>';
 }
 
 const previousMonth = k => { const [y,m]=k.split('-').map(Number);return (m===1?y-1:y)+'-'+String(m===1?12:m-1).padStart(2,'0'); };
@@ -393,6 +395,7 @@ async function mount(host){
     chooseSong(list,songOn?songPick:'',id=>{songPick=id;saveSongPick(id);if(host.isConnected)render();});
    };
    if(!songOn)V.monthlyPracticePlans?.(host.querySelector('[data-monthly-plans]'),selected,songItems,rows);
+   if(!songOn)V.nextPractice?.bindTop?.(host.querySelector('[data-month-section="practice"]'));
    host.querySelectorAll('[data-growth-goal]').forEach(b=>b.onclick=()=>{
     const d=definitions.find(x=>x.id===b.dataset.growthGoal);
     if(!d)return;

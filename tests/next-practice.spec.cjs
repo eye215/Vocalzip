@@ -172,3 +172,35 @@ test('AI에게 하나 더 받기 asks first: nothing reaches the AI server befor
   await expect(draft.locator('[data-np-go]')).toHaveAttribute('href', '#/practice-review?mode=today');
   await expect(draft.locator('[data-np-add]')).toHaveCount(0);
 });
+
+test('월별 · 전체 분석: 다음 연습 shows the first three of the shared list and "다음 연습 전체 보기"; 목표에 담기 works there', async ({page}) => {
+  await boot(page, seed(), '#/home');
+  // Fake analysed takes (no files): what the device store would hand to VZ.media.list(), so both reports render.
+  await page.evaluate(() => {
+    const day = n => { const d = new Date(Date.now() - n * 864e5); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    const take = (id, n, into) => ({id, name:id, type:'audio/wav', source:'practice', songId:'s1', song:'Defying Gravity', created:Date.now() - n * 864e5, date:day(n), durationSeconds:60,
+      analysis:{v:2, metrics:{voicedSeconds:30, stability:{wobbleCents:20, notes:4}, intonation:{meanAbsCents:into, notes:10}, range:{lowCents:6000, highCents:8000}, breath:{medianPhrase:2.5}}, confidence:{voiceOverMrDb:12}}});
+    const rows = [take('t1', 40, 30), take('t2', 20, 28), take('t3', 2, 26)];
+    window.vzipReadMedia = async () => rows.map(r => ({...r})); VZ.media.invalidate();
+  });
+  const top = async () => page.evaluate(() => VZ.nextPractice().items.filter(x => !x.doneToday).slice(0, 3).map(x => x.id));
+  for (const [hash, section] of [['#/growth-flow?period=all', '[data-growth-anchor="practice"]'], ['#/growth-flow?period=month', '[data-month-section="practice"]']]) {
+    await to(page, hash);
+    const box = page.locator(section + ' [data-np-top]');
+    await expect(box).toBeVisible();
+    const shown = await box.locator('.np-item').evaluateAll(els => els.map(e => e.dataset.npItem));
+    expect(shown.length, hash).toBeGreaterThan(0);
+    expect(shown.length, hash).toBeLessThanOrEqual(3);
+    expect(shown, hash).toEqual(await top());
+    await expect(box.locator('[data-np-all]')).toHaveAttribute('href', '#/next-practice');
+    await expect(box.locator('[data-np-all]')).toHaveText('다음 연습 전체 보기');
+  }
+  // 목표에 담기 on a report row: the list's own way, shown as 담김 in place.
+  const add = page.locator('[data-month-section="practice"] [data-np-top] [data-np-add]').first();
+  const id = await add.getAttribute('data-np-add');
+  await add.click();
+  await expect(page.locator('[data-month-section="practice"] [data-np-top] [data-np-item="' + id + '"] [data-np-added]')).toHaveText('목표에 담김 ✓');
+  expect(await page.evaluate(i => VZ.nextPractice().items.find(x => x.id === i).inGoals, id)).toBe(true);
+  await page.locator('[data-month-section="practice"] [data-np-all]').click();
+  await expect(page).toHaveURL(/#\/next-practice$/);
+});

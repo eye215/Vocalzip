@@ -193,25 +193,22 @@ function paintNext(v) {
   bindNext(v, next);
 }
 
-/* ---------- 나 (성장 v2): 큰 단계 · 기본기 8 · 달라진 한 줄 ---------- */
+/* ---------- 나 (성장 v2): 단계 한 줄 · 달라진 한 줄 ---------- */
 const ME = window.VzipGrowthMe;
-/** A tiny line of the last measured days (values only; no axis). The better direction is up (`lower`: drawn upside down). */
-function sparkSvg(points, lower) {
-  if (points.length < 2) return '<span class="gme-spark-none" aria-hidden="true"></span>';
-  const vs = points.map(p => p.value), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1, w = 56, h = 18;
-  const xy = points.map((p, i) => [Math.round(i / (points.length - 1) * w), Math.round((lower ? (p.value - lo) / span : 1 - (p.value - lo) / span) * (h - 4) + 2)]);
-  return '<svg class="gme-spark" viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true"><polyline points="' + xy.map(p => p.join(',')).join(' ') + '"/><circle cx="' + xy.at(-1)[0] + '" cy="' + xy.at(-1)[1] + '" r="2.2"/></svg>';
-}
+/** 단계 in ONE row (단계 하나로, 2026-11-27): "Lv n · 이름 · 다음 단계까지 n점 · 기본기 n/8 기준 맞춤", opening 단계
+ * (#/levels), the one place with the level card and the eight 기본기 areas. The level is the one 오늘 and 단계 show
+ * (VZ.levels.now); 기준 맞춤 = an area past 기준 맞추는 중 (it has a step). */
 function meHtml(v) {
   if (!ME) return '';
   let lv = null, tiles = [];
-  try { lv = ME.lv(V.db, V.today()); tiles = ME.tiles(V.db, V.today()); } catch (error) { console.error(error); }
-  const card = lv ? '<a class="gme-lv" href="#/levels" data-gme-lv><span class="gme-lv-num">Lv ' + lv.level + '</span><span class="gme-lv-copy"><strong>' + e(lv.name) + '</strong>' +
-    '<small>' + (lv.toNext == null ? '가장 높은 단계예요' : '다음 단계까지 ' + lv.toNext + '점') + ' · 오늘 +' + lv.today + '점</small>' +
-    '<span class="gme-bar" role="progressbar" aria-label="다음 단계까지" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + lv.percent + '"><i style="width:' + lv.percent + '%"></i></span></span></a>' : '';
-  const grid = tiles.length ? '<ul class="gme-tiles" data-gme-tiles>' + tiles.map(t => '<li><a href="#/levels/' + encodeURIComponent(t.id) + '" data-gme-tile="' + e(t.id) + '" data-state="' + e(t.state) + '">' +
-    '<span class="gme-tile-name">' + e(t.title) + (t.keeping ? '<i class="gme-keep" title="요즘도 유지 중" aria-label="요즘도 유지 중"></i>' : '') + '</span><strong>' + e(t.label) + '</strong>' + sparkSvg(t.spark, t.lower) + '</a></li>').join('') + '</ul>' : '';
-  return '<section class="gm-section gme-me" data-gm-section="me" aria-label="나">' + card + grid + '</section>';
+  try { lv = V.levels?.now?.() || ME.lv(V.db, V.today()); tiles = ME.tiles(V.db, V.today()); } catch (error) { console.error(error); }
+  if (!lv) return '';
+  const next = lv.toNext == null ? '가장 높은 단계예요' : '다음 단계까지 ' + lv.toNext + '점';
+  const set = tiles.filter(t => t.state === 'step').length;
+  const skills = tiles.length ? '기본기 ' + set + '/' + tiles.length + ' 기준 맞춤' : '';
+  const text = ['Lv ' + lv.level, lv.name, next, skills].filter(Boolean).join(' · ');
+  return '<section class="gm-section gme-me" data-gm-section="me" aria-label="나"><a class="gme-lv" href="#/levels" data-gme-lv aria-label="' + e(text + ', 단계 보기') + '">' +
+    '<i class="ph ph-arrow-fat-line-up gme-lv-icon" aria-hidden="true"></i><span class="gme-lv-text" data-gme-lv-text>' + e(text) + '</span><i class="ph ph-caret-right gme-lv-go" aria-hidden="true"></i></a></section>';
 }
 function lineHtml(v) {
   if (!ME) return '';
@@ -234,7 +231,7 @@ function paint(v) {
   const bar = '<div class="gm-bar"><div class="growth-view-tabs growth-range gm-period" role="group" aria-label="성장 기간"><span class="growth-range-label" aria-hidden="true">기간</span>' +
     PERIODS.map(([key, label]) => '<button type="button" data-gm-period="' + key + '" aria-pressed="' + (key === k) + '" class="' + (key === k ? 'active' : '') + '">' + label + '</button>').join('') +
     '</div><p class="gm-label" data-gm-label>' + e(v.period.label) + '</p></div>';
-  // 나: 큰 단계 · 기본기 · 달라진 한 줄 · 다음 연습 · 한 것. 달라진 것 자세히 (#/growth-changes): the full card on its own page.
+  // 나: 단계 한 줄 · 달라진 한 줄 · 다음 연습 · 한 것. 달라진 것 자세히 (#/growth-changes): the full card on its own page.
   v.host.innerHTML = (v.mode === 'changes' ? '' : meHtml(v)) + bar + '<div class="gm-grid">' + (v.mode === 'changes' ? changesHtml(v) + flowLink(v) : lineHtml(v) + nextHtml(v) + doneHtml(v) + flowLink(v)) + '</div>' +
     '<p class="small muted growth-disclaimer">수치는 음성 측정에 기반한 참고 정보예요. 분석하지 않은 녹음에는 결과를 만들어 넣지 않고, 연습 시간은 직접 적은 시간만 더해요.</p>';
   v.host.querySelectorAll('[data-gm-period]').forEach(b => b.onclick = () => {

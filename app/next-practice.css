@@ -41,3 +41,9 @@
 .np-ai-status:empty{display:none}
 /* 다음 연습 n개 더 / 전체 보기 links on 성장 › 나 and 오늘의 목표 */
 .vz-plan-next-all{display:inline-flex;align-items:center;gap:4px;min-height:44px;color:var(--vz-color-accent,#7A32F5);font-size:13px;font-weight:800;text-decoration:none}
+.np-top{display:grid;gap:8px;margin:0 0 12px}
+.np-top-empty{margin:0;color:var(--vz-color-ink-muted,#667085);font-size:13px;line-height:20px}
+.growth-own-picks{margin-top:4px;border-radius:14px;background:var(--surface-2,#F9FAFB)}
+.growth-own-picks>summary{display:flex;align-items:center;min-height:44px;padding:0 14px;cursor:pointer;color:var(--vz-color-ink-secondary,#344054);font-size:13px;font-weight:700}
+.growth-own-picks>:not(summary){margin-left:14px;margin-right:14px}
+.growth-own-picks[open]{padding-bottom:12px}

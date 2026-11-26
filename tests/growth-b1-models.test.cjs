@@ -42,22 +42,28 @@ test('the snapshot of every 결과 리포트 number is byte-for-byte what it was
   // 노래 연습실 → 오늘의 연습 (2026-11-26): 전체 분석's "연습실에서 시작하기" link left (new tasks come from 곡에 적용하기).
   // The label is stripped like the phase 4 labels; with it stripped the file before and after give the same `numbers`
   // hash (8d4f…), so nothing else moved. Both hashes retaken.
+  // #560 (AI 청취 코멘트 · ① 보이스 체크, 2026-11-26) reworded the AI 청취 관찰 empty line and made the set "8개 · 약 29분";
+  // 단계는 한 곳 · 다음 연습 공용 목록 (2026-11-27) dropped the 월별 '노래 연습실에서 연습하기' link and folded the reports'
+  // own picks under "이 달/이 리포트 측정으로 고른 연습 n개". Labels only: with them stripped, the file before and after give the same `numbers` (checked value by value), so the stripped-set change alone moved that hash; both hashes retaken.
   const file = fs.readFileSync(path.join(__dirname, 'growth-characterization.snapshot.json'));
   const SONG_TAB = ['analysisTab', 'analysisRows'], PHASE4_SECTIONS = ['trainingTab', 'labStates', 'practiceNumbers'];
   const PHASE4_LABELS = new Set(['다음에 연습할 것', '추천 연습', '추천·계획', '다음 연습',
     '실측 변화에 기반한 규칙형 추천입니다. AI 청취 진단이나 의학적 판단이 아니에요.', '실측 변화에 기반해 규칙으로 고른 연습이에요. AI 청취 진단이나 의학적 판단이 아니에요.',
-    '매일 보이스 체크', '오늘 아직 · 30초 · 연속 3일', '연습실에서 시작하기']);
+    '매일 보이스 체크', '오늘 아직 · 30초 · 연속 3일', '연습실에서 시작하기',
+    '곡으로 지정된 연습실 녹음에 AI 코멘트를 요청하면 여기에도 연결돼요. 트레이닝 과제의 코멘트는 제외해요.',
+    '곡으로 지정된 연습실 녹음이나 오늘의 연습 녹음에 AI 코멘트를 요청하면 여기에도 연결돼요. 트레이닝 과제의 코멘트는 제외해요.',
+    '노래 연습실에서 연습하기', '이 달 측정으로 고른 연습 3개', '이 리포트 측정으로 고른 연습 3개']);
   const strip = v => Array.isArray(v) ? v.filter(x => !(typeof x === 'string' && PHASE4_LABELS.has(x))).map(strip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, strip(x)])) : v;
   const parsed = JSON.parse(file);
   const numbers = JSON.stringify(strip(Object.fromEntries(Object.entries(parsed).map(([zone, v]) => [zone, Object.fromEntries(Object.entries(v).filter(([k]) => !SONG_TAB.includes(k) && !PHASE4_SECTIONS.includes(k)))]))), null, 1);
-  assert.equal(crypto.createHash('sha256').update(numbers).digest('hex'), '8d4f9798fa4d6c44a89ef73d4e330294019b3214660d46d51c8f7b17224ed9e6');
+  assert.equal(crypto.createHash('sha256').update(numbers).digest('hex'), 'c70a6b0ff28fcd596979ba4fc12f8871c321f56d7c30bb2e5695dc60e81a731b');
   // The numbers the removed 보컬 트레이닝 section showed, as they were: the two measured exercises, 연습실 submissions,
   // 보이스 체크 records, the practice set line and the 트레이닝 recordings (newest first) — the same in both time zones.
   for (const zone of Object.keys(parsed)) assert.deepEqual(parsed[zone].practiceNumbers, {
     tips:[['음정 안정성 (롱톤) 연습', '지속음 흔들림 ±11 cent · 최근 8개 중간값 · 권장 8분'], ['음정 정확도 연습', '음정 오차 ±14.5 cent · 최근 8개 중간값 · 권장 10분']],
-    roomSubmissions:1, voiceChecks:3, practiceSet:'7개 · 약 28분', trainingTakes:['vc3', 'vc2', 'vc1', 't1', 'et', 'ex', 't2']});
+    roomSubmissions:1, voiceChecks:3, practiceSet:'8개 · 약 29분', trainingTakes:['vc3', 'vc2', 'vc1', 't1', 'et', 'ex', 't2']});
   for (const zone of Object.keys(parsed)) assert.equal(JSON.stringify(parsed[zone]).includes('보컬 연구소'), false);
-  assert.equal(crypto.createHash('sha256').update(file).digest('hex'), '68ee4780893353e4e4478932dd4f2538e5cfcb9e52738d6c6e10470d943a45bd');
+  assert.equal(crypto.createHash('sha256').update(file).digest('hex'), '1ae6e1e932998fa2cd12797d7a3db6c613785c3e55439b7a49baa8e0d321bbb3');
 });
 
 test('"늘었나" take filter: switch off = 결과 리포트 rule verdict; on = 연습실 · 트레이닝 연습 takes too', () => {

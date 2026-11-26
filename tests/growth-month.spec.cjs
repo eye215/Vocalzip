@@ -68,11 +68,20 @@ test('나 for 월별 (the default): 큰 단계 · 기본기 8, one line of chang
   await expect(tile(page, 'lessons')).toHaveText('0번');
   await expect(tile(page, 'points')).toHaveText('2번');
   await expect(page.locator('[data-gm-tile="points"] small')).toHaveText('지켰어요 1 · 놓쳤어요 1');
-  // 나 (성장 v2): the 큰 단계 card and the eight 기본기 tiles, each opening its 단계 page.
+  // 나 (단계 하나로): ONE row of 단계 — Lv · 이름 · 다음 단계까지 · 기본기 n/8 기준 맞춤 — opening 단계, where the level
+  // card and the eight 기본기 areas are. No card, no tiles here.
+  await expect(page.locator('[data-gme-lv]')).toHaveCount(1);
   await expect(page.locator('[data-gme-lv]')).toHaveAttribute('href', '#/levels');
-  await expect(page.locator('[data-gme-lv]')).toContainText('Lv ');
-  expect(await page.locator('[data-gme-tile]').evaluateAll(els => els.map(e => e.dataset.gmeTile))).toEqual(['breath', 'pitch', 'sustain', 'path', 'range', 'high', 'vibrato', 'rhythm']);
-  await expect(page.locator('[data-gme-tile="pitch"]')).toHaveAttribute('href', '#/levels/pitch');
+  const lvNow = await page.evaluate(() => { const x = VZ.levels.now(); return {level:x.level, name:x.name, toNext:x.toNext}; });
+  await expect(page.locator('[data-gme-lv-text]')).toHaveText(new RegExp('^Lv ' + lvNow.level + ' · ' + lvNow.name + ' · ' + (lvNow.toNext == null ? '가장 높은 단계예요' : '다음 단계까지 ' + lvNow.toNext + '점') + ' · 기본기 [0-8]/8 기준 맞춤$'));
+  await expect(page.locator('[data-gme-tile]')).toHaveCount(0);
+  await expect(section(page, 'me').locator('a')).toHaveCount(1);
+  await page.locator('[data-gme-lv]').click();
+  await expect(page).toHaveURL(/#\/levels$/);
+  await expect(page.locator('[data-lv-level]')).toBeVisible();
+  await expect(page.locator('.lv-tile')).toHaveCount(8);
+  await page.locator('[data-back]').click();
+  await expect(page).toHaveURL(/#\/vocal-growth$/);
   // ONE line of what changed (지난달과 비교, same song), with the two takes one tap away; the full card is its own page.
   await expect(page.locator('[data-gme-line]')).toHaveText(/^\S.* · \S/);
   await expect(page.locator('[data-gme-listen]')).toHaveAttribute('href', /^#\/vocal-lab\//);
@@ -312,21 +321,22 @@ test('phone 390 × 844: one column, 44px targets, nothing wider than the screen'
     expect(new Set(col).size, period).toBe(1);
   }
   await page.locator('[data-gm-period="month"]').click();
-  for (const sel of ['[data-gm-period]', '[data-gme-lv]', '[data-gme-tile]', '[data-gme-listen]', '[data-gme-changes]', '.gm-next-actions > *', '[data-gm-flow]', '.growth-top-tabs a']) {
+  for (const sel of ['[data-gm-period]', '[data-gme-lv]', '[data-gme-listen]', '[data-gme-changes]', '.gm-next-actions > *', '[data-gm-flow]', '.growth-top-tabs a']) {
     for (const el of await page.locator(sel).all()) { const b = await el.boundingBox(); if (b && b.height) expect(b.height, sel).toBeGreaterThanOrEqual(44); }
   }
   if (SHOTS) await page.screenshot({path:path.join(SHOTS, 'growth-month-390x844.png'), fullPage:false});
   if (SHOTS) await page.screenshot({path:path.join(SHOTS, 'growth-month-390x844-full.png'), fullPage:true});
 });
 
-test('iPad 820 × 1180: 큰 단계 beside the eight 기본기 tiles (four across), nothing wider than the screen', async ({page}, info) => {
+test('iPad 820 × 1180: 단계 as one row across the column, nothing wider than the screen', async ({page}, info) => {
   test.skip(info.project.name !== 'chromium-desktop', 'sizes are set explicitly');
   await page.setViewportSize({width:820, height:1180});
   await boot(page);
   await expect(section(page, 'line')).toBeVisible();
-  const box = await page.evaluate(() => ({lv:document.querySelector('[data-gme-lv]').getBoundingClientRect().toJSON(), tiles:[...document.querySelectorAll('[data-gme-tile]')].map(t => t.getBoundingClientRect().toJSON())}));
-  expect(box.tiles[0].left).toBeGreaterThan(box.lv.right);
-  expect(new Set(box.tiles.map(t => Math.round(t.top))).size).toBe(2);
+  const box = await page.evaluate(() => ({lv:document.querySelector('[data-gme-lv]').getBoundingClientRect().toJSON(), tiles:document.querySelectorAll('[data-gme-tile]').length}));
+  expect(box.tiles).toBe(0);
+  expect(box.lv.height).toBeLessThan(80);
+  expect(box.lv.height).toBeGreaterThanOrEqual(44);
   expect(await overflow(page)).toEqual({wide:false, over:0});
   if (SHOTS) await page.screenshot({path:path.join(SHOTS, 'growth-month-820x1180.png'), fullPage:false});
 });

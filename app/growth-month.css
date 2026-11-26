@@ -73,31 +73,18 @@
 }
 @media (max-width:350px){.gm-section{padding:16px 12px}.gm-tiles strong{font-size:18px}}
 @media (prefers-reduced-motion:reduce){.gm-switch input,.gm-switch input::after{transition:none}}
-/* 성장 v2 · 나 (app/growth-month.js meHtml / lineHtml): the 큰 단계 card, the eight 기본기 tiles with a tiny line of the
- * last measured days, and ONE sentence of what changed. Light canvas, accent #7A32F5, 44px targets. */
-.gme-me{display:grid;gap:12px;}
-.gme-lv{display:flex;align-items:center;gap:14px;min-height:72px;padding:14px 16px;border-radius:20px;background:linear-gradient(135deg,#7A32F5,#9C5CFF);color:#fff;text-decoration:none;box-shadow:0 8px 24px rgba(122,50,245,.22);}
-.gme-lv-num{flex:none;font-size:24px;line-height:30px;font-weight:800;letter-spacing:-.02em;}
-.gme-lv-copy{flex:1;min-width:0;display:grid;gap:4px;}
-.gme-lv-copy strong{font-size:16px;line-height:22px;}
-.gme-lv-copy small{color:rgba(255,255,255,.85);font-size:12px;line-height:17px;}
-.gme-bar{display:block;height:6px;border-radius:99px;background:rgba(255,255,255,.28);overflow:hidden;}
-.gme-bar i{display:block;height:100%;border-radius:99px;background:#fff;}
-.gme-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0;padding:0;list-style:none;}
-.gme-tiles a{display:grid;gap:2px;min-height:76px;padding:10px 10px 8px;border-radius:16px;background:#fff;color:inherit;text-decoration:none;box-shadow:0 0 0 1px #EFE9F8;}
-.gme-tiles a:active{background:#F8F5FD;}
-.gme-tile-name{display:flex;align-items:center;gap:4px;color:#475467;font-size:12px;line-height:16px;font-weight:600;}
-.gme-keep{display:inline-block;width:7px;height:7px;border-radius:50%;background:#12B76A;}
-.gme-tiles strong{font-size:13px;line-height:18px;font-weight:700;color:#101828;word-break:keep-all;}
-.gme-tiles a[data-state=ready] strong,.gme-tiles a[data-state=soon] strong{color:#98A2B3;font-weight:600;}
-.gme-spark{width:100%;max-width:56px;height:18px;fill:none;stroke:#7A32F5;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
-.gme-spark circle{fill:#7A32F5;stroke:none;}
-.gme-spark-none{display:block;height:18px;}
+/* 성장 v2 · 나 (app/growth-month.js meHtml / lineHtml): 단계 in ONE row (the level card and the eight 기본기 areas live
+ * on 단계, #/levels), and ONE sentence of what changed. Light canvas, accent #7A32F5, 44px targets. */
+.gme-me{display:block;padding:0;background:transparent;box-shadow:none;border:0;}
+.gme-lv{display:flex;align-items:center;gap:10px;min-height:48px;padding:10px 14px;border-radius:16px;background:#fff;color:#101828;text-decoration:none;box-shadow:0 0 0 1px #EFE9F8;}
+.gme-lv:active{background:#F8F5FD;}
+.gme-lv:focus-visible{outline:2px solid #7A32F5;outline-offset:2px;}
+.gme-lv-icon{flex:none;color:#7A32F5;font-size:18px;}
+.gme-lv-text{flex:1;min-width:0;font-size:14px;line-height:20px;font-weight:600;word-break:keep-all;font-variant-numeric:tabular-nums;}
+.gme-lv-go{flex:none;color:#98A2B3;font-size:16px;}
 .gme-h{margin:0 0 4px;font-size:17px;line-height:24px;font-weight:700;}
 .gme-line-text{margin:0 0 2px;font-size:16px;line-height:23px;font-weight:600;color:#101828;word-break:keep-all;}
 .gme-line .gm-act{margin-top:8px;}
-@media (max-width:359px){.gme-tiles{grid-template-columns:repeat(2,minmax(0,1fr));}}
-@media (min-width:760px){.gme-me{grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:start;}.gme-lv{min-height:100%;}}
 /* 성장 v2 · 곡 카드 (app/growth-hub.js): a card per analysed song — word, one line, ▶ 처음 · 최근, count and day. */
 .gs-cards{display:grid;gap:10px;}
 .gs-card{border-radius:18px;background:#fff;box-shadow:0 0 0 1px #EFE9F8;overflow:hidden;}

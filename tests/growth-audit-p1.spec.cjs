@@ -142,18 +142,20 @@ test('one take, one whole-recording number: other bases are labelled; 추천 연
   // The report right above says 음정 정확도 improved → it is not recommended under it; the reason is said.
   const recommend = page.locator('.vl-recommend');
   await expect(row).toHaveClass(/good/);
-  await expect(recommend.locator('.vl-tip summary strong')).not.toContainText(['음정 정확도 연습']);
+  await expect(recommend.locator('[data-vl-next] .np-item').first()).toBeVisible();
+  await expect(recommend.locator('[data-np-item="intonation:s1"]')).toHaveCount(0);
+  expect(await recommend.locator('.np-title').allTextContents()).not.toContain(tips.tips.find(t => t.key === 'into').name);
   await expect(recommend.locator('[data-tip-skipped]')).toHaveText('위 ‘이 곡의 변화’에서 좋아진 방향인 항목(음정 정확도)은 추천에서 뺐어요.');
   // One take open in the player: 이 곡의 변화 does not depend on which takes are open (it is the song's verdict), so
   // the report is still there and the same measure stays out of the recommendations.
   await openWith(page, 's1', ['a6']);
   await expect(page.locator('[data-growth-report] [data-growth-row="intonation"]')).toHaveClass(/good/);
-  await expect(page.locator('.vl-tip[data-tip="into"]')).toHaveCount(0);
+  await expect(page.locator('[data-np-item="intonation:s1"]')).toHaveCount(0);
   await expect(page.locator('[data-tip-skipped]')).toHaveCount(1);
   // s2 got worse: the report says so and the recommendation stays.
   await page.goto('/#/home'); await page.goto('/#/vocal-lab/s2');
   await expect(page.locator('[data-growth-row="intonation"]')).toHaveClass(/bad/);
-  await expect(page.locator('.vl-tip[data-tip="into"]')).toHaveCount(0);   // only 2 takes: no personal advice yet
+  await expect(page.locator('[data-np-item="intonation:s2"]')).toHaveCount(0);   // only 2 takes: no personal advice yet
   await expect(page.locator('.vl-recommend')).toContainText('3개 이상');
 });
 
