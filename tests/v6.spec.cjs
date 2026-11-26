@@ -551,6 +551,23 @@ test('A sheet makes the page behind it inert: one "곡 추가" for a screen read
   await expect(named()).toHaveCount(1);
 });
 
+test('저장 공간 › 앱 기록 공간: what the app keeps in this browser, key by key and section by section; reading changes nothing', async ({page}) => {
+  await boot(page, {media:false});
+  await page.evaluate(() => localStorage.setItem('big-cache', 'x'.repeat(200000)));
+  const before = await page.evaluate(() => JSON.stringify(Object.entries(localStorage).sort()));
+  await page.goto('/#/storage');
+  const box = page.locator('[data-app-storage]');
+  await expect(box).toBeVisible();
+  await expect(box).toContainText('이 화면은 보기만 해요');
+  await expect(box.locator('[data-app-storage-total]')).toHaveText(/^\d+(\.\d)?(KB|MB)$/);
+  // Largest first: the 400KB cache, then the records (with their own name).
+  await expect(box.locator('[data-app-storage-keys] [data-app-storage-row]').first()).toContainText('big-cache');
+  await expect(box.locator('[data-app-storage-keys]')).toContainText('앱 기록 (곡·레슨·연습 등)');
+  await expect(box.locator('[data-app-storage-parts]')).toContainText('연습 기록');
+  await expect(box.locator('[data-app-storage-parts]')).toContainText('곡');
+  expect(await page.evaluate(() => JSON.stringify(Object.entries(localStorage).sort()))).toBe(before);
+});
+
 test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pauses on expired login, retries only failures, resumable', async ({page}) => {
   test.setTimeout(180000);
   await boot(page, {media:false});

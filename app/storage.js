@@ -34,9 +34,37 @@ async function moveOne(item, signal) {
   } finally { await prepared?.dispose?.(); }
 }
 
+/* 앱 기록 공간 (2026-11-26, after "저장하지 못했어요" kept showing on an iPad): what this app keeps in the browser's
+ * small storage (localStorage — about 5MB on iPhone/iPad Safari, separate from the recordings), key by key, and inside
+ * the records themselves section by section. Read only: nothing here deletes or changes anything. */
+const DB_KEY = 'vocal-zip_mvp_v1';
+const SECTION = {songs:'곡', lessons:'레슨', assignments:'숙제', practices:'연습 기록', comparisonReports:'비교·듣고 고르기',
+  performances:'공연', dailyGoals:'오늘의 목표', practicePlans:'연습 계획·설정', scoreAnnotations:'악보 표시', videoFeedback:'영상 피드백',
+  monthlyGrowthReports:'월별 리포트', monthlyAiReports:'AI 월간 리포트', overallAiReports:'AI 전체 리포트', categories:'트레이닝 분류',
+  settings:'설정', deleted:'지운 기록 목록', deletedAt:'지운 기록 시각'};
+const kb = n => n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
+const nameOf = key => { const k = String(key).replace(/^vzip_account_v1:[^:]*:/, ''); return k === DB_KEY ? '앱 기록 (곡·레슨·연습 등)' : k; };
+VZ.appStorageHtml = () => {
+  const r = VZ.storageReport?.(); if (!r) return '';
+  const rows = r.rows.slice(0, 8), db = r.rows.find(x => nameOf(x.key).startsWith('앱 기록'));
+  let parts = [];
+  try { const data = JSON.parse(localStorage.getItem(db?.key || DB_KEY) || '{}'); parts = Object.entries(data).map(([k, v]) => ({k, bytes:(JSON.stringify(v) || '').length * 2, n:Array.isArray(v) ? v.length : v && typeof v === 'object' ? Object.keys(v).length : null})).sort((a, b) => b.bytes - a.bytes).slice(0, 8); } catch { /* unreadable: no breakdown */ }
+  const line = (title, bytes, sub = '') => '<div class="item" data-app-storage-row><span class="item-main"><span class="item-title">' + esc(title) + '</span>' + (sub ? '<span class="item-sub">' + esc(sub) + '</span>' : '') + '</span><span class="small" style="font-weight:600">' + kb(bytes) + '</span></div>';
+  return '<h2 class="sec" style="margin-top:4px">앱 기록 공간</h2><div class="card stack" data-app-storage>' +
+    '<p class="small muted" style="margin:0">녹음 파일과 따로, 앱이 이 기기 브라우저에 두는 기록이에요. 아이폰·아이패드 Safari에서는 보통 5MB쯤이 한도라서, 가득 차면 "저장하지 못했어요"가 떠요. 이 화면은 보기만 해요.</p>' +
+    '<p style="margin:0"><strong data-app-storage-total>' + kb(r.bytes) + '</strong> <span class="small muted">사용 중</span></p>' +
+    '<div class="list" data-app-storage-keys>' + rows.map(x => line(nameOf(x.key), x.bytes)).join('') + '</div>' +
+    (parts.length ? '<h3 class="small" style="margin:8px 0 0">앱 기록 안에서 큰 것</h3><div class="list" data-app-storage-parts>' + parts.map(p => line(SECTION[p.k] || p.k, p.bytes, p.n != null ? p.n + '개' : '')).join('') + '</div>' : '') +
+    '<p class="small muted" style="margin:0" data-device-estimate></p></div>';
+};
+const fillEstimate = async host => {
+  const el = host?.querySelector('[data-device-estimate]'); if (!el || !navigator.storage?.estimate) return;
+  try { const e = await navigator.storage.estimate(); if (el.isConnected && e?.usage != null) el.textContent = '이 기기에서 앱 전체(기기에 둔 녹음 포함) ' + mb(e.usage) + (e.quota ? ' · 브라우저가 허락한 최대 ' + mb(e.quota) : ''); } catch { /* not available */ }
+};
 VZ.route('storage', {title:'저장 공간 관리', back:true, tab:'keep', noAutoRefresh:true,
-  render() { return '<div data-storage><p class="muted">불러오는 중…</p></div><a class="card item" href="#/upload-check" style="margin-top:12px;text-decoration:none"><span class="avatar"><i class="ph ph-stethoscope"></i></span><span class="item-main"><span class="item-title">업로드 상태 진단</span><span class="item-sub">기기·전체 녹음·R2 파일을 맞춰 보기 (읽기 전용)</span></span><i class="ph ph-caret-right chev"></i></a>'; },
+  render() { return VZ.appStorageHtml() + '<div data-storage><p class="muted">불러오는 중…</p></div><a class="card item" href="#/upload-check" style="margin-top:12px;text-decoration:none"><span class="avatar"><i class="ph ph-stethoscope"></i></span><span class="item-main"><span class="item-title">업로드 상태 진단</span><span class="item-sub">기기·전체 녹음·R2 파일을 맞춰 보기 (읽기 전용)</span></span><i class="ph ph-caret-right chev"></i></a>'; },
   async mount(main) {
+    fillEstimate(main);
     VZ.setGuard(() => run && !run.finished ? '파일을 옮기는 중이에요. 나가면 남은 파일은 다음에 이어서 옮길 수 있어요. 나갈까요?' : '');
     await draw(main);
   },
