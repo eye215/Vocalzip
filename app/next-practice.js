@@ -1,12 +1,14 @@
 /* 다음 연습 — ONE list of what to practise next for the whole app (다음 연습 하나로, 2026-11-26).
  *
- *   VZ.nextPractice({date?, songId?, limit?, media?, results?}) → {date, items, open, total}
+ *   VZ.nextPractice({date?, songId?, limit?, media?, results?, tips?, tipsSongId?}) → {date, items, open, total}
  *
  * Built on app/growth-next-model.js build() with the inputs 성장 › 나 always gave it (전체 분석 recommendations through
  * the shared VZ.growthModel, the latest 월별 추천 연습, VZ.practiceTips, 발성 정밀 측정 results), so 홈 · 오늘의 목표 시트 ·
  * 성장 › 나 · this list read the same order and the same merging. Nothing is stored: it is derived on every call.
  *   media    the recordings the screen already holds (VZ.media.cached() when left out) — home passes its own list
  *   results  발성 정밀 측정 results when the screen read them; otherwise the last ones read (loadPrecision)
+ *   tips     VZ.practiceTips(…) the screen worked out itself (곡 분석: one song's takes, minus what it shows as better);
+ *            left out, the tips over `media`. tipsSongId: the song those tips are for, so their items carry it.
  * Each item carries, besides the model's fields:
  *   inGoals   it is in today's goals ('담김'): merged with a goal, or a goal made from it — matched as the places that
  *             make goals match them (homework source/sourceId, 전체 분석's 'overall-growth:<date>:<metric>' id, a
@@ -15,6 +17,9 @@
  *             따라 하기 of it saved today); these come after all the others
  *   go        {href, label}: the way to start it that exists today (따라 하기 …), or null
  * VZ.nextPractice.addGoal(item) puts one in today's goals the way it is done today (no new kind of goal).
+ * VZ.nextPractice.listHtml(items, {here}) / bindAdd(host, find, after): the same rows on another screen (곡 분석's 다음
+ * 연습), with 따라 하기 and 목표에 담기 working as here. topHtml({limit}) / bindTop(root): the first `limit` still to do
+ * and "다음 연습 전체 보기" (월별 · 전체 분석's 다음 연습).
  *
  * #/next-practice: the full list as a page — rank, every source, one reason line, 따라 하기 and 목표에 담기 inline;
  * 전체 · 곡별 filters; 오늘 한 것 folded at the end; "AI에게 하나 더 받기" (the 오늘 할 일 AI request of
@@ -83,14 +88,15 @@ function goOf(it) {
 }
 /** Can 목표에 담기 make a goal of it? Goals already are goals; AI drafts are taken (after editing) on their own screen. */
 const canAdd = it => !['goal', 'routine', 'ai-draft'].includes(it.action?.kind);
-function nextPractice({date = V.today(), songId = '', limit = 0, media = null, results} = {}) {
+function nextPractice({date = V.today(), songId = '', limit = 0, media = null, results, tips:given, tipsSongId = ''} = {}) {
   const files = Array.isArray(media) ? media : V.media?.cached?.() || [];
   if (Array.isArray(results)) precisionCache = results;
   let overall = null, tips = null;
   try { overall = V.growthModel?.(files)?.overall || null; } catch (error) { console.error(error); }
-  try { tips = V.practiceTips?.(files) || null; } catch (error) { console.error(error); }
+  if (given !== undefined) tips = given || null;
+  else try { tips = V.practiceTips?.(files) || null; } catch (error) { console.error(error); }
   const monthly = live('monthlyGrowthReports').sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')))[0] || null;
-  const built = N.build({db:V.db, today:date, overall, monthly, tips, precision:precisionOf(precisionCache), limit:1000, keepDone:true});
+  const built = N.build({db:V.db, today:date, overall, monthly, tips, tipsSongId, precision:precisionOf(precisionCache), limit:1000, keepDone:true});
   const goals = live('dailyGoals').filter(g => g.date === date), practices = live('practices').filter(p => p.date === date);
   const runs = window.VzipDailySet?.runsOn?.(V.db, date) || [];
   const items = built.items.map(it => {
@@ -141,7 +147,8 @@ async function loadPrecision() {
   return precisionCache;
 }
 V.nextPractice = nextPractice;
-Object.assign(V.nextPractice, {addGoal, goalFor, loadPrecision, label:s => N.LABEL[s] || ''});
+Object.assign(V.nextPractice, {addGoal, goalFor, loadPrecision, label:s => N.LABEL[s] || '', listHtml:(...a) => listHtml(...a), bindAdd:(...a) => bindAdd(...a),
+  topHtml:(...a) => topHtml(...a), bindTop:(...a) => bindTop(...a)});
 
 /* ---------- #/next-practice ---------- */
 let request = 0, view = null;   // view: {host, media, filter: 'all'|'song', song, open (오늘 한 것 펼침), status}
@@ -161,6 +168,36 @@ function rowHtml(it, n) {
     '<p class="np-head">' + (n ? '<span class="np-num">' + n + '</span>' : '<span class="np-check" aria-hidden="true">✓</span><span class="sr-only">오늘 했어요</span>') + chips(it) + '</p>' +
     '<strong class="np-title">' + e(it.title) + '</strong>' + (reason(it) ? '<small class="np-why">' + e(reason(it)) + '</small>' : '') +
     (go || add ? '<div class="np-actions">' + go + add + '</div>' : '') + '</li>';
+}
+/** These rows on another screen: numbered from 1 (오늘 한 것: a check). `here`: that screen's address, so no row links
+ * to the screen it is on. */
+const listHtml = (items, {here = ''} = {}) => '<ol class="np-list">' +
+  list(items).map((it, i) => rowHtml(here && it.go?.href === here ? {...it, go:null} : it, it.doneToday ? 0 : i + 1)).join('') + '</ol>';
+/** 목표에 담기 on such rows: find(id) gives the row's item now, after(item) repaints once it is in today's goals. */
+function bindAdd(host, find, after) {
+  host.querySelectorAll('[data-np-add]').forEach(b => b.onclick = () => {
+    const it = find(b.dataset.npAdd);
+    if (!it) return;
+    b.disabled = true;
+    if (addGoal(it)) after?.(it); else b.disabled = false;
+  });
+}
+/** The first `limit` of the list still to do, and the way to the whole list. */
+function topHtml({limit = 3} = {}) {
+  let items = [];
+  try { items = nextPractice().items.filter(x => !x.doneToday).slice(0, limit); } catch (error) { console.error(error); }
+  return '<div class="np-top" data-np-top>' + (items.length ? listHtml(items) : '<p class="np-top-empty" data-np-top-empty>지금 할 다음 연습이 없어요.</p>') +
+    '<a class="vz-plan-next-all" href="#/next-practice" data-np-all>다음 연습 전체 보기 <i class="ph ph-arrow-right" aria-hidden="true"></i></a></div>';
+}
+/** 목표에 담기 on topHtml's rows (inside root), then those rows again in place. */
+function bindTop(root, opts = {}) {
+  const box = root?.querySelector('[data-np-top]');
+  if (!box) return;
+  bindAdd(box, id => nextPractice().items.find(x => x.id === id), it => {
+    const wrap = document.createElement('div'); wrap.innerHTML = topHtml(opts);
+    const fresh = wrap.firstElementChild; box.replaceWith(fresh); bindTop(root, opts);
+    fresh.querySelector('[data-np-item="' + CSS.escape(it.id) + '"] [data-np-added]')?.setAttribute('tabindex', '-1');
+  });
 }
 function paint(v) {
   if (!v.host.isConnected) return;
@@ -197,12 +234,8 @@ function bind(v) {
   });
   h.querySelectorAll('[data-np-song]').forEach(b => b.onclick = () => { v.song = b.dataset.npSong; paint(v); h.querySelector('[data-np-song="' + CSS.escape(v.song) + '"]')?.focus(); });
   h.querySelector('[data-np-done]')?.addEventListener('toggle', ev => { v.open = ev.target.open; });
-  h.querySelectorAll('[data-np-add]').forEach(b => b.onclick = () => {
-    const it = nextPractice({media:v.media}).items.find(x => x.id === b.dataset.npAdd);
-    if (!it) return;
-    b.disabled = true;
-    if (addGoal(it)) { paint(v); h.querySelector('[data-np-item="' + CSS.escape(it.id) + '"] [data-np-added]')?.setAttribute('tabindex', '-1'); }
-    else b.disabled = false;
+  bindAdd(h, id => nextPractice({media:v.media}).items.find(x => x.id === id), it => {
+    paint(v); h.querySelector('[data-np-item="' + CSS.escape(it.id) + '"] [data-np-added]')?.setAttribute('tabindex', '-1');
   });
   const ai = h.querySelector('[data-np-ai]');
   if (ai) ai.onclick = () => askAi(v);

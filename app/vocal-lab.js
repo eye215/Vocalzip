@@ -410,30 +410,48 @@ function makeSegment(s,m) {
     '<label class="vl-range-label">분석할 구간 이동<input type="range" min="0" max="'+Math.max(0,Math.floor(total-16))+'" value="'+Math.min(start,Math.max(0,Math.floor(total-16)))+'" data-start aria-label="구간 시작 위치"></label><p class="vl-muted" data-analyze-status aria-live="polite">'+(full?'파형과 수치는 실제 녹음 분석 결과예요.':'그래프는 이 녹음을 분석하면 표시돼요.')+'</p></section>';
 }
 const TIP_METRIC={into:'intonation',wob:'stability',phr:'phrase'};
+/** 다음 연습 of this song: the ONE shared list (VZ.nextPractice, app/next-practice.js) filtered to the song, its 측정 기반
+ * rows worked out from this song's takes (minus a measure 이 곡의 변화 shows as better). At most NEXT_MAX rows still to do;
+ * 다음 연습 전체 보기 opens the whole list. The AI button stays here: it asks for one more exercise for THIS take and
+ * segment (the whole list's AI asks for one from the week's records), and asks before anything is sent. */
+const NEXT_MAX=5;
 function recommendations(s) {
   // A measure 이 곡의 변화 shows as 좋아진 방향 is not recommended on the same screen: the next one is.
   const report=labReport(s);
   const improved=Object.keys(TIP_METRIC).filter(key=>report?.[TIP_METRIC[key]]?.state==='better');
   const result=V.practiceTips(s.items,{songId:s.song.id,exclude:improved});
-  if (!result.enough) return {count:result.count, tips:[]};
-  const skipped=(result.skipped||[]).map(key=>G?.METRICS.find(d=>d.id===TIP_METRIC[key])?.title).filter(Boolean);
+  const skipped=result.enough?(result.skipped||[]).map(key=>G?.METRICS.find(d=>d.id===TIP_METRIC[key])?.title).filter(Boolean):[];
   const note=skipped.length?'위 ‘이 곡의 변화’에서 좋아진 방향인 항목('+skipped.join('·')+')은 추천에서 뺐어요.':'';
-  const tips=result.tips.length?result.tips.slice(0,2):[{
-    key:'maintain', name:'롱톤 유지 연습', metric:'유지 연습', value:'',
-    reason:'최근 측정값이 고르게 안정적이에요.', goal:'편안한 음역에서 일정한 소리 유지', minutes:5,
-    steps:['편한 음역에서 롱톤 5초씩 5회','같은 세기와 편안한 호흡으로 유지']
-  }];
-  return {count:result.count,tips,note};
+  let items=[];
+  // This screen's own AI 다른 연습 drafts are not rows: the card under the list shows the one of the chosen take.
+  try{items=V.nextPractice?V.nextPractice({songId:s.song.id,media:s.all,tips:result,tipsSongId:s.song.id}).items.filter(x=>!x.doneToday&&x.action?.ref?.kind!=='ai-exercise').slice(0,NEXT_MAX):[];}
+  catch(error){console.error(error);}
+  return {count:result.count,enough:!!result.enough,tips:result.enough?result.tips:[],items,note};
 }
 function tipCard(t,songId){return '<details '+(t.aiRef?'open ':'')+'class="vl-tip" data-tip="'+esc(t.key)+'"><summary><span><strong>'+esc(t.name)+'</strong><small>'+esc(t.metric+(t.value?' · '+(t.basis?t.basis+' ':'')+t.value:''))+'</small></span><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="vl-tip-detail"><p>'+esc(t.reason)+'</p><ol>'+t.steps.map(step=>'<li>'+esc(step)+'</li>').join('')+'</ol><p class="vl-tip-goal">목표: '+esc(t.goal)+' · 권장 '+t.minutes+'분</p><div class="vl-tip-actions"><a href="'+esc(V.guideHref?V.guideHref(t.aiRef?'ai:'+t.aiRef:'analysis:'+t.key,songId):'#/practice-set?guide='+encodeURIComponent(t.aiRef?'ai:'+t.aiRef:'analysis:'+t.key)+'&song='+encodeURIComponent(songId))+'">따라 하기</a><button type="button" data-practice-tip="'+esc(t.key)+'">연습 기록에 담기</button></div></div></details>';}
 const aiContext=s=>String(s.active)+':'+(s.start[s.active]||0);
 const savedAITip=s=>s.aiTips?.get(aiContext(s))||[...(s.aiTips||new Map())].reverse().find(([key])=>key.startsWith(String(s.active)+':'))?.[1];
 function recommendationList(recs,songId,aiTip=null) {
-  const items=recs.tips.map(t=>tipCard(t,songId)).join('');
+  const here='#/vocal-lab/'+encodeURIComponent(songId);
+  const rows=recs.items.length&&V.nextPractice?.listHtml?V.nextPractice.listHtml(recs.items,{here}):'';
+  const empty=recs.enough?'지금은 이 곡에서 따로 할 다음 연습이 없어요.':'이 곡의 신뢰할 수 있는 분석 녹음이 3개 이상 모이면 맞춤 연습 목록이 나와요. 현재 '+recs.count+'개예요.';
   return '<section class="vl-weak-block vl-recommend"><h3 class="vl-sub">다음 연습</h3>'+
-    (items?'<div class="vl-tip-list">'+items+'</div>':'<p class="vl-muted">이 곡의 신뢰할 수 있는 분석 녹음이 3개 이상 모이면 맞춤 연습 목록이 나와요. 현재 '+recs.count+'개예요.</p>')+
+    (rows?'<div class="vl-next" data-vl-next>'+rows+'</div>':'<p class="vl-muted" data-vl-next-empty>'+esc(empty)+'</p>')+
+    (rows&&!recs.enough?'<p class="vl-muted">'+esc(empty)+'</p>':'')+
     (recs.note?'<p class="vl-muted" data-tip-skipped>'+esc(recs.note)+'</p>':'')+
-    '<div class="vl-tip-list" data-ai-tip>'+(aiTip?tipCard(aiTip,songId):'')+'</div><div class="vl-recommend-actions"><button type="button" class="vl-repeat-practice" data-repeat-practice>이 구간 반복 듣기</button><button type="button" class="vl-repeat-practice" data-ai-exercise>다른 연습 하나 AI 추천받기</button></div><p class="vl-muted" data-ai-status role="status">기록을 바탕으로 기존 목록에 없는 연습 한 가지를 추천해요.</p></section>';
+    '<a class="vl-next-all" href="#/next-practice" data-vl-next-all>다음 연습 전체 보기 <i class="ph ph-arrow-right" aria-hidden="true"></i></a>'+
+    '<div class="vl-tip-list" data-ai-tip>'+(aiTip?tipCard(aiTip,songId):'')+'</div><div class="vl-recommend-actions"><button type="button" class="vl-repeat-practice" data-repeat-practice>이 구간 반복 듣기</button><button type="button" class="vl-repeat-practice" data-ai-exercise>다른 연습 하나 AI 추천받기</button></div><p class="vl-muted" data-ai-status role="status">이 구간 기록을 바탕으로 위 목록에 없는 연습 한 가지를 추천해요. 보내기 전에 무엇을 보내는지 먼저 보여 드려요.</p></section>';
+}
+/** 목표에 담기 on the 다음 연습 rows (the list's own way), then the rows again in place. */
+function bindNext(s){
+  const slot=s.slots?.tips;if(!slot||!V.nextPractice?.bindAdd)return;
+  const shown=()=>recommendations(s).items;
+  V.nextPractice.bindAdd(slot,id=>shown().find(x=>x.id===id),it=>{
+    const host=slot.querySelector('[data-vl-next]');if(!host)return;
+    host.innerHTML=V.nextPractice.listHtml(shown(),{here:'#/vocal-lab/'+encodeURIComponent(s.song.id)});
+    bindNext(s);
+    host.querySelector('[data-np-item="'+CSS.escape(it.id)+'"] [data-np-added]')?.setAttribute('tabindex','-1');
+  });
 }
 /** 두 녹음 비교: any two of the song's recordings → 가리고 듣고 평가 (the listening sheet, app/listen-verdict.js),
  * 측정값 나란히 보기 (the A/B table) and a memo for the pair. A take picked here joins the chips above so it can be played. */
@@ -831,8 +849,9 @@ function screen(s) {
   });
   T.querySelectorAll('[data-rating]').forEach(b=>b.onclick=async()=>{const score=Number(b.dataset.rating);try{await M.update(m,{rating:score});m.rating=score;T.querySelectorAll('[data-rating]').forEach(star=>star.setAttribute('aria-pressed',String(Number(star.dataset.rating)<=score)));T.querySelector('.vl-rating b').textContent=score+'/5';}catch(err){V.toast('만족도를 저장하지 못했어요: '+err.message,'error');}});
   host.querySelector('[data-repeat-practice]').onclick=()=>{s.loop=true;T.querySelector('[data-loop]').setAttribute('aria-pressed','true');player.seek(s.start[m.id]||0);player.play();};
+  bindNext(s);
   host.querySelectorAll('[data-practice-tip]').forEach(button=>button.onclick=()=>{
-    const tip=[...recs.tips,savedAITip(s)].filter(Boolean).find(x=>x.key===button.dataset.practiceTip);
+    const tip=[savedAITip(s)].filter(Boolean).find(x=>x.key===button.dataset.practiceTip);
     if(!tip)return;
     V.practiceSheet({songId:s.song.id,mediaIds:[m.id],preset:{minutes:tip.minutes,memo:'[추천 연습] '+tip.name+' — '+tip.steps.join(' / ')}});
   });
@@ -840,10 +859,17 @@ function screen(s) {
   const aiButton=host.querySelector('[data-ai-exercise]');
   aiButton.disabled=!!s.aiPending;
   aiButton.onclick=async()=>{
-    if(s.aiPending)return;const context=aiContext(s),status=host.querySelector('[data-ai-status]');s.aiPending=true;aiButton.disabled=true;status.textContent='겹치지 않는 연습 한 가지를 찾고 있어요…';
+    if(s.aiPending)return;const context=aiContext(s),status=host.querySelector('[data-ai-status]');
+    // Asked first: nothing is sent before 보내기 (as 다음 연습's "AI에게 하나 더 받기").
+    s.aiPending=true;aiButton.disabled=true;
+    const ok=await V.confirm('다른 연습 하나 AI 추천받기','이 곡 제목, 지금 고른 녹음의 날짜·측정값·메모와 구간 위치, 마지막 연습 기록의 메모·컨디션, 위 다음 연습 목록을 NVIDIA에 보내 겹치지 않는 연습 한 가지를 만들어요.\n녹음 파일은 보내지 않아요. 녹음을 청취하지 않으며 수치만으로 소리나 실력 향상을 단정하지 않아요.',{ok:'보내기'});
+    if(!ok||s.dead||!host.isConnected||aiContext(s)!==context){s.aiPending=false;if(!s.dead&&host.isConnected){const button=host.querySelector('[data-ai-exercise]');if(button)button.disabled=false;}return;}
+    status.textContent='겹치지 않는 연습 한 가지를 찾고 있어요…';
     try{
       const last=(V.db.practices||[]).filter(p=>!p.songId||p.songId===s.song.id).sort((a,b)=>String(a.date).localeCompare(String(b.date))||(a.created||0)-(b.created||0)).at(-1);
-      const result=await window.vzipCloudCoach({mode:'inline-exercise',excluded:recs.tips.map(t=>t.key),task:'보컬 연구소의 기존 추천과 겹치지 않는 추가 연습 한 가지',summary:'기존 추천: '+recs.tips.map(t=>t.name).join(', '),song:s.song.title,comfort:last?.practiceRoom?.draft?.comfort||'',symptoms:last?.practiceRoom?.draft?.symptoms||[],mood:last?.practiceRoom?.mood||'',memo:last?.practiceRoom?.draft?.memo||last?.memo||'',answers:[JSON.stringify({displayed:recs.tips,recording:{date:M.dateOf(m),review:m.review||'',metrics:analysis(m)?.metrics||null},segmentStart:s.start[m.id]||0})]});
+      const shown=recs.items.map(x=>({title:x.title,source:x.source}));
+      const excluded=[...new Set(recs.items.map(x=>x.action?.kind==='practice-tip'?x.action.tipKey:'').filter(Boolean))];
+      const result=await window.vzipCloudCoach({mode:'inline-exercise',excluded,task:'보컬 연구소의 기존 추천과 겹치지 않는 추가 연습 한 가지',summary:'기존 추천: '+shown.map(t=>t.title).join(', '),song:s.song.title,comfort:last?.practiceRoom?.draft?.comfort||'',symptoms:last?.practiceRoom?.draft?.symptoms||[],mood:last?.practiceRoom?.mood||'',memo:last?.practiceRoom?.draft?.memo||last?.memo||'',answers:[JSON.stringify({displayed:shown,recording:{date:M.dateOf(m),review:m.review||'',metrics:analysis(m)?.metrics||null},segmentStart:s.start[m.id]||0})]});
       if(s.dead||!host.isConnected||aiContext(s)!==context)return;
       const x=result.exercise;if(!x||!Array.isArray(x.steps)||!x.name)throw Error('추천 형식을 확인하지 못했어요. 다시 요청해 주세요.');
       const id=V.uid(),tip={key:'ai-'+id,aiRef:id,name:x.name,reason:x.reason,steps:x.steps,goal:x.goal,minutes:x.minutes,metric:'AI 추가 추천',value:time(s.start[m.id]||0)+' 구간',family:x.family,nonVocal:x.family==='interpretation'};

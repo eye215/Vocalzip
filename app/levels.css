@@ -69,6 +69,11 @@
 .lv-dots i{width:14px;height:14px;border-radius:50%;border:2px solid #c9b2f7;box-sizing:border-box}
 .lv-dots i.is-on{border-color:var(--vz-color-accent,#7A32F5);background:var(--vz-color-accent,#7A32F5)}
 .lv-recent{display:grid;margin:0;padding:0;list-style:none}
+/* 최근 기록's tiny line of the last measured days (it was on the 기본기 tiles of 성장 › 나): values only, no axis. */
+.lv-spark-row{display:flex;align-items:center;gap:10px;margin:0 0 8px}
+.lv-spark{flex:none;width:72px;height:22px;fill:none;stroke:var(--vz-color-accent,#7A32F5);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.lv-spark circle{fill:var(--vz-color-accent,#7A32F5);stroke:none}
+.lv-spark-row small{color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:16px;word-break:keep-all}
 .lv-recent li{display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-height:32px;padding:4px 0;border-top:1px solid var(--vz-color-border,#eae3f1);font-size:13px;line-height:20px}
 .lv-recent li:first-child{border-top:0}
 .lv-recent span{flex:none;color:var(--vz-color-ink-muted,#667085);font-variant-numeric:tabular-nums}

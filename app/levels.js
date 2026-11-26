@@ -137,6 +137,17 @@ function exerciseNames(a){
   const D=window.VzipDailySet;
   return a.by.map(id=>{const e=D?.exercise?.(id);return e?{title:e.title,group:D.groupOf(e.group)?.title||''}:null;}).filter(Boolean);
 }
+/** A tiny line of the area's last measured days (one value a day, the day's last; app/growth-me-model.js tiles), which
+ * was on the 기본기 tiles of 성장 › 나 before those became one row: values only, no axis, the better direction up. */
+function sparkRow(a){
+  let t=null;try{t=window.VzipGrowthMe?.tiles(V.db,V.today()).find(x=>x.id===a.id)||null;}catch(error){console.error(error);}
+  const points=t?.spark||[];
+  if(points.length<2)return '';
+  const vs=points.map(p=>p.value),lo=Math.min(...vs),hi=Math.max(...vs),span=hi-lo||1,w=72,h=22;
+  const xy=points.map((p,i)=>[Math.round(i/(points.length-1)*w),Math.round((t.lower?(p.value-lo)/span:1-(p.value-lo)/span)*(h-4)+2)]);
+  return '<p class="lv-spark-row" data-lv-spark="'+points.length+'"><svg class="lv-spark" viewBox="0 0 '+w+' '+h+'" aria-hidden="true"><polyline points="'+xy.map(p=>p.join(',')).join(' ')+'"/>'+
+    '<circle cx="'+xy.at(-1)[0]+'" cy="'+xy.at(-1)[1]+'" r="2.4"/></svg><small>최근 '+points.length+'일 흐름 · 위로 갈수록 기준에 가까워요</small></p>';
+}
 function areaHtml(a){
   const head=(()=>{
     if(a.state==='step')return '<p class="lv-state" data-lv-state>'+(a.step?'<strong>'+a.step+'단계</strong>예요':'아직 <strong>1단계 전</strong>이에요')+'</p>'+
@@ -155,7 +166,7 @@ function areaHtml(a){
         '<p class="lv-progress" data-lv-progress>'+dots+'<span>'+n.need+'번 중 '+n.count+'번 했어요</span></p>'+
         (n.days.length?'<p class="lv-note" data-lv-days>'+n.days.map(d=>esc(day(d.date))).join(' · ')+'</p>':'')+
         '<p class="lv-note">서로 다른 날에 '+n.need+'번 채우면 돼요.'+(a.state==='calibrating'?' 기준 맞추는 중에는 세기만 하고 단계는 올리지 않아요.':n.due?' 다 채웠어요. 다음 오늘의 연습을 마치면 '+n.step+'단계가 돼요.':'')+'</p>')+'</section>';
-  const recent='<section class="lv-card" data-lv-recent><h3>최근 기록</h3>'+(a.recent.length?'<ul class="lv-recent">'+a.recent.map(r=>'<li><span>'+esc(day(r.date))+'</span><b>'+esc(r.text)+'</b></li>').join('')+'</ul>'+
+  const recent='<section class="lv-card" data-lv-recent><h3>최근 기록</h3>'+(a.recent.length?sparkRow(a)+'<ul class="lv-recent">'+a.recent.map(r=>'<li><span>'+esc(day(r.date))+'</span><b>'+esc(r.text)+'</b></li>').join('')+'</ul>'+
     (a.base?'<p class="lv-note" data-lv-base>처음 음역 · '+esc(L.noteName(a.base.low)+'–'+L.noteName(a.base.high))+(a.base.closed?'':' (첫 주라 아직 재는 중이에요)')+'</p>':''):
     '<p class="lv-empty">'+(a.state==='soon'?'재는 연습이 생기면 여기에 쌓여요.':'아직 기록이 없어요.')+'</p>')+'</section>';
   const steps='<section class="lv-card" data-lv-steps><h3>단계 기준</h3><ol class="lv-steps">'+a.steps.map(s=>'<li data-step="'+s.step+'" data-state="'+s.state+'"><span class="lv-step-n" aria-hidden="true">'+(s.state==='earned'?'<i class="ph ph-check"></i>':s.step)+'</span>'+

@@ -50,6 +50,9 @@
 // analysed take. Defying Gravity: 비교 가능 → 판정 보류 (its latest take was measured another way than the earlier ones:
 // 무엇이 달라졌나 never pairs those).
 // 노래 연습실 → 오늘의 연습 (2026-11-26): only the 전체 분석 link "연습실에서 시작하기" left overallScreen (both zones).
+// 다음 연습 하나로 (2026-11-27): no number or verdict moved. 전체 · 월별 분석's 다음 연습 lead with the first three of the
+// ONE list (VZ.nextPractice, [data-np-top]: left out here, it has its own spec) and fold the report's own picks under
+// "이 리포트 측정으로 고른 연습 n개" / "이 달 측정으로 고른 연습 n개" (added); 월별's link "노래 연습실에서 연습하기" left.
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
@@ -65,7 +68,7 @@ const {NOW, MEDIA, DB} = require('./growth-characterization.fixture.cjs');
 // Precision navigation has separate entry/route tests; keep the original metric snapshot byte-for-byte.
 // 무엇이 달라졌나 ([data-growth-changes], app/growth-changes-ui.js) is a new card above 전체 분석 with its own spec
 // (tests/growth-listen.spec.cjs): left out here so every pinned value stays comparable.
-const texts = () => (root => { const out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (n.parentElement.closest('script,style,[data-range-flow],[data-precision-entry],[data-precision-report-entry],[data-growth-changes]')) continue; const t = n.nodeValue.replace(/\s+/g, ' ').trim(); if (t) out.push(t); } return out; });
+const texts = () => (root => { const out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (n.parentElement.closest('script,style,[data-range-flow],[data-precision-entry],[data-precision-report-entry],[data-growth-changes],[data-np-top]')) continue; const t = n.nodeValue.replace(/\s+/g, ' ').trim(); if (t) out.push(t); } return out; });
 async function boot(page) {
   page.__errors = [];
   page.on('pageerror', e => page.__errors.push(e.message));

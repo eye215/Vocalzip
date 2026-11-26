@@ -172,6 +172,9 @@ test('an area: the next step in plain words, "3번 중 n번 했어요", recent v
   await expect(host(page).locator('[data-lv-recent] li')).toHaveCount(5);
   await expect(host(page).locator('[data-lv-recent] li').first()).toHaveText('11.20 (금)5개 중 5개 유지');
   await expect(host(page).locator('[data-lv-recent] li').nth(1)).toHaveText('11.19 (목)5개 중 4개 유지');
+  // The tiny line of the last measured days (it was on 성장 › 나's 기본기 tiles before they became one row).
+  await expect(host(page).locator('[data-lv-recent] [data-lv-spark] svg polyline')).toHaveCount(1);
+  expect(Number(await host(page).locator('[data-lv-spark]').getAttribute('data-lv-spark'))).toBeGreaterThanOrEqual(2);
   expect(await host(page).innerText()).not.toMatch(/잘해요|재능|못해요|부족/);
   // The five steps: done (with its day), next, later — every one measured by an exercise now.
   expect(await host(page).locator('[data-lv-steps] li').evaluateAll(els => els.map(e => e.dataset.state))).toEqual(['earned', 'next', 'later', 'later', 'later']);

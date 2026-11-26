@@ -199,14 +199,14 @@ test('뒤로 from the screens a tab opens returns to that tab, with 성장 lit o
     await back(/#\/growth-lab$/);
     await expect(current(page)).toHaveText('기록');
   }
-  // 이번 달 → 지난 흐름 (월별, the default period) → 연습실 → 뒤로 keeps the month view; 뒤로 again is 이번 달.
+  // 이번 달 → 지난 흐름 (월별, the default period) → 다음 연습 전체 보기 → 뒤로 keeps the month view; 뒤로 again is 이번 달.
   await tabs(page).nth(0).click();
   await page.locator('[data-gm-flow]').click();
   await expect(page).toHaveURL(/#\/growth-flow\?period=month$/);
   await expect(page.locator('#top h1')).toHaveText('지난 흐름');
   await expect(dock(page)).toHaveAttribute('aria-current', 'page');
-  await page.locator('#view a[href="#/practice-room"]').first().click();
-  await expect(page).toHaveURL(/#\/practice-room$/);
+  await page.locator('#view [data-month-section="practice"] [data-np-all]').click();
+  await expect(page).toHaveURL(/#\/next-practice$/);
   await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current', 'page');   // a practice screen: 오늘's (phase 4)
   await back(/#\/growth-flow\?period=month$/);
   await expect(dock(page)).toHaveAttribute('aria-current', 'page');
@@ -528,14 +528,15 @@ for (const [width, height] of [[820, 1180], [1180, 820]]) test('tablet ' + width
   await expect(page.locator('.growth-hub-hint')).toHaveCount(0);     // the hint belongs to 곡
   await tabs(page).nth(1).click();
   await expect(page.locator('.growth-hub-hint')).toBeVisible();
-  // 나: 큰 단계 beside the eight 기본기 tiles; the one line, 다음 연습 and 한 것 below, nothing wider than the screen.
+  // 나: 단계 in one row (the 기본기 tiles are on 단계); the one line, 다음 연습 and 한 것 below, nothing wider than the screen.
   await tabs(page).nth(0).click();
   await expect(page.locator('[data-gm-section="next"]')).toBeVisible();
   const me = await page.evaluate(() => {
     const box = s => document.querySelector(s).getBoundingClientRect();
-    return {lv:box('[data-gme-lv]'), tile:box('[data-gme-tile]'), line:box('[data-gm-section="line"]'), next:box('[data-gm-section="next"]'), tabs:box('.growth-top-tabs').width, view:box('#view').width};
+    return {lv:box('[data-gme-lv]'), tiles:document.querySelectorAll('[data-gme-tile]').length, line:box('[data-gm-section="line"]'), next:box('[data-gm-section="next"]'), tabs:box('.growth-top-tabs').width, view:box('#view').width};
   });
-  expect(me.tile.left).toBeGreaterThan(me.lv.right);
+  expect(me.tiles).toBe(0);
+  expect(me.lv.height).toBeLessThan(80);
   expect(me.next.top).toBeGreaterThan(me.lv.top);
   expect(me.tabs).toBeLessThan(me.view);                       // the tab box keeps a phone-like width
   expect(await overflow(page)).toEqual({wide:false, over:0});

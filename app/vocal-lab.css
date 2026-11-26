@@ -368,3 +368,12 @@ body .sheet-page.vl-observation-overlay .vl-observation-card{
 
 /* v5 (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): every tap target is at least 44px. */
 .vl-chip-play,.vl-growth-ai-head button{min-height:44px}
+/* 다음 연습 rows (the shared list, app/next-practice.js) on this dark screen. */
+.vl-next .np-item{background:#211b2b;border-color:#352d40}
+.vl-next .np-title{color:#f7f5fc}
+.vl-next .np-why{color:#aaa3b7}
+.vl-next .np-num{color:#bc84ed}
+.vl-next .np-add{background:#2d2140;color:#e4caff}
+.vl-next .np-added{background:#17322a;color:#7fdcb0}
+.vl-next .np-chip{background:#2d2140;color:#e4caff}
+.vl-next-all{display:inline-flex;align-items:center;gap:4px;min-height:44px;margin-top:4px;color:#e4caff;font-size:13px;font-weight:700;text-decoration:none}
