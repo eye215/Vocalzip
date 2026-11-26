@@ -70,7 +70,7 @@
     host.classList.add('vz-media-select-enabled');
     const findItem = id => items.find(item => String(item.id) === id);
     const decorate = () => {
-      if (document.body.dataset.vzRoute === 'library') return;
+      if (['library', 'library-tidy'].includes(document.body.dataset.vzRoute)) return; // these have their own ticks
       host.querySelectorAll('[data-media]').forEach(row => {
         if (row.querySelector('.vz-media-select')) return;
         const item = findItem(row.dataset.media);
@@ -84,7 +84,7 @@
       });
     };
     decorate();
-    if (document.body.dataset.vzRoute !== 'library') new MutationObserver(decorate).observe(host, {childList:true, subtree:true});
+    if (!['library', 'library-tidy'].includes(document.body.dataset.vzRoute)) new MutationObserver(decorate).observe(host, {childList:true, subtree:true});
     host.addEventListener('click', event => {
       const row = event.target.closest('[data-media]');
       if (!row || !host.contains(row)) return;
