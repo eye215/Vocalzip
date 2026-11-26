@@ -53,6 +53,7 @@
 // 다음 연습 하나로 (2026-11-27): no number or verdict moved. 전체 · 월별 분석's 다음 연습 lead with the first three of the
 // ONE list (VZ.nextPractice, [data-np-top]: left out here, it has its own spec) and fold the report's own picks under
 // "이 리포트 측정으로 고른 연습 n개" / "이 달 측정으로 고른 연습 n개" (added); 월별's link "노래 연습실에서 연습하기" left.
+// #560 (오늘의 연습 AI 청취 · ① 보이스 체크): the listening-evidence line says "…녹음이나 오늘의 연습 녹음에…" and practiceSet is one step more (8개 · 약 29분).
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
