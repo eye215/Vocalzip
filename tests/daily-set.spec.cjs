@@ -12,7 +12,7 @@ const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:
  from:()=>{const c={};for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle','in','limit'])c[m]=()=>c;c.then=r=>r({data:[],error:null});return c}})};`;
 /** 고르기 with one exercise per group, so the set is the same on any date: 목·어깨 풀기 → “스~” → 허밍 롱톤 → 음 따라 부르기
  * (리듬 rests; the measuring exercises — 사이렌 · 맨 위 음 · 스케일 too — have their own spec, tests/daily-set-measure.spec.cjs). */
-const PINNED = {id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'loosen-liptrill':true, 'loosen-hum':true, 'breath-pulse':true, 'breath-hiss':true, 'voice-liptrill5':true, 'voice-mum':true, 'voice-vibrato':true, 'voice-high':true, 'loosen-siren':true, 'ear-scale':true}, groupsOff:{rhythm:true}, replace:{}};
+const PINNED = {id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'loosen-liptrill':true, 'loosen-hum':true, 'breath-pulse':true, 'breath-hiss':true, 'voice-liptrill5':true, 'voice-mum':true, 'voice-vibrato':true, 'voice-high':true, 'loosen-siren':true, 'ear-scale':true}, groupsOff:{rhythm:true, 'voice-check':true}, replace:{}}; // ① 보이스 체크 rests here: its own tests turn it on
 const seed = (extra = {}) => ({categories:[], songs:[{id:'s1', title:'This Is the Moment'}], lessons:[], assignments:[], practices:[], performances:[], comparisonReports:[], dailyGoals:[],
   practicePlans:[{...PINNED}], settings:{voiceCheck:{voiceType:'alto', refNote:60, highNote:69, tones:true}}, ...extra});
 /** Fake mic (window.__mic: {opened, stopped, deny}), fake pitch (window.__sing Hz, 0 = silence), reference notes
@@ -446,12 +446,13 @@ test('편집: ONE screen — a built-in row says which exercises take turns or r
   await expect(plan.locator('.pset-row[data-kind="exercise"]').filter({hasText:'음감'})).toHaveCount(1);
   row = (await db(page)).practicePlans.filter(p => p.kind === 'daily-set-prefs');
   expect(row).toHaveLength(1); expect(row[0].groupsOff).toEqual({});
-  // The card follows at once, and tomorrow's 목 풀기 is 허밍 again.
+  // The card follows at once, and tomorrow's 목 풀기 is 허밍 again (after ① 보이스 체크, on by default with no check saved).
   await to(page, '#/home');
-  await expect(line(page).first().locator('.vz-set-item span')).toHaveText('허밍');
+  await expect(line(page).first().locator('.vz-set-item span')).toHaveText('보이스 체크 30초');
+  await expect(line(page).nth(1).locator('.vz-set-item span')).toHaveText('허밍');
   await page.clock.setFixedTime(new Date('2026-11-05T09:00:00.000Z'));
   await page.reload(); await ready(page);
-  await expect(line(page).first().locator('.vz-set-item span')).toHaveText('허밍');
+  await expect(line(page).nth(1).locator('.vz-set-item span')).toHaveText('허밍');
 });
 
 test('연습 전후 30초 녹음: turned on in 고르기, saved as practice recordings linked to the set, then 가리고 듣기 for the pair', async ({page}) => {
@@ -678,4 +679,224 @@ test('곡에 적용하기: the set list names the task; a 보이스 체크 of �
   await expect(say(page)).toHaveText('가사의 상대와 목적 정하기');
   await expect(run(page).locator('[data-run-why]')).toHaveText('누구에게, 무엇을 전하고 싶은지 구체적으로 적어봐요.');
   await expect(run(page).locator('[data-run-task="reflection"]')).toHaveText('직접 남긴 불편함이나 목 상태를 우선했어요 · 소리 없이 해요');
+});
+
+/* AI 청취 코멘트 on the 녹음 step (2026-11-26): the 노래 연습실 request (window.vzipCloudCoach, stubbed and counted here),
+ * only after a confirm; the comment is kept on the 녹음 step's item of the ONE run row. */
+const songSeed = () => seed({practices:[{id:'p0', date:'2026-11-03', minutes:10, manualMinutes:10, songId:'s1', practiceMode:'song'}]});
+const NOTE = '들리는 특징: 끝음이 또렷해요\n먼저 확인: 숨을 고르게\n다음 시도: 후렴을 한 번 더';
+async function coachStub(page, pending = false) {
+  await page.evaluate(([note, pending]) => {
+    window.__coach = [];
+    window.vzipCloudSignedIn = () => true;
+    window.vzipCloudCoach = async input => { window.__coach.push(input); return pending ? new Promise(done => { window.__release = () => done({note}); }) : {note}; };
+  }, [NOTE, pending]);
+}
+/** The 녹음 step: skip there, open the recorder, a recording of `bytes` saved for the song, back to the set. */
+async function recordTake(page, bytes) {
+  for (let i = 0; i < 10 && !await run(page).locator('[data-record]').count(); i++) await run(page).locator('[data-run-skip]').click();
+  await run(page).locator('[data-record]').click();
+  await expect(page).toHaveURL(/#\/record/);
+  await page.evaluate(async bytes => {
+    const id = 'take-' + bytes;
+    await VZ.media.saveBlob({id, name:'녹음 ' + bytes, created:Date.now(), recordedDate:VZ.today(), dateSource:'recorded', type:'audio/wav', source:'practice', recordingCategory:'song', songId:'s1',
+      blob:new Blob([new Uint8Array(bytes)], {type:'audio/wav'}), durationSeconds:2});
+  }, bytes);
+  await to(page, '#/practice-set');
+  await expect(run(page).locator('[data-ai-coach]')).toBeVisible();
+}
+const calls = page => page.evaluate(() => window.__coach.length);
+
+test('녹음 step › AI 청취 코멘트: nothing is sent over 5 MB or before 보내기 (nor after 취소); one request after it, kept on the 녹음 item, shown on the summary, the done screen and 연습 기록', async ({page}) => {
+  test.setTimeout(60000);
+  const value = songSeed(), task = D.applyTask(value, TODAY);
+  await boot(page, value);
+  await coachStub(page);
+  await start(page);
+  // Over 5 MB: said at once, nothing asked, nothing sent.
+  await recordTake(page, 5 * 1024 * 1024 + 10);
+  await run(page).locator('[data-ai-coach]').click();
+  await expect(run(page).locator('[data-coach-state]')).toHaveText('AI 청취는 5MB 이하 녹음만 보낼 수 있어요. 짧게 다시 녹음해 주세요.');
+  await expect(page.getByRole('button', {name:'보내기'})).toHaveCount(0);
+  expect(await calls(page)).toBe(0);
+  // A short take: the confirm says what is sent; 취소 sends nothing.
+  await recordTake(page, 4000);
+  await expect(run(page).locator('[data-linked]')).toContainText('녹음 2개');
+  await run(page).locator('[data-ai-coach]').click();
+  const dialog = page.locator('.sheet').filter({hasText:'AI 청취 코멘트 받기'});
+  await expect(dialog).toContainText('이 단계의 마지막 녹음, 오늘 과제(“' + task.name + '” · ' + task.text + '), 곡 제목(“This Is the Moment”)을 보내요.');
+  await expect(dialog).toContainText('가사나 메모, 다른 기록은 보내지 않아요.');
+  expect(await calls(page)).toBe(0);
+  await page.getByRole('button', {name:'취소'}).click();
+  await expect(page.getByRole('button', {name:'보내기'})).toHaveCount(0);
+  expect(await calls(page)).toBe(0);
+  // 보내기: one request with the recording, the task and the song title only.
+  await run(page).locator('[data-ai-coach]').click();
+  await page.getByRole('button', {name:'보내기'}).click();
+  await expect(run(page).locator('[data-coach-note]')).toContainText('끝음이 또렷해요');
+  expect(await calls(page)).toBe(1);
+  const input = await page.evaluate(() => { const x = window.__coach[0]; return {...x, audio:{mime:x.audio.mime, size:x.audio.data.length}}; });
+  expect(input).toEqual(expect.objectContaining({mode:'audio', task:task.name, taskId:task.key, summary:task.text, song:'This Is the Moment', lyrics:'', translation:'', lyricNotes:'', memo:'', answers:[]}));
+  expect(input.audio).toEqual({mime:'audio/wav', size:Math.ceil(4000 / 3) * 4});
+  await expect(run(page).locator('[data-ai-coach]')).toHaveText('AI 청취 코멘트 다시 받기');
+  // Finish: the summary shows it; saving keeps it on the 녹음 item only.
+  await primary(page).click(); await primary(page).click();
+  await expect(page.locator('.pset-summary [data-coach-note]')).toContainText('끝음이 또렷해요');
+  await page.getByRole('button', {name:'기록 저장'}).click();
+  await expect(page.locator('[data-done-coach]')).toContainText('후렴을 한 번 더');
+  const data = await db(page), row = data.practices.find(p => p.dailySet);
+  const withNote = row.dailySet.items.filter(x => 'aiCoach' in x);
+  expect(withNote.map(x => [x.kind, x.aiCoach])).toEqual([['record', NOTE]]);
+  expect(typeof withNote[0].aiCoachAt).toBe('number');
+  expect(row.dailySet.items.filter(x => 'aiCoachAt' in x)).toHaveLength(1);
+  expect(await calls(page)).toBe(1);
+  // 연습 기록 › the run's detail.
+  await page.getByRole('link', {name:'연습 기록 보기'}).click();
+  await page.locator('[data-practice="' + row.id + '"]').click();
+  await expect(page.locator('[data-practice-coach]')).toContainText('끝음이 또렷해요');
+  await expect(page.locator('[data-practice-coach]')).toContainText('녹음 · This Is the Moment');
+});
+
+test('녹음 step › AI 청취 코멘트 that comes after the set is saved: put on the 녹음 item of the run row in place, shown on the done screen', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, songSeed());
+  await coachStub(page, true);
+  await start(page);
+  await recordTake(page, 3000);
+  await run(page).locator('[data-ai-coach]').click();
+  await page.getByRole('button', {name:'보내기'}).click();
+  await expect(run(page).locator('[data-ai-coach]')).toHaveText('코멘트를 받는 중…');
+  await expect(run(page).locator('[data-ai-coach]')).toBeDisabled();
+  await primary(page).click(); await primary(page).click();
+  await page.getByRole('button', {name:'기록 저장'}).click();
+  await expect(page.locator('[data-coach-wait]')).toBeVisible();
+  const before = await db(page), saved = before.practices.find(p => p.dailySet);
+  expect(saved.dailySet.items.some(x => 'aiCoach' in x)).toBe(false);
+  await page.evaluate(() => window.__release());
+  await expect(page.locator('[data-done-coach] [data-coach-note]')).toContainText('끝음이 또렷해요');
+  await expect(page.locator('[data-coach-wait]')).toHaveCount(0);
+  const after = await db(page), row = after.practices.find(p => p.id === saved.id);
+  expect(after.practices).toHaveLength(before.practices.length);
+  const strip = r => ({...r, dailySet:{...r.dailySet, items:r.dailySet.items.map(({aiCoach, aiCoachAt, ...x}) => x)}});
+  expect(strip(row)).toEqual(saved);
+  expect(row.dailySet.items.find(x => x.kind === 'record').aiCoach).toBe(NOTE);
+  expect(await calls(page)).toBe(1);
+});
+
+/* ① 보이스 체크 30초 (2026-11-26): a link step at the head of the full set when no check is saved today. The check keeps
+ * its own row and minutes; the set's clock never runs on the step. */
+const VOICE_ON = {...PINNED, groupsOff:{rhythm:true}};
+/** The 30-second check with a fake recorder (a short WAV) and no analysis, the guide 15× faster (as tests/voice-check.spec.cjs). */
+async function fakeCheck(page) {
+  await page.evaluate(() => {
+    window.vzipCloudSignedIn = () => false;
+    window.VZIP_VOICE_CHECK_SPEED = 15;
+    const sr = 8000, n = sr, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf), w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+    VZ.media.capture = async ({onLevel} = {}) => { let t0 = 0;
+      return {start() { t0 = performance.now(); }, seconds:() => t0 ? (performance.now() - t0) / 1000 : 0, state:'recording',
+        async stop() { onLevel?.(0); return {blob:new Blob([buf], {type:'audio/wav'}), type:'audio/wav', durationSeconds:30, waveform:[.2], releaseProtection() {}}; }, cancel() {}}; };
+    VZ.analyzeRecording = async () => { throw Error('분석 생략'); };
+  });
+}
+const voiceRows = data => data.practices.filter(p => p.voiceCheck);
+
+test('① 보이스 체크 30초: first in the full set only while no check is saved today, counted once in the estimate; the 편집 switch takes it out and 연습 추가 puts it back', async ({page}) => {
+  const value = seed({practicePlans:[{...VOICE_ON}]}), built = D.build(value, {today:TODAY, voiceCheck:true});
+  expect(built.steps.map(s => s.id)).toEqual(['voice-check', 'ex-loosen-neck', 'ex-breath-s', 'ex-voice-hum', 'ex-ear-follow']);
+  expect(built.minutes).toBe(D.build(value, {today:TODAY}).minutes + 1);
+  await boot(page, value);
+  await expect(card(page).locator('.vz-set-head small')).toHaveText('5개 · 약 ' + built.minutes + '분');
+  await expect(card(page).locator('[data-set-summary]')).toHaveText('시작하면: 보이스 체크 30초 → 기본기 4개');
+  await expect(line(page).first().locator('.vz-set-item b')).toHaveText('보이스 체크');
+  await expect(line(page).first().locator('.vz-set-item span')).toHaveText('보이스 체크 30초');
+  // 편집 › its row › 보이스 체크 빼기: kept in the one 고르기 row; the card follows.
+  await card(page).locator('[data-set-pick]').click();
+  const plan = page.locator('.pset-plan');
+  await plan.locator('.pset-row[data-kind="voice-check"] [data-edit]').click();
+  await expect(page.locator('[data-voice-sheet]')).toContainText('오늘의 연습 시간에는 더하지 않아요');
+  await page.locator('[data-voice-sheet] [data-rest]').click();
+  await expect(plan.locator('.pset-row[data-kind="voice-check"]')).toHaveCount(0);
+  expect((await db(page)).practicePlans.find(p => p.id === 'daily-set-prefs').groupsOff).toEqual({rhythm:true, 'voice-check':true});
+  await to(page, '#/home');
+  await expect(line(page).first().locator('.vz-set-item span')).toHaveText('목·어깨 풀기');
+  // 연습 추가 › 보이스 체크 30초 · 다시 넣기.
+  await card(page).locator('[data-set-pick]').click();
+  await plan.locator('[data-add]').click();
+  await page.locator('.pset-add-option[data-key="group:voice-check"]').click();
+  await expect(plan.locator('.pset-row').first()).toHaveAttribute('data-kind', 'voice-check');
+  expect((await db(page)).practicePlans.find(p => p.id === 'daily-set-prefs').groupsOff).toEqual({rhythm:true});
+  // A check saved today (anywhere): no step ①.
+  await page.evaluate(d => VZ.change(db => { db.practices.push({id:'voice-check:t0', date:d, minutes:.5, manualMinutes:.5, practiceMode:'training', practiceTimeSource:'voice-check', voiceCheck:{v:1, selfRating:4, at:Date.now()}}); }, {silent:true}), TODAY);
+  await to(page, '#/home');
+  await expect(line(page)).toHaveCount(4);
+  await expect(card(page).locator('[data-set-summary]')).toHaveText('시작하면: 기본기 4개');
+});
+
+test('① 보이스 체크 30초: 뒤로 leaves it open, then the check saves and the set goes on; its row keeps its minutes, the set row counts none of them; 목 상태 2 turns 곡에 적용하기 quiet', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, seed({practicePlans:[{...VOICE_ON}], practices:[{id:'p0', date:'2026-11-03', minutes:10, manualMinutes:10, songId:'s1', practiceMode:'song'}]}));
+  await fakeCheck(page);
+  await start(page);
+  await expect(run(page)).toHaveAttribute('data-mode', 'voice');
+  await expect(count(page)).toHaveText('1 / 7');
+  await expect(primary(page)).toHaveText('보이스 체크 시작');
+  await expect(run(page).locator('[data-run-voice]')).toContainText('오늘의 연습 시간에 넣지 않아요');
+  // Opened, then 뒤로: back on the same step, nothing done, nothing timed.
+  await primary(page).click();
+  await expect(page).toHaveURL(/#\/voice-check\/run$/);
+  await page.goBack();
+  await expect(run(page)).toHaveAttribute('data-mode', 'voice');
+  await expect(count(page)).toHaveText('1 / 7');
+  expect(voiceRows(await db(page))).toEqual([]);
+  // The check: recorded, saved, 목 상태 2, 다음으로 → back in the set on the next step.
+  await primary(page).click();
+  await page.getByRole('button', {name:'30초 체크 시작'}).click();
+  await expect(page.locator('.vc-recording')).toBeVisible();
+  await elapse(page, 2.5);
+  await expect(page.getByRole('heading', {name:'지금 목 상태는 어때요?'})).toBeVisible();
+  await page.locator('[data-vc-rate="2"]').click();
+  await page.getByRole('button', {name:'결과 보기'}).click();
+  await page.locator('[data-vc-continue]').click();
+  await expect(page).toHaveURL(/#\/practice-set$/);
+  await expect(count(page)).toHaveText('2 / 7');
+  await expect(run(page).locator('[data-run-last]')).toHaveText('보이스 체크 30초 · 기록했어요');
+  // A minute on 목·어깨 풀기: the set's own time.
+  await primary(page).click();
+  await elapse(page, 60);
+  await run(page).locator('[data-run-skip]').click();
+  // 곡에 적용하기 of this set reads the 목 상태: the task without singing.
+  await skipTo(page, 'free');
+  await expect(say(page)).toHaveText('가사의 상대와 목적 정하기');
+  await expect(run(page).locator('[data-run-task="reflection"]')).toHaveCount(1);
+  await run(page).locator('[data-run-stop]').click();
+  await expect(page.locator('.pset-summary .pset-row[data-step="voice-check"]')).toContainText('따로');
+  await page.getByRole('button', {name:'기록 저장'}).click();
+  const data = await db(page), [check] = voiceRows(data), row = data.practices.find(p => p.dailySet);
+  expect(check.voiceCheck.selfRating).toBe(2);
+  expect(check.minutes).toBeGreaterThan(.4); expect(check.minutes).toBeLessThanOrEqual(.5);
+  expect(row.dailySet.items[0]).toEqual(expect.objectContaining({id:'voice-check', kind:'voice-check', state:'done', seconds:0, minutes:0}));
+  expect(row.minutes).toBe(1); // the 60 s of 목·어깨 풀기 only
+  expect(row.mediaIds).toEqual([]);
+  expect(row.technique.map(t => t.name)).not.toContain('보이스 체크 30초');
+});
+
+test('① 보이스 체크 30초 left open can be skipped: no check row, the item says skipped with 0 s', async ({page}) => {
+  await boot(page, seed({practicePlans:[{...VOICE_ON}]}));
+  await start(page);
+  await primary(page).click();
+  await expect(page).toHaveURL(/#\/voice-check\/run$/);
+  await page.goBack();
+  await expect(run(page)).toHaveAttribute('data-mode', 'voice');
+  await run(page).locator('[data-run-skip]').click();
+  await expect(run(page).locator('[data-run-last]')).toHaveText('보이스 체크 30초 · 건너뛰었어요');
+  await expect(run(page)).toHaveAttribute('data-mode', 'timed');
+  await primary(page).click();
+  await elapse(page, 30);
+  await run(page).locator('[data-run-stop]').click();
+  await page.getByRole('button', {name:'기록 저장'}).click();
+  const data = await db(page), row = data.practices.find(p => p.dailySet);
+  expect(voiceRows(data)).toEqual([]);
+  expect(row.dailySet.items[0]).toEqual(expect.objectContaining({id:'voice-check', state:'skipped', seconds:0, minutes:0}));
+  expect(row.minutes).toBe(.5);
 });

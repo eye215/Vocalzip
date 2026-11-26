@@ -90,7 +90,10 @@ test('song-only AI evidence shares the same explicit exclusion for training sess
  assert.match(js,/function songListeningEntry\(p,month\)/);
  assert.match(js,/p\.practiceMode!=='training'/);
  assert.match(js,/!!V\.song\(songId\)/);
- assert.match(js,/const entries=\(V\.db\.practices\|\|\[\]\)\.filter\(p=>songListeningEntry\(p,month\)\)/);
+ assert.match(js,/const room=\(V\.db\.practices\|\|\[\]\)\.filter\(p=>songListeningEntry\(p,month\)\)/);
+ // 오늘의 연습 녹음 코멘트도 같은 규칙: 있는 곡에 연결된 것만 (트레이닝은 제외).
+ assert.match(js,/function setListeningEntries\(month\)/);
+ assert.match(js,/n\.songId&&!!V\.song\(n\.songId\)/);
  assert.match(js,/const observations=\(V\.db\.practices\|\|\[\]\)\.filter\(p=>songListeningEntry\(p,month\)\)/);
 });
 

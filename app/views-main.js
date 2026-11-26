@@ -420,7 +420,9 @@ VZ.practiceSource = p => {
 };
 /** A step of 오늘의 연습 whose time moved into its goal's record when the goal was ticked: it holds nothing of its own
  * (0 minutes, no recording) and only repeats a row shown elsewhere. Lists leave it out; the stored row stays. */
-VZ.practiceHidden = p => !!p?.practiceSetId && !(VZ.practiceMinutes(p) > 0) && !(p.mediaIds || []).length;
+VZ.practiceHidden = p => !!p?.practiceSetId && !(VZ.practiceMinutes(p) > 0) && !(p.mediaIds || []).length &&
+  // A set's run row that keeps an AI 청취 코멘트 is shown: the comment is read in its detail.
+  !(Array.isArray(p.dailySet?.items) && p.dailySet.items.some(x => x && typeof x.aiCoach === 'string' && x.aiCoach.trim()));
 VZ.practiceRow = (p, opts) => {
   const day = !!opts?.day; // inside a day view: no date, recordings are listed underneath
   const title = VZ.practiceTitle(p), src = VZ.practiceSource(p);
@@ -430,7 +432,10 @@ VZ.practiceDetail = id => {
   const p = VZ.db.practices.find(x => x.id === id); if (!p) return;
   const tasks = (p.completed || []).map(id => { const t = VZ.db.assignments.find(a => a.id === id); return t && [t.title + ' ' + window.VzipPracticeTime.homeworkRepetitions(p, id) + '회', p.assignmentNotes?.[id] || ''].filter(Boolean).join(' — '); }).filter(Boolean);
   const src = VZ.practiceSource(p);
-  VZ.sheet({title:VZ.dateLabel(p.date) + ' 연습', body:'<div class="stack"><div class="card flat"><div class="row between"><strong>' + esc(VZ.practiceTitle(p)) + '</strong><span class="badge">' + (p.practiceTimeSource === 'unconfirmed' ? '시간 미입력' : VZ.minutes(VZ.practiceMinutes(p))) + '</span></div>' + (p.practiceTimeSource === 'recording' ? '<p class="small muted" style="margin:4px 0 0" data-practice-recording-time>이 곡 녹음 길이로 셌어요. 수정에서 시간을 적으면 그 시간만 세요.</p>' : '') + (src.label ? '<p class="small muted" style="margin:4px 0 0" data-practice-source>' + esc(src.label) + '에서 기록</p>' : '') + (p.rating ? '<p class="small muted">만족도 ' + '★'.repeat(p.rating) + '</p>' : '') + (src.memo ? '<p style="white-space:pre-wrap;margin:8px 0 0">' + esc(src.memo) + '</p>' : '') + (tasks.length ? '<div class="small" style="margin-top:8px"><strong>한 숙제</strong>' + tasks.map(x => '<div class="muted">· ' + esc(x) + '</div>').join('') + '</div>' : '') + '</div><div class="list" data-list></div></div>',
+  // 오늘의 연습: the AI 청취 코멘트 kept on a step of the set (app/practice-set.js, its 녹음 step), shown with the step's name.
+  const coach = (Array.isArray(p.dailySet?.items) ? p.dailySet.items : []).filter(x => x && typeof x.aiCoach === 'string' && x.aiCoach.trim());
+  const coachHtml = coach.length ? '<div class="small" style="margin-top:8px" data-practice-coach><strong>AI 청취 코멘트</strong>' + coach.map(x => '<div class="muted" style="margin-top:4px">' + esc(x.title || '') + '</div><p style="white-space:pre-wrap;margin:2px 0 0">' + esc(x.aiCoach.trim()) + '</p>').join('') + '<p class="muted" style="margin:4px 0 0">AI 답변은 진단이 아닌 연습 참고용이에요.</p></div>' : '';
+  VZ.sheet({title:VZ.dateLabel(p.date) + ' 연습', body:'<div class="stack"><div class="card flat"><div class="row between"><strong>' + esc(VZ.practiceTitle(p)) + '</strong><span class="badge">' + (p.practiceTimeSource === 'unconfirmed' ? '시간 미입력' : VZ.minutes(VZ.practiceMinutes(p))) + '</span></div>' + (p.practiceTimeSource === 'recording' ? '<p class="small muted" style="margin:4px 0 0" data-practice-recording-time>이 곡 녹음 길이로 셌어요. 수정에서 시간을 적으면 그 시간만 세요.</p>' : '') + (src.label ? '<p class="small muted" style="margin:4px 0 0" data-practice-source>' + esc(src.label) + '에서 기록</p>' : '') + (p.rating ? '<p class="small muted">만족도 ' + '★'.repeat(p.rating) + '</p>' : '') + (src.memo ? '<p style="white-space:pre-wrap;margin:8px 0 0">' + esc(src.memo) + '</p>' : '') + (tasks.length ? '<div class="small" style="margin-top:8px"><strong>한 숙제</strong>' + tasks.map(x => '<div class="muted">· ' + esc(x) + '</div>').join('') + '</div>' : '') + coachHtml + '</div><div class="list" data-list></div></div>',
     foot:'<div class="btn-row"><button type="button" class="btn danger" data-del>삭제</button><button type="button" class="btn secondary" data-edit>수정</button></div>',
     onMount:async (el, close) => {
       const wrap = el.parentNode;

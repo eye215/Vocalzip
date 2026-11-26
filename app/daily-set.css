@@ -136,6 +136,8 @@ body.vz-set-run .pset-host{max-width:none;padding-bottom:0;}
 .dset-run .pset-song span{color:#aaa3b7;}
 .dset-run .pset-song i,.dset-run .pset-over-note i{color:#c9b2f7;}
 .dset-run .pset-note{color:#aaa3b7;}
+.dset-run .pset-coach-head{color:#f4effb;}
+.dset-run .pset-coach-note{background:rgba(255,255,255,.07);color:#e9e2f5;}
 .dset-run .pset-chip{background:rgba(255,255,255,.08);color:#e9e2f5;}
 .dset-run .pset-over-note{margin:0 0 4px;}
 .pset-links{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0;}

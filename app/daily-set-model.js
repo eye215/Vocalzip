@@ -22,6 +22,12 @@
  *      rest day (today's 보이스 체크 목 상태 ≤ 2, or a 노래 연습실 submission of today that says rest) gives the task
  *      done without singing. No step (곡 off, or covered), no task. Nothing of the room is written: no practiceRoom row.
  *   Optional: a 30-second take before the first and after the last step (prefs.recording).
+ *   Step ① 보이스 체크 30초 (2026-11-26, VOICE; options.voiceCheck): when no 매일 보이스 체크 is saved today and it is on in 고르기 (groupsOff
+ *   ['voice-check'], default on), the full set starts with a LINK step (kind 'voice-check'): it opens the check
+ *   (app/voice-check.js) and is done when the check saves. The check writes its own practice row with its own minutes;
+ *   the set's clock never runs on this step and its item keeps seconds 0 / minutes 0, so the time counts once. Its
+ *   목 상태 (1–2) feeds restToday, so 곡에 적용하기 of the same set becomes the task done without singing. 따라 하기
+ *   (a set of one step) never has it.
  *
  * WHERE THINGS ARE KEPT — no new list, only rows of lists that already sync:
  *   practicePlans  {id:'daily-set-prefs', kind:'daily-set-prefs', off, groupsOff, replace, recording, recordSongId,
@@ -30,7 +36,9 @@
  *                   items, recording}}                     ONE row per finished set: real active minutes and, per item,
  *                                                          done/skipped, seconds, hold seconds and accuracy, the
  *                                                          wobble (sd, cent) of each held note, and `measures`
- *                                                          ([{area, kind, value, unit, …}]) for 기본기 단계
+ *                                                          ([{area, kind, value, unit, …}]) for 기본기 단계; the 녹음
+ *                                                          step's item may carry aiCoach / aiCoachAt (AI 청취 코멘트,
+ *                                                          asked for after a confirm; optional, see setCoach)
  *   A finished goal step still writes that goal's single row 'goal:<goalId>' and a song section its own song row
  *   (app/practice-set-model.js save), so time is never counted twice and a song keeps its minutes.
  * 따라 하기 (2026-11-26) is a set of ONE step (kind 'next', step.guide, mode 'guide'; app/guided-practice.js): saved as this
@@ -116,6 +124,12 @@ const CATALOG=[
 ];
 /** 곡: not a rotation of exercises but the automatic end of a set (곡에 적용하기, then the optional 녹음). */
 const SONG={id:'song',title:'곡',line:'오늘 연습을 곡에 적용하고, 원하면 녹음해요'};
+/** 보이스 체크: step ① of the full set (a link to the 30-second check, no clock of its own). */
+const VOICE={id:'voice-check',title:'보이스 체크',line:'30초로 오늘 목 상태를 남겨요'};
+/** A 매일 보이스 체크 saved on a date (its own practice row, app/voice-check.js). */
+const voiceDone=(db,today)=>live(db,'practices').some(p=>p.date===today&&(p.voiceCheck&&typeof p.voiceCheck==='object'||p.practiceTimeSource==='voice-check'));
+const voiceStep=()=>({kind:'voice-check',id:'voice-check',title:'보이스 체크 30초',minutes:1,mic:true,
+  why:'같은 30초 루틴으로 오늘 목 상태를 남겨요. 이 시간은 보이스 체크 기록에만 세요.'});
 /** The 가사·표현 tasks of the former 노래 연습실 (practice-room/app.js TASKS: the same keys, names and `goal` line — a
  * test keeps the words the same). ROTATION takes turns; performance and the no-voice reflection come by rule. */
 const APPLY_TASKS={
@@ -170,7 +184,7 @@ function applyInfo(st){
 }
 const withTask=(s,t)=>t?{...s,roomTask:t.key,roomWhy:t.why}:s;
 const groupIds=()=>GROUPS.map(g=>g.id);
-const groupOf=id=>GROUPS.find(g=>g.id===id)||(id===SONG.id?SONG:null);
+const groupOf=id=>GROUPS.find(g=>g.id===id)||(id===SONG.id?SONG:id===VOICE.id?VOICE:null);
 const exercise=id=>CATALOG.find(e=>e.id===id)||null;
 const exercisesOf=group=>CATALOG.filter(e=>e.group===group);
 
@@ -179,7 +193,7 @@ const validComfort=c=>c&&Number.isInteger(c.low)&&Number.isInteger(c.high)&&c.lo
 function cleanPrefs(raw){
   const row=raw&&typeof raw==='object'?raw:{},off={},groupsOff={},replace={};
   for(const e of CATALOG)if(row.off?.[e.id]===true)off[e.id]=true;
-  for(const g of [...GROUPS,SONG])if(row.groupsOff?.[g.id]===true)groupsOff[g.id]=true;
+  for(const g of [...GROUPS,SONG,VOICE])if(row.groupsOff?.[g.id]===true)groupsOff[g.id]=true;
   // A group always keeps one exercise on (a whole group is turned off with groupsOff).
   for(const g of GROUPS){const ex=exercisesOf(g.id);if(ex.length&&ex.every(e=>off[e.id]))delete off[ex[0].id];}
   for(const [key,group] of Object.entries(row.replace&&typeof row.replace==='object'?row.replace:{}))if(groupIds().includes(group)&&key.length<=200)replace[key]=group;
@@ -266,6 +280,7 @@ const applyStep=s=>autoSong(s)&&String(s.title).startsWith('곡 구간 · ')?{..
  * Today's set. options: {today, recentSongId?, template?}. Returns {steps, own (the person's steps, as the set editor
  * lists them), base (오늘 연습 세트 defaults, for the editor), template, prefs, minutes}.
  * options.own: the person's steps as edited on the set screen (then they are used instead of today's defaults).
+ * options.voiceCheck: true where the 30-second check can be opened (the app, app/voice-check.js): then ① 보이스 체크.
  */
 function build(db={},options={}){
   const P=dep.set(),{today}=options;
@@ -305,17 +320,19 @@ function build(db={},options={}){
   }
   const takes=pf.recording?[{kind:'take',id:'take-before',slot:'before',title:'연습 전 30초 녹음',minutes:1,mic:true,optional:true,songId:pf.recordSongId,phrase:pf.phrase},
     {kind:'take',id:'take-after',slot:'after',title:'연습 후 30초 녹음',minutes:1,mic:true,optional:true,songId:pf.recordSongId,phrase:pf.phrase}]:[];
-  const room=MAX_STEPS-takes.length,fixed=[...lead,...groups].slice(0,room);
+  // ① 보이스 체크 30초 when none is saved today (and it is on): before everything, the 30-second take too.
+  const voice=options.voiceCheck===true&&!pf.groupsOff[VOICE.id]&&!voiceDone(db,today)?P.normalize([voiceStep()]):[];
+  const room=MAX_STEPS-takes.length-voice.length,fixed=[...lead,...groups].slice(0,room);
   const body=P.normalize([...fixed,...own.slice(0,Math.max(0,room-fixed.length))]);
-  const steps=takes.length?[...P.normalize([takes[0]]),...body,...P.normalize([takes[1]])]:body;
+  const steps=[...voice,...(takes.length?[...P.normalize([takes[0]]),...body,...P.normalize([takes[1]])]:body)];
   return {steps,own:body.filter(isOwn),base:set.base,template:set.template,prefs:pf,minutes:totalMinutes(steps)};
 }
 /** A step the person manages on the set screen (minutes, remove, order) — not one 고르기 or 다음 연습 puts in. */
-const isOwn=s=>!['exercise','next','take'].includes(s.kind);
+const isOwn=s=>!['exercise','next','take','voice-check'].includes(s.kind);
 const totalMinutes=steps=>list(steps).reduce((n,s)=>n+(Number(s.minutes)||0),0);
 /** How a step is run: its exercise's mode, 'take' for the 30-second recording, 'guide' for 따라 하기 (a set of one
  * step: app/guided-practice.js VZ.guidedStepFor), 'free' (a plain timer) otherwise. */
-const modeOf=s=>s.guide&&typeof s.guide==='object'?'guide':s.kind==='exercise'?exercise(s.exercise)?.mode||'free':s.kind==='take'?'take':'free';
+const modeOf=s=>s.guide&&typeof s.guide==='object'?'guide':s.kind==='exercise'?exercise(s.exercise)?.mode||'free':s.kind==='take'?'take':s.kind==='voice-check'?'voice':'free';
 /** A run row that is a 따라 하기 (a set of one step), not today's set: 오늘's 오늘의 연습 card does not read it as done. */
 const isGuideRun=row=>{const items=list(row?.dailySet?.items);return items.length===1&&String(items[0]?.id||'').startsWith('guide:');};
 const SOURCE={homework:'숙제',personal:'개인',recommendation:'추천','lesson-point':'레슨 지적'};
@@ -324,6 +341,7 @@ const KIND={warmup:'웜업',goal:'오늘의 목표',song:'곡 구간',record:'�
 function labelOf(s){
   if(s.kind==='exercise'||s.replaces)return groupOf(s.group)?.title||'연습';
   if(s.apply)return SONG.title;
+  if(s.kind==='voice-check')return VOICE.title;
   if(s.kind==='next')return SOURCE[s.source]||'다음 연습';
   if(s.first)return '시작 체크';
   if(s.kind==='goal')return s.routine?(s.source==='homework'?'숙제 · 매일 반복':'매일 반복'):SOURCE[s.source]||'목표';
@@ -462,18 +480,54 @@ const measuresOf=r=>list(r?.measures).filter(m=>m&&typeof m==='object'&&typeof m
 /** One item of the run row. */
 function itemOf(st,minutes){
   const r=st.result||{};
+  // ① 보이스 체크: its time is in its own row only; this row says 0 whatever happened on the step.
+  if(st.kind==='voice-check'){st={...st,elapsed:0};minutes=0;}
   return {id:st.id,kind:st.kind,...(st.exercise?{exercise:st.exercise}:{}),...(st.group?{group:st.group}:{}),...(st.source?{source:st.source}:{}),
     ...(st.assignmentId?{assignmentId:st.assignmentId}:{}),...(st.pointId?{pointId:st.pointId}:{}),...(st.goalId?{goalId:st.goalId}:{}),
     title:st.title,state:st.skipped?'skipped':st.done?'done':'left',seconds:Math.round(Number(st.elapsed)||0),minutes,
     ...(r.mode?{mode:r.mode}:{}),...(r.timer?{timer:true}:{}),...(r.parts!=null?{parts:r.parts}:{}),...(r.holdSeconds!=null?{holdSeconds:r.holdSeconds}:{}),
     ...(r.accuracy!=null?{accuracy:r.accuracy}:{}),...(Array.isArray(r.notes)?{notes:r.notes}:{}),...(r.rounds!=null?{rounds:r.rounds}:{}),
     ...(r.longestOut!=null?{longestOut:r.longestOut}:{}),...(measuresOf(r).length?{measures:measuresOf(r)}:{}),...(st.mic?{mic:true}:{}),...(st.apply?{apply:true}:{}),
-    ...(st.roomTask&&APPLY_TASKS[st.roomTask]?{roomTask:st.roomTask}:{})};
+    ...(st.roomTask&&APPLY_TASKS[st.roomTask]?{roomTask:st.roomTask}:{}),...coachFields(st)};
+}
+/* ---------- AI 청취 코멘트 (2026-11-26) ----------
+ * The one optional field a run-row item may carry: aiCoach (the comment text, as the 노래 연습실 kept it, at most
+ * COACH_MAX characters) with aiCoachAt (when it came). Only the 녹음 step asks for it (app/practice-set.js, after a
+ * confirm that says what is sent); a row without it stays as it was. */
+const COACH_MAX=1100;
+const coachText=v=>typeof v==='string'?v.trim().slice(0,COACH_MAX):'';
+function coachFields(st){
+  const note=coachText(st?.aiCoach);if(!note)return {};
+  const at=Number(st.aiCoachAt);
+  return {aiCoach:note,...(Number.isFinite(at)&&at>0?{aiCoachAt:at}:{})};
+}
+/** Put a comment that came after the set was saved on its item of the run row, in place (call inside VZ.change).
+ * Nothing else of the row changes. false when the row or the item is gone (then nothing is written). */
+function setCoach(db,runId,itemId,note,at=Date.now()){
+  const row=live(db,'practices').find(p=>p.id===runId&&p.dailySet&&Array.isArray(p.dailySet.items)),text=coachText(note);
+  const item=row&&row.dailySet.items.find(x=>x&&x.id===itemId);
+  if(!item||!text)return false;
+  item.aiCoach=text;item.aiCoachAt=Number(at)||Date.now();
+  return true;
+}
+/** The comments kept on the sets' run rows, newest first: [{runId, date, itemId, title, note, at, songId}]. songId is the
+ * song of the step's own row (a 녹음 step keeps one, app/practice-set-model.js save), else the run row's. */
+function coachNotes(db){
+  const rows=live(db,'practices'),out=[];
+  for(const p of rows){
+    if(!p.dailySet||!Array.isArray(p.dailySet.items))continue;
+    for(const x of p.dailySet.items){
+      const note=coachText(x?.aiCoach);if(!note)continue;
+      const own=x.row?rows.find(r=>r.id===x.row):null;
+      out.push({runId:p.id,date:String(p.date||''),itemId:String(x.id||''),title:shortTitle(x),note,at:Number(x.aiCoachAt)||Number(p.created)||0,songId:String(own?.songId||p.songId||'')});
+    }
+  }
+  return out.sort((a,b)=>b.date.localeCompare(a.date)||b.at-a.at);
 }
 /** Summary lines of a session: every step with its state and seconds (minutes rounded, as typed fields start). */
 function summary(s){
   return s.steps.map(st=>({id:st.id,kind:st.kind,title:shortTitle(st),label:labelOf(st),goalId:st.goalId||'',state:st.skipped?'skipped':st.done?'done':'left',
-    done:st.done===true,seconds:Math.round(Number(st.elapsed)||0),minutes:Math.min(600,Math.round((Number(st.elapsed)||0)/60)),measured:!isOwn(st),
+    done:st.done===true,seconds:st.kind==='voice-check'?0:Math.round(Number(st.elapsed)||0),minutes:st.kind==='voice-check'?0:Math.min(600,Math.round((Number(st.elapsed)||0)/60)),measured:!isOwn(st),
     mediaIds:list(st.mediaIds).slice(),result:st.result||null}));
 }
 /**
@@ -526,9 +580,9 @@ function save(db,s,rows,{now=Date.now(),category=null}={}){
 /** The sets finished on a date (newest last): the run rows. */
 const runsOn=(db,date)=>live(db,'practices').filter(p=>p.dailySet&&p.date===date).sort((a,b)=>(Number(a.created)||0)-(Number(b.created)||0));
 
-return {GROUPS,SONG,CATALOG,APPLY_TASKS,ROTATION,PERFORMANCE_DAYS,applyTask,applyInfo,restToday,nextPerformance,NEXT_MAX,NEXT_MINUTES,TAKE_SECONDS,MAX_STEPS,PREFS_ID,PREFS_KIND,groupOf,exercise,exercisesOf,
+return {GROUPS,SONG,VOICE,voiceDone,CATALOG,APPLY_TASKS,ROTATION,PERFORMANCE_DAYS,applyTask,applyInfo,restToday,nextPerformance,NEXT_MAX,NEXT_MINUTES,TAKE_SECONDS,MAX_STEPS,PREFS_ID,PREFS_KIND,groupOf,exercise,exercisesOf,
   prefs,cleanPrefs,setExercise,setGroup,savePrefs,resetPrefs,rotation,pick,dayNumber,
   ownKey,nextItems,focusOf,ownSteps,build,isOwn,totalMinutes,modeOf,isGuideRun,labelOf,shortTitle,timeline,progress,finishItem,stop,
   word,holdStart,holdTick,holdResult,comfort,baseNote,notesFor,noteTags,syllableOf,adapt,noteName,
-  rowId,measuresOf,summary,save,runsOn};
+  rowId,measuresOf,summary,save,runsOn,COACH_MAX,setCoach,coachNotes};
 });

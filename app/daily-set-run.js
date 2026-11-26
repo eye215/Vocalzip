@@ -7,6 +7,7 @@
  * Modes (VzipDailySet.modeOf): timed (목 풀기) · breath (호흡) · follow (the app plays a pattern, then your turn) ·
  * hold (reference note + the 연습 따라 하기 pitch reader VZ.guidedDetectPitch + hold time; a timer when the mic is not
  * available) · take (연습 전후 30초 녹음, VZ.media.capture) · free (the person's own step on the set's wall clock) ·
+ * voice (① 보이스 체크 30초: a link to the 30-second check, app/voice-check.js; the set's clock never runs on it) ·
  * guide (따라 하기, a set of one step: a hand-reviewed video with the mic off and the clock only while it plays, then
  * 혼자 해 보기 on a timer with the tuner where the exercise has one; the metronome where its text names a beat).
  * The measuring exercises of 기본기 단계 (app/daily-measure-model.js has their numbers): hiss (“스~” 길게: the length of
@@ -250,6 +251,17 @@ const ENGINES={
       tick(){if(!capture)return;const sec=capture.seconds();text(r.q('[data-run-count]'),mmss(Math.max(0,limit-sec)));r.sub('최대 '+limit+'초 · 다 부르면 끝내기를 눌러요');if(sec>=limit)finish();},
       cancel(){if(capture){const c=capture;capture=null;try{c.cancel();}catch{}}},
       result:()=>({mode:'take'})};
+  },
+  /* ① 보이스 체크 30초: one button opens the check (ctx.voiceCheck); it comes back here when the check saves (then the
+   * step is done, app/practice-set.js) or is left. The set's clock is never started here: the check keeps its own time. */
+  voice(r){
+    return {custom:true,say:()=>'30초 보이스 체크로 오늘 목 상태를 남겨요',
+      stage:()=>'<div class="dset-voice" data-run-voice><p class="dset-rule">이 단계는 오늘의 연습 시간에 넣지 않아요. 보이스 체크 시간은 보이스 체크 기록에만 들어가요.</p></div>',
+      ready(){r.word('준비되면 시작해요','wait');r.sub('목 상태가 1–2점이면 오늘 곡 과제를 소리 없이 하는 것으로 바꿔요');},
+      primaryText:()=>'보이스 체크 시작',
+      begin(){r.ctx.voiceCheck?.();},
+      press(){},
+      result:()=>({mode:'voice-check'})};
   },
   /* The person's own step (a goal, a song section, a homework): the set's wall clock against the planned minutes. */
   free(r){
@@ -926,8 +938,8 @@ function mount(host,ctx){
   const html=()=>'<header class="dset-top"><button type="button" class="dset-x" data-run-exit aria-label="나가기 · 오늘 안에 이어서 할 수 있어요"><i class="ph ph-x" aria-hidden="true"></i></button>'+
     '<ol class="dset-bar" aria-hidden="true">'+tl.map(x=>'<li class="is-'+x.state+'"></li>').join('')+'</ol><span class="dset-count"><span data-run-count-all>'+(s.index+1)+' / '+s.steps.length+'</span></span></header>'+
     (last?'<p class="dset-last" data-run-last'+(lastSkipped?' data-skipped':'')+'><i class="ph ph-'+(lastSkipped?'skip-forward':'check')+'" aria-hidden="true"></i>'+esc(last)+'</p>':'')+
-    '<p class="dset-name" data-run-name><b>'+esc(label)+'</b>'+((mode==='free'&&!task)||mode==='guide'?'':'<span>'+esc(D.shortTitle(st))+'</span>')+(st.optional?'<span>선택</span>':'')+
-      (st.mic?'<span class="dset-badge"><i class="ph ph-microphone" aria-hidden="true"></i>마이크</span>':'')+'<span class="dset-badge">약 '+st.minutes+'분</span></p>'+
+    '<p class="dset-name" data-run-name><b>'+esc(label)+'</b>'+((mode==='free'&&!task)||mode==='guide'||mode==='voice'?'':'<span>'+esc(D.shortTitle(st))+'</span>')+(st.optional?'<span>선택</span>':'')+
+      (st.mic?'<span class="dset-badge"><i class="ph ph-microphone" aria-hidden="true"></i>마이크</span>':'')+'<span class="dset-badge">'+(mode==='voice'?'30초 · 시간은 따로':'약 '+st.minutes+'분')+'</span></p>'+
     '<h2 class="dset-say" id="pset-step-title" data-run-say></h2>'+
     '<p class="dset-why" data-run-why>'+esc(ctx.why?.(st)||st.why||'')+'</p>'+
     (task?'<p class="dset-task-why" data-run-task="'+esc(task.key)+'">'+esc(task.why)+'</p>':'')+
@@ -945,7 +957,7 @@ function mount(host,ctx){
     const label=r.gate?'':r.state==='result'?'다음으로':r.engine.primaryText?.(r.state)||(r.state==='doing'?'잠깐 멈춤':r.state==='paused'?'계속하기':'시작하기');
     if(!r.gate)text(p,label);
     // 다시: once something was started. The person's own step pauses with a small button (its big one is 다 했어요).
-    redo.hidden=r.state==='ready'||mode==='take'||mode==='guide'||r.engine.wall;
+    redo.hidden=r.state==='ready'||mode==='take'||mode==='guide'||mode==='voice'||r.engine.wall;
     pauseB.hidden=!((r.engine.wall||r.engine.pausable?.())&&r.state==='doing');pauseB.setAttribute('aria-label','일시정지');
   };
 

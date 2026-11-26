@@ -5,7 +5,7 @@ const scripts=[
  'app/weak-phrase.js','app/segment-ab-model.js','app/segment-ab-ui.js',
  'app/plan-outcome-model.js','app/plan-outcome-ui.js',
  'app/growth-metrics-model.js','app/growth-dataset.js','app/overall-growth-model.js','app/overall-growth-ui.js',
- 'app/monthly-practice-plans.js','app/monthly-growth.js'
+ 'app/monthly-practice-plans.js','app/daily-set-model.js','app/monthly-growth.js'
 ];
 async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[],view='monthly'}={}){
  await page.goto('about:blank');
@@ -197,6 +197,34 @@ test('song growth listening evidence excludes training-only and unassigned sessi
  const evidence=await page.evaluate(()=>window.__coachEvidence);
  expect(evidence.observations[0].song).toBe('Test Song');
  expect(evidence.observations[0].heard).not.toContain('훈련 전용');
+});
+
+test('AI 청취 관찰 also lists 오늘의 연습 녹음 comments (run-row item aiCoach), newest first, 5 at most; a set step without a song is left out',async({page})=>{
+ const room=(id,date,created,note)=>({id,date,created,songId:'song-1',practiceMode:'song',practiceRoom:{songId:'song-1',aiCoach:'들리는 특징: '+note}});
+ const run=(sid,date,created,items)=>({id:'practice-set:'+sid,date,created,minutes:5,practiceMode:'training',songId:'',practiceSetId:sid,dailySet:{v:1,minutes:5,items}});
+ const own=(sid,step,songId)=>({id:'practice-set:'+sid+':'+step,date:'2026-11-09',minutes:0,practiceMode:songId?'song':'training',songId,practiceSetId:sid,practiceSetStep:step,mediaIds:['m']});
+ const practices=[
+  room('r0','2026-11-01',0,'방 영번째'),room('r1','2026-11-02',1,'방 첫째'),room('r2','2026-11-03',2,'방 둘째'),room('r3','2026-11-04',3,'방 셋째'),room('r4','2026-11-05',4,'방 넷째'),
+  run('a','2026-11-09',9,[{id:'record-song-1',kind:'record',title:'녹음 · Test Song',state:'done',seconds:60,minutes:1,row:'practice-set:a:record-song-1',aiCoach:'들리는 특징: 세트 녹음의 끝음이 또렷해요\n다음 시도: 한 번 더',aiCoachAt:9}]),
+  own('a','record-song-1','song-1'),
+  // A step without a song (training only): not evidence about a song.
+  run('b','2026-11-10',10,[{id:'record-x',kind:'record',title:'녹음',state:'done',seconds:60,minutes:1,aiCoach:'들리는 특징: 노래 없는 세트 코멘트'}]),
+  // Last month: another month's list.
+  run('c','2026-10-30',8,[{id:'record-song-1',kind:'record',title:'녹음 · Test Song',state:'done',seconds:60,minutes:1,row:'practice-set:c:record-song-1',aiCoach:'들리는 특징: 지난달 세트'}]),
+  {...own('c','record-song-1','song-1'),date:'2026-10-30'}
+ ];
+ await boot(page,{practices});
+ const quotes=page.locator('.growth-listening');
+ await expect(quotes).toHaveCount(5);
+ await expect(quotes.first()).toHaveAttribute('data-listening-set','');
+ await expect(quotes.first()).toContainText('세트 녹음의 끝음이 또렷해요');
+ await expect(quotes.first()).toContainText('2026-11-09 · 오늘의 연습');
+ await expect(quotes.first()).toContainText('AI 제안: 한 번 더');
+ await expect(quotes.nth(4)).toContainText('방 첫째'); // newest first: the oldest room comment drops out of the five
+ await expect(page.locator('.growth-page')).not.toContainText('방 영번째');
+ await expect(page.locator('.growth-page')).toContainText('AI 청취 코멘트 6건');
+ await expect(page.locator('.growth-page')).not.toContainText('노래 없는 세트');
+ await expect(page.locator('.growth-page')).not.toContainText('지난달 세트');
 });
 
 test('all-time dashboard combines lifetime counts, consistent same-song metrics, monthly chart and opt-in overall AI',async({page})=>{
