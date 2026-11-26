@@ -134,7 +134,7 @@ VZ.recPracticeBlock = (card, {songId, date, mediaId}) => {
     const sub = mine.length ? '직접 적은 시간이에요' : auto ? '녹음 길이로 넣었어요. 실제로 연습한 시간을 누르면 그걸로 바꿔요.' : '실제로 연습한 시간을 누르면 연습 기록에 들어가요.';
     const cur = mine.length === 1 ? VZ.practiceMinutes(mine[0]) : 0;
     host.innerHTML = '<p class="rec-practice-line"><i class="ph ph-timer" aria-hidden="true"></i><span>' + line + '</span></p><p class="rec-practice-sub">' + esc(sub) + '</p>' +
-      (mine.length > 1 ? '' : '<div class="rec-practice-chips" role="group" aria-label="실제로 연습한 시간">' + [10, 20, 30, 60].map(n => '<button type="button" data-rec-min="' + n + '" aria-pressed="' + (cur === n) + '">' + n + '분</button>').join('') + '</div>') +
+      (mine.length > 1 ? '' : '<div class="rec-practice-chips" role="group" aria-label="실제로 연습한 시간">' + VZ.PRACTICE_MINUTE_CHIPS.map(n => '<button type="button" data-rec-min="' + n + '" aria-pressed="' + (cur === n) + '">' + n + '분</button>').join('') + '</div>') +
       '<button type="button" class="rec-practice-more" data-log>' + (mine.length ? '연습 기록 고치기' : '자세히 적기') + ' <i class="ph ph-caret-right" aria-hidden="true"></i></button>';
     host.querySelectorAll('[data-rec-min]').forEach(b => b.onclick = () => set(Number(b.dataset.recMin)));
     host.querySelector('[data-log]').onclick = () => VZ.practiceSheet({songId, date, mediaIds:[mediaId], practice:own().length === 1 ? own()[0] : null});
@@ -177,7 +177,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
   // 트레이닝 분류 3단계: 분류 › 세부 항목 › 세부 항목 2. Each level can add a new entry that is kept for next time.
   const level = (label, name, opts, placeholder) => '<label class="field"><span>' + label + '</span><select name="' + name + '" data-level>' + opts + '</select><input type="text" name="' + name + '__new" maxlength="40" placeholder="' + placeholder + '" hidden style="margin-top:8px"></label>';
   const initialMinutes = p ? VZ.practiceMinutes(p) : preset?.minutes || 30;
-  const quick = [10, 20, 30, 60].map(n => '<button type="button" data-min="' + n + '" aria-pressed="' + (Number(initialMinutes) === n) + '">' + n + '분</button>').join('');
+  const quick = VZ.PRACTICE_MINUTE_CHIPS.map(n => '<button type="button" data-min="' + n + '" aria-pressed="' + (Number(initialMinutes) === n) + '">' + n + '분</button>').join('');
   const stars = [1, 2, 3, 4, 5].map(n => '<button type="button" data-star="' + n + '" aria-label="만족도 ' + n + '" aria-pressed="' + ((p?.rating || 0) >= n) + '"><i class="' + ((p?.rating || 0) >= n ? 'ph-fill' : 'ph') + ' ph-star" aria-hidden="true"></i></button>').join('');
   let draft = null;
   VZ.sheet({title:p ? '연습 기록 수정' : '연습 기록', onClose:() => draft?.discard(), body:'<form id="practice-log">' +

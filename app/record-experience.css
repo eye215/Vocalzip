@@ -116,7 +116,7 @@ body.vz-record-mode [data-review] .card>.btn-row{position:sticky;bottom:calc(10p
 .rec-practice-line i{font-size:18px;color:#B794F6;}
 .rec-practice-line b{color:#C9B0FF;}
 .rec-practice-sub{margin:0;font-size:13px;line-height:19px;opacity:.72;word-break:keep-all;}
-.rec-practice-chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.rec-practice-chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;}
 .rec-practice-chips button{min-height:44px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(255,255,255,.06);color:inherit;font:inherit;font-size:15px;font-weight:600;cursor:pointer;}
 .rec-practice-chips button[aria-pressed=true]{border-color:#8B5CF6;background:#7A32F5;color:#fff;}
 .rec-practice-more{justify-self:start;display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0;border:0;background:none;color:#C9B0FF;font:inherit;font-size:14px;font-weight:600;cursor:pointer;}

@@ -144,6 +144,8 @@ test('녹음 저장 → 오늘 이 곡 연습: the take counts at once, one tap 
   const rows = () => page.evaluate(() => VZ.db.practices.filter(p => p.songId === 's1' && p.date === VZ.today()).map(p => ({id:p.id, minutes:p.minutes, source:p.practiceTimeSource, media:p.mediaIds.length})));
   expect(await rows()).toEqual([expect.objectContaining({id:expect.stringMatching(/^rec-time:/), minutes:1, source:'recording', media:1})]);
   for (const b of await block.locator('[data-rec-min]').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  // The same one-tap set as the goal time sheet and the practice-log sheet.
+  expect(await block.locator('[data-rec-min]').evaluateAll(list => list.map(b => b.textContent))).toEqual(['5분', '10분', '20분', '30분', '60분']);
   // The automatic row goes in the same change as the tap, even when the recordings list is not at hand (a failed cloud
   // read leaves it unread: 1.0 walkthrough, 2026-11-24 — the song showed 1분 + 30분 until another screen read it).
   await page.evaluate(() => { VZ.media.cached = () => []; });

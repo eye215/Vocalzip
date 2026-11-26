@@ -274,7 +274,9 @@ test('지금 할 것 homework opens guided practice and the final step saves pra
  const category=value.categories.find(c=>c.id===value.practices.at(-1).categoryId);
  expect(category.name).toBe('호흡');
  expect(category.items).toContain('호흡을 길게 유지하기');
- expect(value.assignments.find(t=>t.id==='a1').status).toBe('done');
+ // The run counts one practice of the homework (like '숙제 했나요?'); only the homework's own check marks it done.
+ expect(value.practices.at(-1)).toMatchObject({completed:['a1'],assignmentReps:{a1:1}});
+ expect(value.assignments.find(t=>t.id==='a1').status).toBe('active');
  expect(value.dailyGoals.find(g=>g.id==='g1').completed).toBe(true);
  await page.getByRole('button',{name:'연습 기록 보기',exact:true}).click();
  await expect(page).toHaveURL(/#\/practices$/);
@@ -645,7 +647,7 @@ test('checking a goal asks for the time at once: chip, 저장, then the row, tod
  await page.getByRole('checkbox',{name:'후렴 연결 연습하기',exact:true}).check();
  const sheet=timeSheet(page);await expect(sheet).toBeVisible();await expect(page.locator('.vz-perform-offer')).toHaveCount(0);
  await expect(sheet.locator('.sheet-head h2')).toHaveText('후렴 연결 연습하기');await expect(sheet.getByText('얼마나 연습했나요?',{exact:true})).toBeVisible();
- await expect(sheet.locator('.vz-time-chip')).toHaveText(['5분','10분','15분','20분','30분','직접 입력']);
+ await expect(sheet.locator('.vz-time-chip')).toHaveText(['5분','10분','20분','30분','60분','직접 입력']); // the same set as the saved-take card and the practice-log sheet
  await expect(sheet.locator('.vz-time-chip[aria-pressed=true]')).toHaveCount(0); // nothing to preselect for a new goal
  for(const chip of await sheet.locator('.vz-time-chip').all())expect((await chip.boundingBox()).height).toBeGreaterThanOrEqual(44);
  await sheet.getByRole('button',{name:'10분',exact:true}).click();
@@ -685,7 +687,7 @@ test('checking a goal asks for the time at once: chip, 저장, then the row, tod
  expect((await db(page)).practices).toEqual(value.practices);
  // Saving another time replaces the record, never adds a second one.
  await row.locator('.vz-goal-record').click();
- await sheet.getByRole('button',{name:'15분',exact:true}).click();await sheet.getByRole('button',{name:'저장',exact:true}).click();
+ await sheet.getByRole('button',{name:'직접 입력',exact:true}).click();await sheet.getByLabel('연습 시간(분) 직접 입력',{exact:true}).fill('15');await sheet.getByRole('button',{name:'저장',exact:true}).click();
  await expect(popup.locator('.sheet-head h2')).toHaveText('저장했어요');
  await expect(popup.locator('[data-today-text]')).toHaveText('오늘 27분 / 목표 30분 · 90%');await expect(popup.locator('[data-today-added]')).toHaveText('이번 기록 +5분');
  await expect(popup.locator('[data-today-headline]')).toHaveText('거의 다 왔어요');
