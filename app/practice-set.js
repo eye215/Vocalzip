@@ -16,7 +16,7 @@
 'use strict';
 const V=window.VZ,P=window.VzipPracticeSet,D=window.VzipDailySet;
 if(!V||!P||!D||typeof document==='undefined')return;
-const esc=V.esc;
+const esc=V.esc,list=v=>Array.isArray(v)?v:[];
 const owner=()=>window.vzipCloudUserId?.()||window.VzipAccountScope?.owner||'local';
 const store=()=>window.VzipAccountScope?.storage||window.localStorage;
 const KEY=()=>'vzip_practice_set_live:'+owner();
@@ -431,6 +431,80 @@ async function saveTake(st,res){
   await V.media.saveBlob(item);res.releaseProtection?.();
   return id;
 }
+/* ---------- AI 청취 코멘트 (the 녹음 step, 2026-11-26) ----------
+ * The 노래 연습실's request (VZ.vzipCloudCoach → vzip-nvidia-coach, the same payload shape and the same 5 MB limit), asked
+ * for only with the button and only after a confirm that says what is sent: the step's last recording, today's 곡에
+ * 적용하기 task (its name and instruction) and the song title. No lyrics, memo or other record is sent. The comment is
+ * kept on the step (then on its item of the run row, D.setCoach when the set was saved meanwhile). Nothing else changes. */
+const COACH_LIMIT=5*1024*1024,COACH_TOO_BIG='AI 청취는 5MB 이하 녹음만 보낼 수 있어요. 짧게 다시 녹음해 주세요.';
+let coaching=null;const coachSaid={};
+/** The task the comment is about: today's 곡에 적용하기 task in this set, else the 녹음 step itself. */
+function coachTask(s,st){
+  const apply=s.steps.find(x=>x.apply&&D.applyInfo?.(x)),info=apply&&D.applyInfo(apply);
+  return info?{key:info.key,name:info.name,text:info.text}:{key:'',name:'곡 녹음',text:'오늘 연습한 곡을 한 번 불러 녹음했어요.'};
+}
+const coachLines=note=>String(note||'').split('\n').map(x=>x.trim()).filter(Boolean);
+const coachNoteHtml=note=>'<div class="pset-coach-note" data-coach-note>'+coachLines(note).map(x=>'<p>'+esc(x)+'</p>').join('')+'</div>';
+function coachSlot(st,{ask=false}={}){
+  const busy=!!coaching&&coaching.sid===session?.id&&coaching.stid===st.id;
+  return '<div class="pset-coach" data-coach-slot="'+esc(st.id)+'"'+(ask?' data-ask':'')+'>'+
+    (st.aiCoach?'<p class="pset-coach-head">AI 청취 코멘트</p>'+coachNoteHtml(st.aiCoach):'')+
+    (ask?'<button type="button" class="btn secondary block" data-ai-coach'+(busy?' disabled':'')+'><i class="ph ph-sparkle" aria-hidden="true"></i>'+(busy?'코멘트를 받는 중…':st.aiCoach?'AI 청취 코멘트 다시 받기':'AI 청취 코멘트 받기')+'</button>'+
+      (st.aiCoach||busy?'':'<p class="pset-note">원할 때만 보내요. 누르면 무엇을 보내는지 먼저 알려 드려요.</p>'):'')+
+    '<p class="pset-note" role="status" data-coach-state>'+esc(coachSaid[st.id]||'')+'</p></div>';
+}
+/** Redraw the comment parts in place (the summary's typed minutes stay); the done screen is drawn again. */
+function repaintCoach(){
+  document.querySelectorAll('[data-pset-host] [data-coach-slot]').forEach(el=>{
+    const st=session?.steps.find(x=>x.id===el.dataset.coachSlot);
+    if(st)el.outerHTML=coachSlot(st,{ask:el.hasAttribute('data-ask')});
+  });
+  if(!session&&saved&&document.querySelector('[data-pset-host] .pset-done'))paint();
+}
+/** A comment that came: on the step while the set is in hand, else on its item of the saved run row. */
+function keepCoach(sid,stid,note,at){
+  if(session?.id===sid){const st=session.steps.find(x=>x.id===stid);if(!st)return false;st.aiCoach=note;st.aiCoachAt=at;persist();return true;}
+  const runId=D.rowId({id:sid});
+  if(!(V.db.practices||[]).some(p=>p&&p.id===runId))return false;
+  let ok=false;
+  return V.change(db=>{ok=D.setCoach(db,runId,stid,note,at);},{silent:true})&&ok;
+}
+async function askCoach(stid){
+  const s=session,st=s?.steps.find(x=>x.id===stid);
+  if(!st||coaching||st.kind!=='record')return;
+  const say=text=>{coachSaid[stid]=text;const el=document.querySelector('[data-coach-slot="'+CSS.escape(stid)+'"] [data-coach-state]');if(el)el.textContent=text;};
+  const mediaId=st.mediaIds.at(-1);if(!mediaId)return say('먼저 녹음해 주세요.');
+  if(!window.vzipCloudCoach||!window.vzipCloudSignedIn?.())return say('로그인하면 AI 청취 코멘트를 받을 수 있어요.');
+  // Over 5 MB is said before asking when the file is on this device (nothing is read from the network for it).
+  let item=(V.media?.cached?.()||[]).find(m=>String(m.id)===mediaId)||null,blob=item?V.media.blobOf(item):null;
+  if(blob&&blob.size>COACH_LIMIT)return say(COACH_TOO_BIG);
+  const task=coachTask(s,st),song=st.songId?V.song(st.songId):null;
+  const ok=await V.confirm('AI 청취 코멘트 받기',
+    '이 단계의 마지막 녹음, 오늘 과제(“'+task.name+'” · '+task.text+')'+(song?', 곡 제목(“'+song.title+'”)':'')+'을 보내요.\n'+
+    '녹음은 Gemini에 보내 소리를 듣고, 그 관찰과 과제'+(song?'·곡 제목':'')+'을 NVIDIA에 보내 한국어 코멘트를 작성해요. 가사나 메모, 다른 기록은 보내지 않아요.\n'+
+    'AI 답변은 진단이 아닌 연습 참고용이에요.',{ok:'보내기'});
+  if(!ok||session!==s)return;
+  const who=owner();coaching={sid:s.id,stid};say('');repaintCoach();
+  try{
+    if(!blob){
+      item=(await V.media.list()).find(m=>String(m.id)===mediaId);
+      if(!item)throw Error('녹음을 찾지 못했어요. 삭제됐거나 아직 불러오지 못했어요.');
+      blob=V.media.blobOf(item);
+      if(!blob){const src=await V.media.src(item),res=await fetch(src.url);if(src.revoke)URL.revokeObjectURL(src.url);if(!res.ok)throw Error('녹음을 불러오지 못했어요.');blob=await res.blob();}
+    }
+    if(blob.size>COACH_LIMIT)throw Error(COACH_TOO_BIG);
+    const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]||'');r.onerror=()=>reject(Error('녹음을 읽지 못했어요.'));r.readAsDataURL(blob);});
+    const result=await window.vzipCloudCoach({mode:'audio',audio:{mime:blob.type||'audio/webm',data},answers:[],song:song?.title||'',lyrics:'',translation:'',lyricNotes:'',
+      task:task.name,taskId:task.key,summary:task.text,detail:'',metric:null,unit:null,status:'',difficulty:'',comfort:'',symptoms:[],mood:'',memo:''});
+    if(owner()!==who)throw Error('계정이 바뀌어서 코멘트를 저장하지 않았어요.');
+    const note=String(result?.note||'').trim().slice(0,D.COACH_MAX);
+    if(!note)throw Error('AI 코멘트가 비어 있어요. 다시 시도해 주세요.');
+    if(!keepCoach(s.id,stid,note,Date.now()))throw Error('기록을 찾지 못해 코멘트를 저장하지 못했어요.');
+    coachSaid[stid]='';
+  }catch(error){coachSaid[stid]=(error?.message||'AI 코멘트를 받지 못했어요.')+' 녹음과 기록은 그대로예요.';}
+  finally{coaching=null;repaintCoach();changed();}
+}
+document.addEventListener('click',e=>{const b=e.target.closest?.('[data-pset-host] [data-ai-coach]');if(b&&!b.disabled)askCoach(b.closest('[data-coach-slot]').dataset.coachSlot);});
 function helperHtml(st){
   const song=st.songId&&V.song(st.songId),seg=st.segmentStart!=null?P.segmentLabel(st.segmentStart,st.segmentEnd):'';
   let html='';
@@ -446,7 +520,8 @@ function helperHtml(st){
   if(st.kind==='record'){
     const n=st.mediaIds.length;
     html+='<button type="button" class="btn secondary block pset-record" data-record><i class="ph ph-microphone" aria-hidden="true"></i>'+(n?'한 번 더 녹음하기':'녹음하기')+'</button>'+
-      '<p class="pset-note" data-linked>'+(n?'녹음 '+n+'개를 이 단계에 연결했어요. ':'')+'녹음 길이는 연습 시간에 더하지 않아요.</p>';
+      '<p class="pset-note" data-linked>'+(n?'녹음 '+n+'개를 이 단계에 연결했어요. ':'')+'녹음 길이는 연습 시간에 더하지 않아요.</p>'+
+      (n||st.aiCoach?coachSlot(st,{ask:n>0}):'');
   }
   if(song&&st.kind!=='next'&&(song.mrTracks||[]).some(x=>!x.deleted)&&V.renderSongMR)html+='<div class="pset-mr" data-mr-host></div>';
   return html;
@@ -572,7 +647,7 @@ function summaryHtml(){
       return '<li class="pset-row" data-step="'+esc(r.id)+'" data-state="'+r.state+'"'+(r.measured?' data-measured':'')+'><span class="pset-row-copy"><small>'+esc(r.label)+' · <b class="pset-state">'+STATE[r.state]+'</b></small><strong>'+esc(r.title)+'</strong>'+
         (extra?'<em>'+esc(extra)+'</em>':'')+
         (st.kind==='goal'?'<label class="pset-check"><input type="checkbox" data-done'+(r.done?' checked':'')+'><span>목표 완료로 체크</span></label>':'')+
-        (r.mediaIds.length?'<em>녹음 '+r.mediaIds.length+'개 연결</em>':'')+'</span>'+
+        (r.mediaIds.length?'<em>녹음 '+r.mediaIds.length+'개 연결</em>':'')+(st.kind==='record'&&(r.mediaIds.length||st.aiCoach)?coachSlot(st,{ask:r.mediaIds.length>0}):'')+'</span>'+
         (r.measured?'<span class="pset-fixed"><b data-sec="'+r.seconds+'">'+(st.kind==='take'?'—':took(r.seconds))+'</b></span>':
           '<label class="pset-min"><input type="number" inputmode="numeric" min="0" max="600" value="'+r.minutes+'" data-min aria-label="'+esc(st.title)+' 연습한 시간(분)"><span>분</span></label>')+'</li>';}).join('')+'</ul>'+
     '<p class="pset-sum-total">합계 <b data-sum></b></p>'+
@@ -629,8 +704,14 @@ function doneHtml(){
   // 연습 전후 녹음이 둘 다 있으면: the existing blind A/B (app/listen-verdict.js) for the pair.
   const pair=saved.pair?'<div class="pset-pair" data-pset-pair><button type="button" class="btn secondary block" data-listen-open data-song="'+esc(saved.pair.songId)+'" data-a="'+esc(saved.pair.a)+'" data-b="'+esc(saved.pair.b)+'"><i class="ph ph-headphones" aria-hidden="true"></i>가리고 듣기 · 연습 전후 비교</button>'+
     '<p class="pset-note">어느 쪽이 연습 전인지 가려 놓고 들어 봐요.</p></div>':'';
+  // AI 청취 코멘트 kept on the run row (one that comes after saving is put there and shows here).
+  const run=saved.runId?(V.db.practices||[]).find(p=>p.id===saved.runId):null,notes=list(run?.dailySet?.items).filter(x=>x&&typeof x.aiCoach==='string'&&x.aiCoach.trim());
+  const waiting=!!coaching&&saved.runId===D.rowId({id:coaching.sid});
+  const coach=notes.length||waiting?'<section class="pset-done-coach" data-done-coach aria-label="AI 청취 코멘트"><p class="pset-coach-head">AI 청취 코멘트</p>'+
+    notes.map(x=>'<div class="pset-coach-item"><small>'+esc(x.title||'')+'</small>'+coachNoteHtml(x.aiCoach)+'</div>').join('')+
+    (waiting?'<p class="pset-note" role="status" data-coach-wait>코멘트를 받는 중이에요. 오면 여기와 연습 기록에 저장돼요.</p>':'')+'</section>':'';
   return '<section class="pset pset-done" aria-labelledby="pset-done-title"><span class="pset-done-mark" aria-hidden="true"><i class="ph ph-check"></i></span>'+
-    '<h2 id="pset-done-title">오늘 연습을 기록했어요</h2><p class="pset-help">연습 '+saved.minutes+'분'+(saved.count?' · '+saved.count+'개 중 '+saved.did+'개':'')+(saved.goals?' · 목표 '+saved.goals+'개 체크':'')+'</p>'+(V.levels?.newsHtml?.(saved.news)||'')+today+pair+
+    '<h2 id="pset-done-title">오늘 연습을 기록했어요</h2><p class="pset-help">연습 '+saved.minutes+'분'+(saved.count?' · '+saved.count+'개 중 '+saved.did+'개':'')+(saved.goals?' · 목표 '+saved.goals+'개 체크':'')+'</p>'+(V.levels?.newsHtml?.(saved.news)||'')+today+pair+coach+
     '<a class="btn block" href="#/home">홈으로</a><a class="btn secondary block" href="#/practices">연습 기록 보기</a></section>';
 }
 

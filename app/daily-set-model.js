@@ -30,7 +30,9 @@
  *                   items, recording}}                     ONE row per finished set: real active minutes and, per item,
  *                                                          done/skipped, seconds, hold seconds and accuracy, the
  *                                                          wobble (sd, cent) of each held note, and `measures`
- *                                                          ([{area, kind, value, unit, …}]) for 기본기 단계
+ *                                                          ([{area, kind, value, unit, …}]) for 기본기 단계; the 녹음
+ *                                                          step's item may carry aiCoach / aiCoachAt (AI 청취 코멘트,
+ *                                                          asked for after a confirm; optional, see setCoach)
  *   A finished goal step still writes that goal's single row 'goal:<goalId>' and a song section its own song row
  *   (app/practice-set-model.js save), so time is never counted twice and a song keeps its minutes.
  * 따라 하기 (2026-11-26) is a set of ONE step (kind 'next', step.guide, mode 'guide'; app/guided-practice.js): saved as this
@@ -468,7 +470,41 @@ function itemOf(st,minutes){
     ...(r.mode?{mode:r.mode}:{}),...(r.timer?{timer:true}:{}),...(r.parts!=null?{parts:r.parts}:{}),...(r.holdSeconds!=null?{holdSeconds:r.holdSeconds}:{}),
     ...(r.accuracy!=null?{accuracy:r.accuracy}:{}),...(Array.isArray(r.notes)?{notes:r.notes}:{}),...(r.rounds!=null?{rounds:r.rounds}:{}),
     ...(r.longestOut!=null?{longestOut:r.longestOut}:{}),...(measuresOf(r).length?{measures:measuresOf(r)}:{}),...(st.mic?{mic:true}:{}),...(st.apply?{apply:true}:{}),
-    ...(st.roomTask&&APPLY_TASKS[st.roomTask]?{roomTask:st.roomTask}:{})};
+    ...(st.roomTask&&APPLY_TASKS[st.roomTask]?{roomTask:st.roomTask}:{}),...coachFields(st)};
+}
+/* ---------- AI 청취 코멘트 (2026-11-26) ----------
+ * The one optional field a run-row item may carry: aiCoach (the comment text, as the 노래 연습실 kept it, at most
+ * COACH_MAX characters) with aiCoachAt (when it came). Only the 녹음 step asks for it (app/practice-set.js, after a
+ * confirm that says what is sent); a row without it stays as it was. */
+const COACH_MAX=1100;
+const coachText=v=>typeof v==='string'?v.trim().slice(0,COACH_MAX):'';
+function coachFields(st){
+  const note=coachText(st?.aiCoach);if(!note)return {};
+  const at=Number(st.aiCoachAt);
+  return {aiCoach:note,...(Number.isFinite(at)&&at>0?{aiCoachAt:at}:{})};
+}
+/** Put a comment that came after the set was saved on its item of the run row, in place (call inside VZ.change).
+ * Nothing else of the row changes. false when the row or the item is gone (then nothing is written). */
+function setCoach(db,runId,itemId,note,at=Date.now()){
+  const row=live(db,'practices').find(p=>p.id===runId&&p.dailySet&&Array.isArray(p.dailySet.items)),text=coachText(note);
+  const item=row&&row.dailySet.items.find(x=>x&&x.id===itemId);
+  if(!item||!text)return false;
+  item.aiCoach=text;item.aiCoachAt=Number(at)||Date.now();
+  return true;
+}
+/** The comments kept on the sets' run rows, newest first: [{runId, date, itemId, title, note, at, songId}]. songId is the
+ * song of the step's own row (a 녹음 step keeps one, app/practice-set-model.js save), else the run row's. */
+function coachNotes(db){
+  const rows=live(db,'practices'),out=[];
+  for(const p of rows){
+    if(!p.dailySet||!Array.isArray(p.dailySet.items))continue;
+    for(const x of p.dailySet.items){
+      const note=coachText(x?.aiCoach);if(!note)continue;
+      const own=x.row?rows.find(r=>r.id===x.row):null;
+      out.push({runId:p.id,date:String(p.date||''),itemId:String(x.id||''),title:shortTitle(x),note,at:Number(x.aiCoachAt)||Number(p.created)||0,songId:String(own?.songId||p.songId||'')});
+    }
+  }
+  return out.sort((a,b)=>b.date.localeCompare(a.date)||b.at-a.at);
 }
 /** Summary lines of a session: every step with its state and seconds (minutes rounded, as typed fields start). */
 function summary(s){
@@ -530,5 +566,5 @@ return {GROUPS,SONG,CATALOG,APPLY_TASKS,ROTATION,PERFORMANCE_DAYS,applyTask,appl
   prefs,cleanPrefs,setExercise,setGroup,savePrefs,resetPrefs,rotation,pick,dayNumber,
   ownKey,nextItems,focusOf,ownSteps,build,isOwn,totalMinutes,modeOf,isGuideRun,labelOf,shortTitle,timeline,progress,finishItem,stop,
   word,holdStart,holdTick,holdResult,comfort,baseNote,notesFor,noteTags,syllableOf,adapt,noteName,
-  rowId,measuresOf,summary,save,runsOn};
+  rowId,measuresOf,summary,save,runsOn,COACH_MAX,setCoach,coachNotes};
 });

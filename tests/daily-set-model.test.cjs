@@ -512,3 +512,28 @@ test('따라 하기 is a set of one guide step: the run row counts the homework 
   // A full set's run is not a 따라 하기.
   assert.equal(D.isGuideRun({dailySet:{items:[{id:'ex-loosen-neck'},{id:'next-hw-a1'}]}}),false);
 });
+
+test('AI 청취 코멘트: the 녹음 step item carries aiCoach / aiCoachAt only when asked; one that comes after saving goes on that item in place',()=>{
+  const now=Date.parse('2026-11-04T12:00:00Z'),db=empty();
+  const s=P.start([{kind:'song',songId:'s1',title:'곡 구간 · This Is the Moment',minutes:5},{kind:'record',songId:'s1',title:'녹음 · This Is the Moment',optional:true,minutes:3}],{id:'k',date:TODAY,now});
+  P.play(s,now);P.tick(s,now+60000);D.finishItem(s,{state:'done',now:now+60000});
+  P.play(s,now+60000);P.tick(s,now+90000);s.steps[1].mediaIds=['m1'];s.steps[1].aiCoach='  들리는 특징: 끝음이 또렷해요\n다음 시도: 한 번 더  ';s.steps[1].aiCoachAt=now+80000;
+  D.finishItem(s,{state:'done',now:now+90000});
+  D.save(db,s,[],{now});
+  const run=db.practices.find(p=>p.id==='practice-set:k'),[song,rec]=run.dailySet.items;
+  assert.equal(rec.aiCoach,'들리는 특징: 끝음이 또렷해요\n다음 시도: 한 번 더');assert.equal(rec.aiCoachAt,now+80000);
+  assert.equal('aiCoach' in song,false);assert.equal('aiCoachAt' in song,false);
+  // The comment is only on the run row: the step's own song row is as before.
+  const own=db.practices.find(p=>p.id===rec.row);assert.equal(own.songId,'s1');assert.equal('aiCoach' in own,false);
+  // Came after saving: set in place, nothing else of the row changes.
+  const before=JSON.parse(JSON.stringify(run));
+  assert.equal(D.setCoach(db,'practice-set:k',song.id,'들리는 특징: 나중에 온 코멘트',now+200000),true);
+  assert.deepEqual({...run,dailySet:{...run.dailySet,items:run.dailySet.items.map(x=>{const {aiCoach,aiCoachAt,...rest}=x;return x.id===song.id?rest:x;})}},before);
+  assert.equal(D.setCoach(db,'practice-set:gone',song.id,'x'),false);assert.equal(D.setCoach(db,'practice-set:k','nope','x'),false);assert.equal(D.setCoach(db,'practice-set:k',song.id,'   '),false);
+  // coachNotes: newest first, with the song of the step's own row (else the run row's).
+  const notes=D.coachNotes(db);
+  assert.deepEqual(notes.map(n=>[n.itemId,n.songId,n.date]),[[song.id,'s1',TODAY],[rec.id,'s1',TODAY]]);
+  // An old row (no aiCoach anywhere) is untouched and gives no notes; a deleted run gives none.
+  assert.deepEqual(D.coachNotes({practices:[{id:'practice-set:o',date:TODAY,dailySet:{v:1,items:[{id:'a',kind:'record',title:'녹음',state:'done'}]}}]}),[]);
+  assert.deepEqual(D.coachNotes({...db,deleted:{practices:['practice-set:k']}}),[]);
+});

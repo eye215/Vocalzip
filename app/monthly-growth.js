@@ -173,20 +173,27 @@ function songListeningEntry(p,month){
    ym(p.date||p.practiceRoom.date)===month&&
    !!String(p.practiceRoom.aiCoach||'').trim();
 }
+/** 오늘의 연습's 녹음 step comments (app/daily-set-model.js coachNotes) under the same rule: only a comment tied to a
+ * song that exists counts as evidence about a song; a set step without one (training only) is left out. */
+function setListeningEntries(month){
+ let notes=[];try{notes=window.VzipDailySet?.coachNotes?.(V.db)||[];}catch(error){console.error(error);}
+ return notes.filter(n=>ym(n.date)===month&&n.songId&&!!V.song(n.songId))
+  .map(n=>({date:n.date.slice(0,10),at:n.at,title:V.songTitle(n.songId)||'곡 미지정',note:n.note,check:false,set:true}));
+}
 function listeningEvidence(month){
- const entries=(V.db.practices||[]).filter(p=>songListeningEntry(p,month))
-  .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
- if(!entries.length)return '<section class="card growth-section"><h2>AI 청취 관찰</h2><p>이달에 저장된 AI 청취 코멘트가 아직 없어요.</p><p class="small muted">곡으로 지정된 연습실 녹음에 AI 코멘트를 요청하면 여기에도 연결돼요. 트레이닝 과제의 코멘트는 제외해요.</p></section>';
- const quotes=entries.slice(0,5).map(p=>{
-  const v=p.practiceRoom,note=String(v.aiCoach||'');
+ const room=(V.db.practices||[]).filter(p=>songListeningEntry(p,month)).map(p=>{const v=p.practiceRoom;
+  return {date:String(p.date||v.date||'').slice(0,10),at:Number(p.created)||0,title:V.songTitle(p.songId||v.songId)||v.title||'곡 미지정',note:String(v.aiCoach||''),check:!!v.aiConditionCheck,set:false};});
+ // Newest first across the 노래 연습실 and 오늘의 연습, the same limit of 5.
+ const entries=[...room,...setListeningEntries(month)].sort((a,b)=>b.date.localeCompare(a.date)||b.at-a.at);
+ if(!entries.length)return '<section class="card growth-section"><h2>AI 청취 관찰</h2><p>이달에 저장된 AI 청취 코멘트가 아직 없어요.</p><p class="small muted">곡으로 지정된 연습실 녹음이나 오늘의 연습 녹음에 AI 코멘트를 요청하면 여기에도 연결돼요. 트레이닝 과제의 코멘트는 제외해요.</p></section>';
+ const quotes=entries.slice(0,5).map(x=>{
+  const note=x.note;
   const audible=note.match(/(?:^|\n)\s*들리는 특징\s*[:：]\s*([^\n]+)/)?.[1]||note.split('\n')[0];
   const follow=note.match(/(?:^|\n)\s*다음 시도\s*[:：]\s*([^\n]+)/)?.[1]||'';
   const safe=String(audible||'').slice(0,250),next=String(follow||'').slice(0,200);
-  const title=V.songTitle(p.songId||v.songId)||v.title||'곡 미지정';
-  const date=String(p.date||v.date||'').slice(0,10);
-  return '<article class="growth-listening"><strong>'+e(title)+'</strong><span class="small muted">'+e(date)+'</span>'+
+  return '<article class="growth-listening"'+(x.set?' data-listening-set':'')+'><strong>'+e(x.title)+'</strong><span class="small muted">'+e(x.date)+(x.set?' · 오늘의 연습':'')+'</span>'+
    '<p>'+e(safe)+'</p>'+(next?'<p class="small muted">AI 제안: '+e(next)+'</p>':'')+
-   (v.aiConditionCheck?'<p class="small muted">소리 변화에 대한 컨디션 확인 권고가 있었어요. 녹음만으로 건강 상태를 판정한 것은 아니에요.</p>':'')+
+   (x.check?'<p class="small muted">소리 변화에 대한 컨디션 확인 권고가 있었어요. 녹음만으로 건강 상태를 판정한 것은 아니에요.</p>':'')+
    '</article>';
  }).join('');
  return '<section class="card growth-section"><h2>AI 청취 관찰</h2><p class="small muted">직접 요청해 저장한 AI 청취 코멘트 '+entries.length+'건 · 최근 최대 5건 표시</p>'+

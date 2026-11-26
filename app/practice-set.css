@@ -94,6 +94,16 @@
 .pset-song span{flex:none;color:#667085;font-variant-numeric:tabular-nums;}
 .pset-record{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;}
 .pset-mr{margin-top:12px;}
+/* AI 청취 코멘트 of the 녹음 step (app/practice-set.js coachSlot) */
+.pset-coach{margin-top:12px;text-align:left;}
+.pset-coach .btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;}
+.pset-coach-head{margin:0 0 6px;color:var(--vz-color-ink,#101828);font-size:14px;line-height:20px;font-weight:700;}
+.pset-coach-note{margin:0 0 8px;padding:10px 14px;border-radius:16px;background:#F3ECFF;color:#344054;font-size:14px;line-height:20px;overflow-wrap:anywhere;}
+.pset-coach-note p{margin:0;}
+.pset-coach-note p+p{margin-top:4px;}
+.pset-coach [data-coach-state]:empty{display:none;}
+.pset-done-coach{width:100%;text-align:left;}
+.pset-coach-item small{display:block;margin-bottom:4px;color:#667085;font-size:13px;line-height:18px;}
 .pset-controls{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;margin-top:auto;padding-top:20px;}
 .pset-ctl{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:52px;padding:0 12px;border:0;border-radius:16px;background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);font:inherit;font-size:16px;line-height:22px;font-weight:600;cursor:pointer;}
 .pset-ctl:disabled{background:#F2EFF7;color:#98A2B3;cursor:default;}
