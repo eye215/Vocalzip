@@ -130,6 +130,42 @@ test('설정 › 관리 opens 내 데이터 내보내기; 기록 JSON and 녹음
   expect(await stubState(page)).toBe(before);
 });
 
+test('기록 불러오기 (moved from 설정 › 기록 백업·복원) merges an old vocalzip-backup JSON and a vocalzip-records JSON, after a confirm, removing nothing', async ({page}) => {
+  test.setTimeout(60000);
+  const r2 = await fakeR2(page);
+  await seed(page, r2);
+  await page.goto('/#/data-export');
+  await expect(page.locator('[data-records-note]')).toContainText('곡 1개');
+  const input = page.locator('.vz-export [data-import-json]');
+  const songs = () => page.evaluate(() => VZ.db.songs.map(s => s.id).sort());
+  const json = (name, data) => ({name, mimeType:'application/json', buffer:Buffer.from(JSON.stringify(data))});
+  const bare = songs => ({categories:[], lessons:[], assignments:[], practices:[], songs});
+  // Not a backup: refused, nothing changes.
+  await input.setInputFiles(json('other.json', {hello:1}));
+  await expect(page.locator('.toast').filter({hasText:'백업 형식이 아니에요'})).toBeVisible();
+  expect(await songs()).toEqual(['s1']);
+  // Cancelling the confirm changes nothing.
+  await input.setInputFiles(json('vocalzip-backup-2026-01-01.json', bare([{id:'s-old', title:'Old Song'}])));
+  await expect(page.getByRole('button', {name:'합치기'})).toBeVisible();
+  await page.getByRole('button', {name:'취소'}).click();
+  expect(await songs()).toEqual(['s1']);
+  // The old 설정 backup file (the bare record).
+  await input.setInputFiles(json('vocalzip-backup-2026-01-01.json', bare([{id:'s-old', title:'Old Song'}])));
+  await page.getByRole('button', {name:'합치기'}).click();
+  await expect.poll(songs).toEqual(['s-old', 's1']);
+  await expect(page.locator('[data-records-note]')).toContainText('곡 2개');
+  expect(await page.evaluate(() => { const st = window.VzipAccountScope?.storage || localStorage; for (let i = 0; i < st.length; i++) if (/^vzip_before_import_/.test(st.key(i) || '')) return JSON.parse(st.getItem(st.key(i))).songs.map(s => s.id); return null; })).toEqual(['s1']);
+  // This screen's own 기록 JSON goes back in too.
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', {name:'기록 JSON'}).click()]);
+  const exported = JSON.parse(fs.readFileSync(await dl.path(), 'utf8'));
+  expect(exported.records.songs.map(s => s.id).sort()).toEqual(['s-old', 's1']);
+  exported.records.songs.push({id:'s-new', title:'New Song'});
+  await input.setInputFiles(json('vocalzip-records-2026-11-26.json', exported));
+  await page.getByRole('button', {name:'합치기'}).click();
+  await expect.poll(songs).toEqual(['s-new', 's-old', 's1']);
+  expect(await page.evaluate(() => VZ.db.settings.dailyTargetMinutes)).toBe(40);
+});
+
 test('원본 파일: two ZIP parts with the original bytes, a retry after a failed download, and no write request', async ({page}) => {
   test.setTimeout(90000);
   const r2 = await fakeR2(page);

@@ -2,8 +2,11 @@
  * Read-only: it only reads the app record (VZ.db), the media list (VZ.media.list / window.vzipReadMedia) and signed
  * links (window.VzipR2.url / prefetch, window.vzipCloudMediaUrl). Nothing on the server or in the media store is written,
  * moved, re-uploaded or re-encoded; the only local write is this page's own progress note (which parts were saved).
+ * The one exception is 기록 불러오기, which the user starts: it merges a backup JSON into the record (VZ.change, nothing
+ * removed or replaced) after a confirm and a vzip_before_import_* copy of the record as it was.
  *
- * 1. 기록: one JSON (the whole app record + every recording/score/MR/performance file's metadata) and a CSV of recordings.
+ * 1. 기록: one JSON (the whole app record + every recording/score/MR/performance file's metadata) and a CSV of recordings;
+ *    기록 불러오기 merges such a JSON — or an old vocalzip-backup-*.json (the bare record) — back in.
  * 2. 원본 파일: original bytes, STOREd (no compression) into ZIP parts ≤ the chosen size (app/data-export-model.js).
  *    Each file is fetched whole (CRC on the fly) before it enters the part, so a broken download never leaves half a
  *    file in a ZIP and can be retried. With the File System Access API the parts stream into a folder the user picks;
@@ -101,17 +104,27 @@ function recordingMeta(r) {
     storage:m.storageProvider === 'r2' ? 'r2' : m.cloud ? 'cloud' : 'device', onDevice:!!M.blobOf(m), inCloud:!!m.cloud, r2Key:m.r2Key || null,
     exportPath:r.path || null, analysis:plainAnalysis(m.analysis)};
 }
-function recordsJson(cat) {
+/** `records` is the whole app record (VZ.db) — the same content the old 설정 › 기록 백업 file (vocalzip-backup-*.json)
+ * held — so this file can be merged back with 기록 불러오기 below. Without a file list (`cat` null: the media list could
+ * not be read) the record is still exported, with `files: null` and the reason. */
+function recordsJson(cat, filesError) {
   const db = VZ.db, fileRow = f => ({kind:f.kind, id:f.id, songId:f.songId ?? null, songTitle:f.songTitle || null, performanceId:f.performanceId ?? null, title:f.title || null, date:f.date || null, size:f.size || null, r2Key:f.r2Key, exportPath:f.path, optional:!!f.optional});
   return {
     format:'vocalzip-records-export', version:1, exportedAt:new Date().toISOString(), appVersion:VZ.version || null, account:{id:window.vzipCloudUserId?.() || null},
     note:'VOCAL.zip 기록 전체와 파일 목록이에요. 녹음·악보 원본 파일은 “원본 파일” 내보내기의 ZIP 파트에 있고, 각 파트의 manifest.json이 파일과 이 기록의 id를 연결해요.',
     counts:{songs:(db.songs || []).length, lessons:(db.lessons || []).length, practices:(db.practices || []).length, assignments:(db.assignments || []).length,
-      recordings:cat.recordings.length, recordingsWithoutOriginal:cat.missing.length, scores:cat.library.filter(f => f.kind === 'score').length,
-      mrFiles:cat.library.filter(f => f.kind === 'mr').length, performanceFiles:cat.library.filter(f => f.kind === 'asset').length},
+      ...(cat ? {recordings:cat.recordings.length, recordingsWithoutOriginal:cat.missing.length, scores:cat.library.filter(f => f.kind === 'score').length,
+        mrFiles:cat.library.filter(f => f.kind === 'mr').length, performanceFiles:cat.library.filter(f => f.kind === 'asset').length} : {})},
     records:clone(db),
-    files:{recordings:[...cat.recordings, ...cat.missing].map(recordingMeta), library:cat.library.map(fileRow)}
+    files:cat ? {recordings:[...cat.recordings, ...cat.missing].map(recordingMeta), library:cat.library.map(fileRow)} : null,
+    ...(cat ? {} : {filesError:String(filesError || '파일 목록을 불러오지 못했어요.')})
   };
+}
+/** A file from 기록 JSON (vocalzip-records-*.json) or from the old 기록 백업 (vocalzip-backup-*.json, the bare VZ.db)
+ * → the app record inside it, or null when it is neither. */
+function importedRecords(data) {
+  const db = data?.format === 'vocalzip-records-export' ? data.records : data;
+  return db && typeof db === 'object' && ['lessons', 'practices', 'assignments', 'categories', 'songs'].every(k => Array.isArray(db[k])) ? db : null;
 }
 function recordingsCsv(cat) {
   const rows = [...cat.recordings, ...cat.missing].map(r => ({r, m:recordingMeta(r)}));
@@ -408,14 +421,20 @@ function onClick(e) {
   else if ('reload' in ds) load(true);
 }
 
+function recordsNote() {
+  const db = VZ.db;
+  return '곡 ' + n(db.songs?.length) + '개 · 레슨 ' + n(db.lessons?.length) + '개 · 연습 ' + n(db.practices?.length) + '개, 목표·계획·분석 요약·설정과 녹음·악보 파일 목록을 바로 받아요. 파일 원본은 들어 있지 않아요.';
+}
 VZ.route('data-export', {title:'내 데이터 내보내기', back:true, tab:'keep', noAutoRefresh:true,
   render() {
-    const db = VZ.db;
     return '<div class="vz-export">' +
-      '<p class="vz-export-lead">내 기록과 파일을 이 기기에 백업해요. 서버의 기록과 파일은 바꾸거나 지우지 않아요.</p>' +
+      '<p class="vz-export-lead">내 기록과 파일을 이 기기에 백업해요. 내보내기는 서버의 기록과 파일을 바꾸거나 지우지 않아요.</p>' +
       '<section class="vz-export-card" aria-labelledby="vz-export-records"><h2 id="vz-export-records">기록</h2>' +
-        '<p class="vz-export-note">곡 ' + n(db.songs?.length) + '개 · 레슨 ' + n(db.lessons?.length) + '개 · 연습 ' + n(db.practices?.length) + '개, 목표·계획·분석 요약·설정과 녹음·악보 파일 목록을 바로 받아요. 파일 원본은 들어 있지 않아요.</p>' +
-        '<div class="vz-export-row"><button type="button" class="btn" data-json><i class="ph ph-file-text"></i>기록 JSON</button><button type="button" class="btn secondary" data-csv><i class="ph ph-table"></i>녹음 목록 CSV</button></div></section>' +
+        '<p class="vz-export-note" data-records-note>' + recordsNote() + '</p>' +
+        '<div class="vz-export-row"><button type="button" class="btn" data-json><i class="ph ph-file-text"></i>기록 JSON</button><button type="button" class="btn secondary" data-csv><i class="ph ph-table"></i>녹음 목록 CSV</button></div>' +
+        // 기록 불러오기 (moved here from 설정 › 기록 백업·복원): merges a backup into the current record — never replaces it.
+        '<p class="vz-export-note">예전에 받은 기록 JSON(vocalzip-records-…, vocalzip-backup-…)을 지금 기록과 합쳐 불러와요. 어느 쪽 기록도 지우지 않아요.</p>' +
+        '<label class="btn secondary vz-export-import"><i class="ph ph-upload-simple"></i>기록 불러오기<input type="file" accept="application/json,.json" class="sr-only" data-import-json></label></section>' +
       '<section class="vz-export-card" data-export-files aria-labelledby="vz-export-files-title"><h2 id="vz-export-files-title">원본 파일</h2>' +
         '<div data-export-summary></div>' +
         '<p class="vz-export-note">녹음은 압축·변환하지 않은 원본 그대로, 악보 PDF·MR과 함께 ZIP 파트로 나눠 받아요. 파일 이름은 “날짜 제목”이고, 파트마다 manifest.json에 기록 id가 있어요. 크기가 커서 오래 걸릴 수 있어요. 받는 동안 이 화면을 켜 두세요.</p>' +
@@ -431,13 +450,29 @@ VZ.route('data-export', {title:'내 데이터 내보내기', back:true, tab:'kee
     const records = async kind => {
       try {
         if (!state.cat) await load();
-        if (!state.cat) throw Error(state.error || '파일 목록을 불러오지 못했어요.');
         const day = VZ.today();
-        if (kind === 'json') download(new Blob([JSON.stringify(recordsJson(state.cat), null, 1)], {type:'application/json'}), 'vocalzip-records-' + day + '.json');
+        // The record itself never waits on the file list: without it the JSON still holds every record (files: null).
+        if (kind === 'json') download(new Blob([JSON.stringify(recordsJson(state.cat, state.error), null, 1)], {type:'application/json'}), 'vocalzip-records-' + day + '.json');
+        else if (!state.cat) throw Error(state.error || '파일 목록을 불러오지 못했어요.');
         else download(new Blob([recordingsCsv(state.cat)], {type:'text/csv;charset=utf-8'}), 'vocalzip-recordings-' + day + '.csv');
       } catch (e) { VZ.toast('기록을 내보내지 못했어요: ' + e.message, 'error'); }
     };
     main.querySelector('[data-json]').onclick = () => records('json');
+    main.querySelector('[data-import-json]').onchange = async e => {
+      const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+      try {
+        const data = importedRecords(JSON.parse(await file.text()));
+        if (!data) throw Error('VOCAL.zip 백업 형식이 아니에요.');
+        if (!await VZ.confirm('백업 불러오기', '백업 파일의 기록(레슨 ' + data.lessons.length + '·연습 ' + data.practices.length + '·곡 ' + data.songs.length + ')을 현재 기록과 합칠까요? 어느 쪽 기록도 지우지 않아요.', {ok:'합치기'})) return;
+        storage().setItem('vzip_before_import_' + Date.now(), JSON.stringify(VZ.db));
+        const merged = window.VzipDataMerge.merge(VZ.db, data).data;
+        if (VZ.change(d => { Object.assign(d, merged); })) {
+          VZ.toast('백업을 합쳤어요.');
+          const note = main.querySelector('[data-records-note]'); if (note) note.textContent = recordsNote();
+          if (!job) { state.cat = null; load(true); } // new songs can bring new scores·MR into the file list
+        }
+      } catch (err) { VZ.toast('불러오지 못했어요: ' + err.message, 'error'); }
+    };
     main.querySelector('[data-csv]').onclick = () => records('csv');
     VZ.setGuard(() => job && ['running'].includes(job.state) ? '파일을 내보내는 중이에요. 나가면 지금 파트를 멈춰요. 저장한 파트는 남고 나중에 이어서 받을 수 있어요. 나갈까요?' : '');
     paint();
@@ -452,5 +487,5 @@ window.addEventListener('vzip:auth-changed', () => {
   if (state.owner !== undefined && state.owner !== owner) { state.cat = null; if (document.querySelector('[data-export-files]')) load(true); }
 });
 window.VzipAccountScope?.beforeLeave?.(() => { cancel(); state.cat = null; });
-VZ.dataExport = {catalog, recordsJson, recordingsCsv, plan};
+VZ.dataExport = {catalog, recordsJson, importedRecords, recordingsCsv, plan};
 })();
