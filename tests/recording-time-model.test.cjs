@@ -62,3 +62,30 @@ test('the person\'s own: an edited automatic row is never touched again; a delet
   // Bad input is left out.
   assert.deepEqual(T.plan(db(), [{id:'x', songId:'', date:D, seconds:9}, {id:'y', songId:'s', date:'', seconds:9}, {id:'z', songId:'s', date:D, seconds:0}, null]), {rows:[], remove:[]});
 });
+
+test('a recording that time entered on its day lists (트레이닝 or another song) is counted there only, not again', () => {
+  // 녹음 길이로 채우기 in a 트레이닝 record: its 3 minutes are the recording's; the automatic row of it goes.
+  const d = db();run(d, [rec('a', 's1', 170), rec('b', 's1', 60)]);
+  assert.equal(d.practices.find(p => p.id === 'rec-time:2026-11-20:s1').minutes, 4);
+  d.practices.push({id:'tr', date:D, songId:'', minutes:3, manualMinutes:3, practiceTimeSource:'manual', practiceMode:'training', mediaIds:['a']});
+  run(d, [rec('a', 's1', 170), rec('b', 's1', 60)]);
+  assert.deepEqual(d.practices.find(p => p.id === 'rec-time:2026-11-20:s1').mediaIds, ['b'], 'only the recording no entered time lists');
+  assert.equal(total(d), 4);
+  // A 목표 수행 기록 with its time, listing the rest: nothing is added for the song that day.
+  d.practices.push({id:'goal:g1', date:D, songId:'', minutes:10, manualMinutes:10, practiceTimeSource:'goal', practiceMode:'training', mediaIds:['b']});
+  run(d, [rec('a', 's1', 170), rec('b', 's1', 60)]);
+  assert.equal(d.practices.some(p => p.id === 'rec-time:2026-11-20:s1'), false);
+  assert.equal(total(d), 13);
+  // Listed by a record without time (a 목표 with no minutes) or on another day: still counted from the recording.
+  const e = db([{id:'goal:g2', date:D, songId:'', minutes:0, manualMinutes:0, practiceTimeSource:'goal', practiceMode:'training', mediaIds:['a']},
+    {id:'old', date:'2026-11-19', songId:'s1', minutes:5, manualMinutes:5, practiceTimeSource:'manual', practiceMode:'song', mediaIds:['a']}]);
+  run(e, [rec('a', 's1', 170)]);
+  assert.equal(e.practices.find(p => p.id === 'rec-time:2026-11-20:s1').minutes, 3);
+  // An imported row it counted goes back to 시간 미입력 once entered time that day lists its recording.
+  const i = db([{id:'imp', date:D, songId:'s1', minutes:0, manualMinutes:0, practiceTimeSource:'unconfirmed', mediaIds:['a'], practiceMode:'song'}]);
+  run(i, [rec('a', 's1', 200)]);
+  assert.equal(i.practices.find(p => p.id === 'imp').minutes, 4);
+  i.practices.push({id:'tr', date:D, songId:'', minutes:4, manualMinutes:4, practiceTimeSource:'manual', practiceMode:'training', mediaIds:['a']});
+  run(i, [rec('a', 's1', 200)]);
+  assert.deepEqual([i.practices.find(p => p.id === 'imp').practiceTimeSource, total(i)], ['unconfirmed', 4]);
+});

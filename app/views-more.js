@@ -477,12 +477,12 @@ VZ.route('settings', {title:'설정', back:true, tab:'keep', noAutoRefresh:true,
   const paintFiles = media => {
     if (!fileStatus.isConnected) return;
     const failed = (VZ.processingLog?.read() || []).filter(r => r.state === 'failed').length;
-    const local = M.localOnly(media).length, b = M.backupStatus(), analysing = VZ.autoAnalysisStatus?.()?.running;
-    const parts = [failed ? '실패 ' + failed + '개 확인 필요' : '',
+    const local = M.localOnly(media).length, b = M.backupStatus(), analysing = VZ.autoAnalysisStatus?.()?.running, stopped = VZ.stoppedUpload?.state?.()?.left || 0;
+    const parts = [failed ? '실패 ' + failed + '개 확인 필요' : '', stopped ? '중단된 업로드 ' + stopped + '개' : '',
       b.running ? '백업 중 ' + (b.done + b.failed) + '/' + b.total : local ? '기기에만 있는 파일 ' + local + '개' : window.vzipCloudSignedIn?.() && media.length ? '모두 백업됨' : '',
       analysing ? '분석 중' : ''].filter(Boolean);
     fileStatus.textContent = parts.join(' · ') || (media.length ? '녹음 ' + media.length + '개' : '처리할 파일이 없어요');
-    fileStatus.closest('a').dataset.state = failed ? 'error' : b.running || local || analysing ? 'busy' : 'ok';
+    fileStatus.closest('a').dataset.state = failed || stopped ? 'error' : b.running || local || analysing ? 'busy' : 'ok';
   };
   paintFiles(M.cached());
   M.list().then(paintFiles).catch(() => {});

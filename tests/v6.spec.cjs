@@ -690,11 +690,18 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   await page.evaluate(() => { const q = JSON.parse(localStorage.getItem('vzip_upload_queue_v1')); q.items[0].state = 'waiting'; localStorage.setItem('vzip_upload_queue_v1', JSON.stringify(q)); });
   await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
   await page.goto('/#/import-hub');
+  // The hub says it in one line and links to 처리 내역, the one place that shows and resumes it.
+  await expect(page.locator('[data-stopped-link]')).toHaveText(/중단된 업로드 1개 · 처리 내역에서 이어 올리기/);
+  await expect(page.locator('[data-hub] [data-q-resume]')).toHaveCount(0);
+  await page.locator('[data-stopped-link]').click();
+  await expect(page).toHaveURL(/#\/processing-log$/);
   await expect(page.locator('[data-stopped]')).toContainText('전체 22개 · 완료 19 · 남음 1');
   await expect(page.locator('[data-stopped]')).toContainText('원본 파일을 다시 선택');
+  await page.goto('/#/settings');
+  await expect(page.locator('[data-file-status]')).toContainText('중단된 업로드 1개');
 });
 
-test('A stopped upload resumes from its card: pick the same files again, finished ones are skipped and only the rest go up', async ({page}) => {
+test('A stopped upload resumes from 처리 내역: pick the same files again, finished ones are skipped and only the rest go up', async ({page}) => {
   test.setTimeout(120000);
   await boot(page, {media:false});
   const wav = tone => { const sr = 4000, n = sr * 26, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / (3 + tone)) * 4000), 44 + i * 2); return b; };
@@ -708,6 +715,8 @@ test('A stopped upload resumes from its card: pick the same files again, finishe
     localStorage.setItem('vzip_upload_queue_v1', JSON.stringify({total:5, pendingCount:0, updatedAt:Date.now(), items:sizes.map((size, i) => ({id:'q' + i, name:'11-5 #' + (i + 1) + '.m4a.wav', size, hash:'', state:i < 3 ? 'done' : 'waiting'}))}));
   }, files.map(f => f.buffer.length));
   await page.evaluate(() => { location.hash = '#/import-hub'; });
+  await expect(page.locator('[data-stopped-link]')).toContainText('중단된 업로드 2개');
+  await page.evaluate(() => { location.hash = '#/processing-log'; });
   const card = page.locator('[data-stopped]');
   await expect(card).toContainText('완료 3 · 남음 2');
   await card.locator('[data-q-resume]').setInputFiles([...files, {name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
@@ -717,7 +726,11 @@ test('A stopped upload resumes from its card: pick the same files again, finishe
   await expect(page.locator('[data-result]')).not.toContainText('실패');
   expect((await page.evaluate(() => window.__uploaded)).sort()).toEqual(['11-5 #4.m4a.wav', '11-5 #5.m4a.wav']);
   await page.evaluate(() => { location.hash = '#/home'; }); await page.evaluate(() => { location.hash = '#/import-hub'; });
-  await expect(page.locator('[data-stopped]')).toHaveCount(0); // nothing left: the card is gone
+  await expect(page.locator('[data-src]').first()).toBeVisible();
+  await expect(page.locator('[data-stopped-link]')).toHaveCount(0); // nothing left: the line is gone
+  await page.evaluate(() => { location.hash = '#/processing-log'; });
+  await expect(page.locator('[data-processing-log] [data-retry-all]')).toBeVisible();
+  await expect(page.locator('[data-stopped]')).toHaveCount(0); // and so is the card
 });
 
 test('보컬 분석: a recording sung over an MR gets a pitch curve and measurements on the device, saved on the recording', async ({page}) => {

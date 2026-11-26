@@ -33,7 +33,8 @@ test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 test('The ⋯ menu has the same items in the same order on 전체 녹음, 곡 상세, 녹음 재생 and 곡 확인', async ({page}) => {
   await open(page);
   const seen = {};
-  for (const [screen, id] of [['전체 녹음', 'row-song-s1'], ['곡 상세 › 녹음', 'row-song-s1'], ['녹음 재생', 'row-song-s1'], ['전체 녹음', 'row-plain'], ['녹음 재생', 'row-plain'], ['곡 확인', 'row-plain'], ['전체 녹음', 'row-explicit-training']]) {
+  // 녹음 재생 (#/recording/<id>) is only for a recording without a song now: one with a song opens in 곡 분석 (test below).
+  for (const [screen, id] of [['전체 녹음', 'row-song-s1'], ['곡 상세 › 녹음', 'row-song-s1'], ['전체 녹음', 'row-plain'], ['녹음 재생', 'row-plain'], ['곡 확인', 'row-plain'], ['전체 녹음', 'row-explicit-training']]) {
     const more = await SCREENS[screen](page, id);
     await more.click();
     await expect(menu(page)).toBeVisible();
@@ -50,11 +51,10 @@ test('The ⋯ menu has the same items in the same order on 전체 녹음, 곡 �
     await expect(menu(page).locator('[data-act=type]')).toContainText('녹음 유형');
     await close(page);
   }
-  // A 곡 녹음 with a song in the cloud store: everything applies, identically on the three screens that list it.
+  // A 곡 녹음 with a song in the cloud store: everything applies, identically on the screens that list it.
   const full = ['play', 'edit', 'song', 'type', 'share', 'analyze', 'download', 'delete'];
   expect(seen['전체 녹음 · row-song-s1']).toEqual(full);
   expect(seen['곡 상세 › 녹음 · row-song-s1']).toEqual(full);
-  expect(seen['녹음 재생 · row-song-s1']).toEqual(full);
   // No song yet: 보컬 분석 is left out (곡 지정 is right there); 곡 확인 adds its 전사 확인.
   const noSong = full.filter(a => a !== 'analyze');
   expect(seen['전체 녹음 · row-plain']).toEqual(noSong);
@@ -126,7 +126,7 @@ for (const [width, height] of [[320, 568], [375, 812]]) test('The popover opens 
   test.skip(test.info().project.name !== 'chromium-mobile', 'phone sizes are set explicitly');
   await page.setViewportSize({width, height});
   await open(page);
-  for (const [screen, id] of [['전체 녹음', 'row-song-s1'], ['곡 상세 › 녹음', 'row-song-s1'], ['녹음 재생', 'row-song-s1'], ['곡 확인', 'row-plain']]) {
+  for (const [screen, id] of [['전체 녹음', 'row-song-s1'], ['곡 상세 › 녹음', 'row-song-s1'], ['녹음 재생', 'row-plain'], ['곡 확인', 'row-plain']]) {
     const more = await SCREENS[screen](page, id);
     // Once as it sits, once with the button low on the screen (where an unanchored popover used to open at the top).
     for (const low of [false, true]) {
@@ -163,6 +163,27 @@ for (const [width, height] of [[834, 1194], [1280, 900]]) test('Tablet ' + width
     expect(Math.abs(placed.box.x + placed.box.width - (placed.button.x + placed.button.width))).toBeLessThanOrEqual(2);
     await close(page);
   }
+});
+
+test('An old #/recording/<id> link of a recording with a song opens 곡 분석 on that take; without a song it stays the playback page', async ({page}) => {
+  await open(page);
+  await fresh(page, '#/recording/row-song-s1');
+  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?a=row-song-s1$/);
+  await expect(page.locator('.vl-player-title strong')).toHaveText('유형 row-song-s1');
+  // A 트레이닝 practice take of the song (연습 녹음 포함 off): the same take opens, not the newest song take.
+  expect(await page.evaluate(() => window.VZ.growthSong?.practice?.())).toBeFalsy();
+  await page.evaluate(() => { window.__rows['row-practice-training'].songId = 's1'; window.__upd['row-practice-training'] = '2026-11-10T09:00:00Z'; window.VZ.media.invalidate(); });
+  await fresh(page, '#/recording/row-practice-training');
+  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?a=row-practice-training$/);
+  await expect(page.locator('.vl-player-title strong')).toHaveText('유형 row-practice-training');
+  // 뒤로 does not come back to the old link (replace).
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/home$/);
+  // A song that is gone: the playback page as before.
+  await page.evaluate(() => { window.__rows['row-plain'].songId = 'gone-song'; window.__upd['row-plain'] = '2026-11-10T09:00:00Z'; window.VZ.media.invalidate(); });
+  await fresh(page, '#/recording/row-plain');
+  await expect(page.locator('[data-recording] [data-media-more]')).toBeVisible();
+  await expect(page).toHaveURL(/#\/recording\/row-plain$/);
 });
 
 test('A 연습실 recording has a way back: ⋯ › 연습실에서 보기 opens its submission in 노래 연습실', async ({page}) => {
