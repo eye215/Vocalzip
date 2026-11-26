@@ -231,6 +231,9 @@ test('타이머로 하기 finishes without the video; 맞지 않아요 is kept a
   await to(page, '#/practice-set?guide=' + encodeURIComponent('homework:a1'));
   await expect(page).toHaveURL(/#\/practice-set$/);
   await elapse(page, .1);
+  // A set of ONE step: no ① 보이스 체크 though none is saved today (the full set would start with it).
+  await expect(run(page).locator('[data-run-count-all]')).toHaveText('1 / 1');
+  expect(await page.evaluate(() => VZ.voiceCheck.doneToday())).toBe(false);
   await run(page).getByRole('button', {name:'영상이 재생되지 않나요? 타이머로 연습하기'}).click();
   await expect(run(page).getByRole('button', {name:'타이머로 하기'})).toHaveAttribute('aria-pressed', 'true');
   await expect(run(page).locator('.dset-video')).toHaveCount(0);

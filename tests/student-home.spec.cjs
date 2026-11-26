@@ -973,7 +973,9 @@ test('a plain take asks once which goal it was for: 목표 없이 저장 changes
 const noDialog=async page=>{await page.evaluate(()=>new Promise(r=>setTimeout(r,400)));await expect(page.getByRole('dialog')).toHaveCount(0);};
 test('no goal step after a take for a lesson recording or while the practice set runs',async({page,browserName})=>{
  test.skip(browserName==='webkit',FAKE_MIC);
- await phoneWidth(page);await boot(page,timeSeed());
+ // A 보이스 체크 saved today: the set has no ① and starts on the homework goal.
+ const seeded=timeSeed();seeded.practices.push({id:'voice-check:t',date:TODAY,minutes:.5,manualMinutes:.5,practiceTimeSource:'voice-check',practiceMode:'training',songId:'',voiceCheck:{v:1,selfRating:4,at:1}});
+ await phoneWidth(page);await boot(page,seeded);
  // Lesson recording: it belongs to the lesson, the goals are not asked about (even with ?goal= in the address).
  await page.goto('/#/record?lesson=l1&goal=g1');await takeLength(page,30);await recordTake(page);await noDialog(page);
  // 오늘의 연습 is running one of the person's own steps (the homework goal, first): it links its own takes when the singer comes back.
@@ -981,7 +983,7 @@ test('no goal step after a take for a lesson recording or while the practice set
  await expect.poll(()=>page.evaluate(()=>!!VZ.practiceSetClock.state())).toBe(true);
  await page.goto('/#/record');await takeLength(page,30);await recordTake(page);await noDialog(page);
  const value=await db(page);
- expect(value.dailyGoals).toEqual(timeSeed().dailyGoals);expect(value.practices).toEqual(timeSeed().practices);
+ expect(value.dailyGoals).toEqual(seeded.dailyGoals);expect(value.practices).toEqual(seeded.practices);
  expect(await takes(page)).toHaveLength(1); // the lesson take is a lesson recording, not a practice take
 });
 test('no goal step after a take when every goal of today is done',async({page,browserName})=>{

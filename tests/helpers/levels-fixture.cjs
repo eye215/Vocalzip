@@ -7,7 +7,7 @@ const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:
  from:()=>{const c={};for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle','in','limit'])c[m]=()=>c;c.then=r=>r({data:[],error:null});return c}})};`;
 const day = n => new Date(Date.UTC(2026, 10, n)).toISOString().slice(0, 10); // November 2026, the n-th
 /** 고르기 with 목·어깨 풀기 and 음 따라 부르기 only (호흡 · 발성 · 리듬 · 곡 rest): a set of two steps, one that listens. */
-const ONLY_EAR = {id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'loosen-liptrill':true, 'loosen-hum':true, 'loosen-siren':true, 'ear-scale':true}, groupsOff:{breath:true, voice:true, rhythm:true, song:true}, replace:{}};
+const ONLY_EAR = {id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'loosen-liptrill':true, 'loosen-hum':true, 'loosen-siren':true, 'ear-scale':true}, groupsOff:{breath:true, voice:true, rhythm:true, song:true, 'voice-check':true}, replace:{}};
 /**
  * One finished set as app/daily-set-model.js saves it. opts: pitch (notes held of 5; null = no 음정 measure),
  * sd (wobble in cent; null = no 지속음 measure), hold, range ([low, high]; null = none), state of the items, left (an

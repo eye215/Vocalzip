@@ -537,3 +537,45 @@ test('AI 청취 코멘트: the 녹음 step item carries aiCoach / aiCoachAt only
   assert.deepEqual(D.coachNotes({practices:[{id:'practice-set:o',date:TODAY,dailySet:{v:1,items:[{id:'a',kind:'record',title:'녹음',state:'done'}]}}]}),[]);
   assert.deepEqual(D.coachNotes({...db,deleted:{practices:['practice-set:k']}}),[]);
 });
+
+test('① 보이스 체크 30초: first in the full set when none is saved today (default on, off in 고르기); its item keeps 0 s, the check keeps its own minutes; a 목 상태 ≤2 turns 곡에 적용하기 quiet',()=>{
+  const now=Date.parse('2026-11-04T12:00:00Z'),db=empty();
+  db.practices.push({id:'p0',date:day(-1),minutes:10,manualMinutes:10,songId:'s1',practiceMode:'song'});
+  const b=D.build(db,{today:TODAY,voiceCheck:true});
+  assert.equal(b.steps[0].kind,'voice-check');assert.equal(b.steps[0].id,'voice-check');assert.equal(b.steps[0].title,'보이스 체크 30초');
+  assert.equal(D.modeOf(b.steps[0]),'voice');assert.equal(D.labelOf(b.steps[0]),'보이스 체크');assert.equal(D.isOwn(b.steps[0]),false);
+  assert.equal(b.own.some(s=>s.kind==='voice-check'),false);
+  // Counted once in the estimate: 1 minute (30 s check and the 목 상태 answer).
+  assert.equal(b.minutes,D.build(db,{today:TODAY}).minutes+1);
+  assert.equal(D.build(db,{today:TODAY}).steps.some(s=>s.kind==='voice-check'),false); // without the check on the screen
+  // With the 30-second takes on, it still comes first.
+  const rec=JSON.parse(JSON.stringify(db));D.savePrefs(rec,{recording:true,recordSongId:'s1'});
+  assert.deepEqual(D.build(rec,{today:TODAY,voiceCheck:true}).steps.slice(0,2).map(s=>s.id),['voice-check','take-before']);
+  // 고르기: off, kept in the same row, back on with 처음대로.
+  const off=JSON.parse(JSON.stringify(db));D.savePrefs(off,D.setGroup(D.prefs(off),'voice-check',false));
+  assert.equal(off.practicePlans.find(x=>x.id===D.PREFS_ID).groupsOff['voice-check'],true);
+  assert.equal(D.build(off,{today:TODAY,voiceCheck:true}).steps.some(s=>s.kind==='voice-check'),false);
+  assert.equal(D.prefs({practicePlans:[{id:D.PREFS_ID,kind:D.PREFS_KIND,groupsOff:{'voice-check':true}}]}).groupsOff['voice-check'],true);
+  assert.deepEqual(D.resetPrefs(D.prefs(off)).groupsOff,{});
+  // A check saved today: no step ①.
+  const done=JSON.parse(JSON.stringify(db));done.practices.push({id:'voice-check:x',date:TODAY,minutes:.5,manualMinutes:.5,practiceTimeSource:'voice-check',practiceMode:'training',voiceCheck:{v:1,selfRating:4,at:now}});
+  assert.equal(D.voiceDone(done,TODAY),true);assert.equal(D.build(done,{today:TODAY,voiceCheck:true}).steps.some(s=>s.kind==='voice-check'),false);
+  // Running it: the set's clock never ran on it; the check writes its own row (as app/voice-check.js does) with 목 상태 2.
+  const s=P.start(b.steps,{id:'v',date:TODAY,now});
+  const vc={id:'voice-check:m1',date:TODAY,minutes:.5,manualMinutes:.5,practiceTimeSource:'voice-check',practiceMode:'training',voiceCheck:{v:1,selfRating:2,at:now+40000},created:now+40000};
+  db.practices.push(vc);
+  D.finishItem(s,{state:'done',result:{mode:'voice-check'},now:now+60000});
+  // Even with time somehow on the step, its item says 0.
+  s.steps[0].elapsed=45;
+  // 곡에 적용하기 of the same set reads the rating when it opens: the task without singing.
+  const apply=s.steps.find(x=>x.apply);assert.ok(apply);
+  assert.deepEqual([D.applyTask(db,TODAY).key,D.applyTask(db,TODAY).why],['reflection','rest']);
+  P.play(s,now+60000);P.tick(s,now+180000);D.finishItem(s,{state:'done',now:now+180000});
+  const r=D.save(db,s,[],{now});
+  const run=db.practices.find(p=>p.id==='practice-set:v'),item=run.dailySet.items[0];
+  assert.deepEqual([item.kind,item.state,item.seconds,item.minutes],['voice-check','done',0,0]);
+  assert.equal(run.minutes,2);assert.equal(r.minutes,2); // the 120 s of the next step only
+  assert.equal(run.technique.some(t=>/보이스/.test(t.name)),false);
+  assert.deepEqual(db.practices.find(p=>p.id==='voice-check:m1'),vc); // the check's row as it was
+  assert.equal(D.summary(s)[0].seconds,0);
+});

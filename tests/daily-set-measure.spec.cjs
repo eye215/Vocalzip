@@ -16,12 +16,12 @@ const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:
  from:()=>{const c={};for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle','in','limit'])c[m]=()=>c;c.then=r=>r({data:[],error:null});return c}})};`;
 /** 고르기 with one measuring exercise only (the others rest), so the set is that one step. */
 const ONLY = {
-  hiss:{off:{'breath-s':true, 'breath-pulse':true}, groupsOff:{loosen:true, voice:true, ear:true, rhythm:true, song:true}},
-  rhythm:{off:{}, groupsOff:{loosen:true, breath:true, voice:true, ear:true, song:true}},
-  vibrato:{off:{'voice-liptrill5':true, 'voice-hum':true, 'voice-mum':true, 'voice-high':true}, groupsOff:{loosen:true, breath:true, ear:true, rhythm:true, song:true}},
-  scale:{off:{'ear-follow':true}, groupsOff:{loosen:true, breath:true, voice:true, rhythm:true, song:true}},
-  high:{off:{'voice-liptrill5':true, 'voice-hum':true, 'voice-mum':true, 'voice-vibrato':true}, groupsOff:{loosen:true, breath:true, ear:true, rhythm:true, song:true}},
-  siren:{off:{'loosen-neck':true, 'loosen-liptrill':true, 'loosen-hum':true}, groupsOff:{breath:true, voice:true, ear:true, rhythm:true, song:true}}
+  hiss:{off:{'breath-s':true, 'breath-pulse':true}, groupsOff:{loosen:true, voice:true, ear:true, rhythm:true, song:true, 'voice-check':true}},
+  rhythm:{off:{}, groupsOff:{loosen:true, breath:true, voice:true, ear:true, song:true, 'voice-check':true}},
+  vibrato:{off:{'voice-liptrill5':true, 'voice-hum':true, 'voice-mum':true, 'voice-high':true}, groupsOff:{loosen:true, breath:true, ear:true, rhythm:true, song:true, 'voice-check':true}},
+  scale:{off:{'ear-follow':true}, groupsOff:{loosen:true, breath:true, voice:true, rhythm:true, song:true, 'voice-check':true}},
+  high:{off:{'voice-liptrill5':true, 'voice-hum':true, 'voice-mum':true, 'voice-vibrato':true}, groupsOff:{loosen:true, breath:true, ear:true, rhythm:true, song:true, 'voice-check':true}},
+  siren:{off:{'loosen-neck':true, 'loosen-liptrill':true, 'loosen-hum':true}, groupsOff:{breath:true, voice:true, ear:true, rhythm:true, song:true, 'voice-check':true}}
 };
 const prefs = mode => ({id:'daily-set-prefs', kind:'daily-set-prefs', v:1, replace:{}, ...ONLY[mode]});
 const seed = (extra = {}) => ({categories:[], songs:[{id:'s1', title:'This Is the Moment'}], lessons:[], assignments:[], practices:[], performances:[], comparisonReports:[], dailyGoals:[],
@@ -136,7 +136,7 @@ test('오늘의 연습: the measuring exercises are in the set when 호흡 · �
   const days = Array.from({length:12}, (_, i) => day(i + 1)), seen = new Set(days.flatMap(d => D.build(seed(), {today:d}).steps.map(s => s.exercise)));
   for (const id of ['breath-hiss', 'voice-vibrato', 'rhythm-ta']) expect(seen.has(id), id).toBe(true);
   // On the card: 호흡 with only “스~” 길게 on, and 리듬.
-  await boot(page, seed({practicePlans:[{id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'breath-s':true, 'breath-pulse':true}, groupsOff:{song:true}, replace:{}}]}));
+  await boot(page, seed({practicePlans:[{id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'breath-s':true, 'breath-pulse':true}, groupsOff:{song:true, 'voice-check':true}, replace:{}}]}));
   const names = card(page).locator('[data-set-line] li .vz-set-item span'), labels = card(page).locator('[data-set-line] li .vz-set-item b');
   await expect(labels).toHaveText(['목 풀기', '호흡 · 추천', '발성', '음감', '리듬']);
   await expect(names.nth(1)).toHaveText('“스~” 길게');

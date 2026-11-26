@@ -11,7 +11,9 @@
  * button stops it — and shows as a small pill elsewhere (app/practice-set-mini.js, V.practiceSetClock).
  * 따라 하기 (#/practice-set?guide=<key>[&song=<id>], VZ.guideHref; old #/guided-practice/<key> links redirect here) starts a
  * set of ONE step (VZ.guidedStepFor, app/guided-practice.js) — a set like any other: one at a time, never while the free
- * timer runs, saved through the same summary. */
+ * timer runs, saved through the same summary.
+ * ① 보이스 체크 30초 (D.build options.voiceCheck): a link step that opens #/voice-check/run and comes back; it is done when
+ * a check is saved today (voiceStepDone, read when the set is shown), never started on the set's clock. */
 (()=>{
 'use strict';
 const V=window.VZ,P=window.VzipPracticeSet,D=window.VzipDailySet;
@@ -105,7 +107,7 @@ function fresh(own){
   const today=V.today();own||=todayOwn(today);
   // 내 로드맵's focus (what the recordings show to fix) goes first in its groups (app/roadmap.js).
   let focus=null;try{focus=V.roadmap?.()?.focus||null;}catch{}
-  const built=D.build(V.db,{today,recentSongId:recentSongId(),...(own?{own}:{}),...(focus?.length?{focus}:{})});
+  const built=D.build(V.db,{today,recentSongId:recentSongId(),voiceCheck:!!V.voiceCheck?.open,...(own?{own}:{}),...(focus?.length?{focus}:{})});
   const slot=built.template?.slot||'';
   return {today,steps:built.steps,own:built.own,base:built.base,slot,prefs:built.prefs};
 }
@@ -137,7 +139,7 @@ V.practiceSetEntry=()=>{
     const run=D.runsOn(V.db,V.today()).filter(r=>!D.isGuideRun(r)).at(-1);
     if(run){
       // Under a minute is said in seconds ("40초"), not rounded to "0분" (2026-11-25: a 30-second measure read as 0분).
-      const timeOf=x=>{const sec=Math.round(Number(x.seconds??Number(x.minutes)*60)||0);return sec>0&&sec<60?sec+'초':Math.round(Number(x.minutes)||sec/60)+'분';};
+      const timeOf=x=>{if(x.kind==='voice-check')return '따로';const sec=Math.round(Number(x.seconds??Number(x.minutes)*60)||0);return sec>0&&sec<60?sec+'초':Math.round(Number(x.minutes)||sec/60)+'분';};
       const items=run.dailySet.items.map(x=>({id:x.id,title:shortTitle(x),label:D.labelOf(x),minutes:Math.round(x.minutes),time:timeOf(x),mic:!!x.mic,state:x.state==='done'?'done':x.state==='skipped'?'skipped':'left'}));
       const n=items.filter(x=>x.state==='done').length,minutes=Math.round(Number(run.dailySet.minutes??run.manualMinutes??run.minutes)||0);
       // Stopped part-way and saved: said as it is, not as finished.
@@ -222,7 +224,7 @@ function keepPrefs(next,toast=''){
 function planHtml(){
   const steps=draft.steps,own=new Set(draft.own.map(s=>s.id)),day=DAYS[P.weekday(draft.today)];
   const row=s=>{
-    const mine=own.has(s.id),edit=mine||s.kind==='exercise'||s.kind==='take';
+    const mine=own.has(s.id),edit=mine||s.kind==='exercise'||s.kind==='take'||s.kind==='voice-check';
     const copy='<span class="pset-row-copy"><small>'+esc(kindLabel(s))+(s.optional?' · 선택':'')+(s.focus?'<span class="pset-focus-tag">추천</span>':'')+'</small><strong>'+esc(shortTitle(s))+'</strong>'+
       (s.segmentStart!=null?'<em>구간 '+esc(P.segmentLabel(s.segmentStart,s.segmentEnd))+'</em>':'')+(D.applyInfo?.(s)?'<em data-room-task="'+esc(s.roomTask)+'">'+esc(D.applyInfo(s).name)+'</em>':'')+(s.focus?'<em class="pset-why" data-focus-why>'+esc(s.focus.why)+'</em>':'')+'</span>'+
       '<span class="pset-fixed">'+(s.mic?micBadge:'')+'<b>'+s.minutes+'분</b>'+(edit?'<i class="ph ph-caret-right" aria-hidden="true"></i>':'')+'</span>';
@@ -249,9 +251,21 @@ function bindPlan(host){
 /** The sheet of one row: what can be changed about that step, nothing else. */
 function rowSheet(id){
   const st=draft?.steps.find(s=>s.id===id);if(!st)return;
+  if(st.kind==='voice-check')return voiceSheet();
   if(st.kind==='exercise')return groupSheet(st);
   if(st.kind==='take')return recordSheet();
   if(draft.own.some(s=>s.id===id))return ownSheet(st);
+}
+/** ① 보이스 체크 30초: what it is, and 빼기 (고르기's switch: groupsOff['voice-check'], back from + 연습 추가). */
+function voiceSheet(){
+  const pf=D.prefs(V.db);
+  V.sheet({title:'보이스 체크 30초',
+    body:'<div class="pset-group-form" data-voice-sheet><p class="pset-help">오늘 보이스 체크를 아직 안 했으면 첫 단계로 넣어요. 보이스 체크 시간은 보이스 체크 기록에만 세고, 오늘의 연습 시간에는 더하지 않아요.</p>'+
+      '<p class="pset-help">목 상태를 1–2점으로 고르면 오늘 곡 과제를 소리 없이 하는 것으로 바꿔요.</p>'+
+      '<button type="button" class="pset-chip pset-rest" data-rest><i class="ph ph-moon" aria-hidden="true"></i>보이스 체크 빼기</button></div>',
+    onMount:(el,close)=>{
+      el.querySelector('[data-rest]').onclick=()=>{if(keepPrefs({...pf,groupsOff:{...pf.groupsOff,[D.VOICE.id]:true}},'보이스 체크를 세트에서 뺐어요. 연습 추가에서 다시 넣을 수 있어요.'))close();};
+    }});
 }
 /** A built-in exercise: which exercises of its group take turns (one a day), or rest the whole group. */
 function groupSheet(st){
@@ -338,8 +352,8 @@ function addSheet(){
   const goals=draft.base.filter(s=>s.kind==='goal'&&!have.has(s.goalId));
   const lastSong=[...draft.own].reverse().find(s=>s.songId)?.songId||recentSongId();
   const warm=draft.base.find(s=>s.kind==='warmup')||{kind:'warmup',title:'웜업 · 호흡과 발성',detail:'호흡과 발성',categoryLabel:'발성',tips:[]};
-  const resting=[...D.GROUPS,D.SONG].filter(g=>pf.groupsOff[g.id]);
-  const options=[...resting.map(g=>({key:'group:'+g.id,label:g.title,meta:'기본 연습 · 다시 넣기',group:g.id})),
+  const resting=[...D.GROUPS,D.SONG,D.VOICE].filter(g=>pf.groupsOff[g.id]);
+  const options=[...resting.map(g=>({key:'group:'+g.id,label:g.id===D.VOICE.id?'보이스 체크 30초':g.title,meta:g.id===D.VOICE.id?'첫 단계 · 다시 넣기':'기본 연습 · 다시 넣기',group:g.id})),
     ...goals.map(s=>({key:'goal:'+s.goalId,label:s.title,meta:kindLabel(s),step:s})),
     ...(!kinds.has('warmup')?[{key:'warmup',label:warm.title,meta:'웜업 · 내 방식대로',step:warm}]:[]),
     ...(!kinds.has('record')&&lastSong&&V.song(lastSong)?[{key:'record',label:'녹음 · '+songTitle(lastSong),meta:'녹음 · 선택',step:{kind:'record',songId:lastSong,title:'녹음 · '+songTitle(lastSong),optional:true,minutes:3}}]:[]),
@@ -415,6 +429,7 @@ function micKnown(){
 function resultLine(st){
   const r=st.result||{},name=shortTitle(st);
   if(st.skipped)return name+' · 건너뛰었어요';
+  if(st.kind==='voice-check')return name+' · 기록했어요';
   if(r.mode==='hold'&&!r.timer&&Array.isArray(r.notes))return name+' · 음 '+r.notes.length+'개 중 '+r.notes.filter(n=>n.ok).length+'개 맞췄어요';
   if(r.mode==='take')return name+' · 저장했어요';
   const measured=window.VzipDailyMeasure?.resultWords?.(r);if(measured)return name+' · '+measured;
@@ -590,7 +605,13 @@ function runContext(){
     saveComfort(c){return V.change(db=>{D.savePrefs(db,{...D.prefs(db),comfort:c});},{silent:true})?comfortNow():null;},
     mic:micKnown,
     setMic(value){session.mic=value;persist();try{if(value==='granted')store().setItem(MIC_KEY(),'ok');}catch{}},
-    saveTake,helper:helperHtml,bindHelper,why:whyOf,note:noteOf,lastLine:()=>lastDone};
+    saveTake,helper:helperHtml,bindHelper,why:whyOf,note:noteOf,lastLine:()=>lastDone,
+    /** ① 보이스 체크: the check opens and comes back here when it saves (onDone; a 뒤로 returns here by itself). The set's
+     * clock is not started; whether the step is done is read from the saved check when the set is shown again. */
+    voiceCheck(){
+      if(!V.voiceCheck?.open)return V.toast('보이스 체크를 열 수 없어요.','error');
+      V.voiceCheck.open({onDone:()=>V.nav('#/practice-set'),onCancel:()=>{}});
+    }};
 }
 /** 곡에 적용하기 not started yet: its task is read again, so a 보이스 체크 done earlier in this set (목 상태 1–2)
  * turns it into the task done without singing. */
@@ -599,8 +620,17 @@ function refreshTask(st){
   const t=D.applyTask?.(V.db,session.date);if(!t||(t.key===st.roomTask&&t.why===st.roomWhy))return;
   st.roomTask=t.key;st.roomWhy=t.why;persist();
 }
+/** ① 보이스 체크 in hand and a check saved today (in its flow or anywhere else): the step is done, with no time. */
+function voiceStepDone(){
+  const st=session?.steps[session.index];
+  if(session?.phase!=='run'||st?.kind!=='voice-check'||st.done||st.skipped||!V.voiceCheck?.doneToday?.())return false;
+  D.finishItem(session,{state:'done',result:{mode:'voice-check'},now:Date.now()});lastDone=resultLine(st);
+  if(session.phase==='run')session.steps[session.index].openedAt||=Date.now();
+  persist();changed();return true;
+}
 function mountRun(host){
   runner?.destroy();
+  if(voiceStepDone()&&session.phase!=='run')return paint();
   refreshTask(session.steps[session.index]);
   const st=session.steps[session.index],go=autostart;autostart=false;
   runner=V.dailySetRunner.mount(host.querySelector('[data-pset-run]'),runContext());
@@ -633,6 +663,7 @@ function bindAway(host){
 const STATE={done:'완료',skipped:'건너뜀',left:'안 함'};
 function resultText(r){
   const x=r.result||{};
+  if(r.kind==='voice-check')return r.state==='done'?'보이스 체크 기록에 시간을 따로 셌어요':'';
   if(x.mode==='hold'&&!x.timer&&Array.isArray(x.notes))return '음 '+x.notes.length+'개 중 '+x.notes.filter(n=>n.ok).length+'개'+(x.accuracy!=null?' · 맞은 시간 '+x.accuracy+'%':'');
   if(x.mode==='hold'&&x.timer)return '타이머로 했어요';
   if(x.mode==='guide')return x.timer?'타이머로 했어요':'영상과 함께 했어요';
@@ -648,7 +679,7 @@ function summaryHtml(){
         (extra?'<em>'+esc(extra)+'</em>':'')+
         (st.kind==='goal'?'<label class="pset-check"><input type="checkbox" data-done'+(r.done?' checked':'')+'><span>목표 완료로 체크</span></label>':'')+
         (r.mediaIds.length?'<em>녹음 '+r.mediaIds.length+'개 연결</em>':'')+(st.kind==='record'&&(r.mediaIds.length||st.aiCoach)?coachSlot(st,{ask:r.mediaIds.length>0}):'')+'</span>'+
-        (r.measured?'<span class="pset-fixed"><b data-sec="'+r.seconds+'">'+(st.kind==='take'?'—':took(r.seconds))+'</b></span>':
+        (r.measured?'<span class="pset-fixed"><b data-sec="'+r.seconds+'">'+(st.kind==='take'?'—':st.kind==='voice-check'?'따로':took(r.seconds))+'</b></span>':
           '<label class="pset-min"><input type="number" inputmode="numeric" min="0" max="600" value="'+r.minutes+'" data-min aria-label="'+esc(st.title)+' 연습한 시간(분)"><span>분</span></label>')+'</li>';}).join('')+'</ul>'+
     '<p class="pset-sum-total">합계 <b data-sum></b></p>'+
     '<p class="pset-sum-today" data-sum-today></p>'+
