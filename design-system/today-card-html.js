@@ -5,7 +5,7 @@
  *   list    계획 rows (today's goals: check circle · title · 숙제/계획/반복 n/m · minutes) and, under a divider, 추가 rows
  *           (today's records linked to no goal: green + · title · 추가 · minutes). The data is app/today-card.js.
  *   inline  Nothing in this card opens a sheet or a popup: a 계획 row opens chips under itself (오늘 기록 연결 · 시간 적고
- *           체크 · 세트로 하기), a 추가 row opens 곡·분류·메모, + 직접 적기 opens a short form. Only + 계획 넣기 opens the
+ *           체크 · 세트로 하기 · 녹음하기 — the recorder carrying the goal), a 추가 row opens 곡·분류·메모, + 직접 적기 opens a short form. Only + 계획 넣기 opens the
  *           goal picker as before.
  *   set     오늘의 연습: its state line, "시작하면: …" (the steps unfold under it), 시작하기 and 타이머만 켜기 beside it. While
  *           the free timer runs (app/free-timer.js) the two buttons give way to "연습 중 · mm:ss · 멈추기".
@@ -59,7 +59,7 @@ export const TODAY_CARD_CSS=String.raw`
 #vocalzip-refined-preview .vz-today-min[data-empty="true"]{color:#98A2B3;}
 #vocalzip-refined-preview .vz-today-panel{margin:0 0 10px 33px;}
 #vocalzip-refined-preview .vz-today-chips{display:flex;flex-wrap:wrap;gap:6px;}
-#vocalzip-refined-preview .vz-today-chip{display:inline-flex;align-items:center;min-height:36px;max-width:100%;margin:0;padding:0 12px;border:1px solid #E4D7FB;border-radius:999px;background:#fff;color:var(--vz-color-accent,#7A32F5);font:inherit;font-size:13px;line-height:18px;font-weight:600;cursor:pointer;text-align:left;}
+#vocalzip-refined-preview .vz-today-chip{display:inline-flex;box-sizing:border-box;text-decoration:none;align-items:center;min-height:36px;max-width:100%;margin:0;padding:0 12px;border:1px solid #E4D7FB;border-radius:999px;background:#fff;color:var(--vz-color-accent,#7A32F5);font:inherit;font-size:13px;line-height:18px;font-weight:600;cursor:pointer;text-align:left;}
 #vocalzip-refined-preview .vz-today-chip[aria-pressed="true"]{border-color:var(--vz-color-accent,#7A32F5);background:var(--vz-color-accent,#7A32F5);color:#fff;}
 #vocalzip-refined-preview .vz-today-chip.is-link{background:#F3ECFF;border-color:#F3ECFF;}
 #vocalzip-refined-preview .vz-today-chip:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;}
@@ -160,7 +160,7 @@ export function createTodayCard(opts={}){
    return '<form class="vz-today-form" data-time-form="'+esc(g.id)+'">'+minutesForm(d,{submit:g.done?"저장":"저장하고 체크",question:"얼마나 연습했나요?"})+"</form>";
   }
   const links=(model.open||[]).map(x=>chip("오늘 기록 연결 · "+x.label,'data-link="'+esc(x.id)+'" data-k="link:'+esc(g.id)+":"+esc(x.id)+'"',"is-link")).join("");
-  return '<div class="vz-today-chips">'+links+chip(g.done?(g.minutes?"시간 고치기":"시간 적기"):"시간 적고 체크",'data-time data-k="time:'+esc(g.id)+'"')+(model.set?chip("세트로 하기",'data-set-from-plan'):"")+'</div><p class="vz-today-error" role="alert" data-error></p>';
+  return '<div class="vz-today-chips">'+links+chip(g.done?(g.minutes?"시간 고치기":"시간 적기"):"시간 적고 체크",'data-time data-k="time:'+esc(g.id)+'"')+(model.set?chip("세트로 하기",'data-set-from-plan'):"")+(g.record?'<a class="vz-today-chip" data-record-goal href="'+esc(g.record)+'">녹음하기</a>':"")+'</div><p class="vz-today-error" role="alert" data-error></p>';
  }
  function extraPanel(x){
   if(!x.editable)return '<p class="vz-today-help">'+(x.kind==="set"?"오늘의 연습에서 기록했어요.":"다른 화면에서 남긴 기록이에요.")+' <a href="#/practices">연습 기록 보기</a></p>';

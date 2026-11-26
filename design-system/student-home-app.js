@@ -143,7 +143,9 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   if(entry)set={...entry,button:entry.state==='new'?'시작하기 · 약 '+entry.minutes+'분':entry.button};
   const goal=id=>(V.db.dailyGoals||[]).find(g=>g?.id===id);
   return {today:date,counts:data.counts,minutes:x.minutes,target:x.targetMinutes,days,
-   plan:data.plan.map(g=>({...g,suggest:R?.suggestMinutes?.(V.db,goal(g.id))?.minutes??null})),extra:data.extra,open:data.open,hint,set,
+   // 녹음하기: the recorder carries the goal (and its song), as the goal row's mic did.
+   plan:data.plan.map(g=>{const sid=goal(g.id)?.songId;return {...g,suggest:R?.suggestMinutes?.(V.db,goal(g.id))?.minutes??null,
+    record:'#/record?goal='+encodeURIComponent(g.id)+(sid&&V.song(sid)?'&song='+encodeURIComponent(sid):'')};}),extra:data.extra,open:data.open,hint,set,
    groups:(window.VzipDailySet?.GROUPS||[]).map(g=>g.title),timer:V.freeTimer?.state()||null,timerBlocked:!V.freeTimer||!!V.freeTimer.blocked(),note:V.freeTimer?.note?.()||null,
    links:linkRows(),chips:V.PRACTICE_MINUTE_CHIPS||[5,10,20,30,60],songs:liveSongs(),categories:categoryNames()};
  }

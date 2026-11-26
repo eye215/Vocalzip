@@ -22,7 +22,7 @@ const seed = () => ({
   dailyGoals:[
     {id:'g1', date:TODAY, title:'2절 브릿지 호흡 위치', source:'homework', sourceId:'a1', completed:true, order:0},
     {id:'g2', date:TODAY, title:'허밍 롱톤 8초', source:'personal', sourceId:'', completed:false, order:1},
-    {id:'g3', date:TODAY, title:'가사 1절 외우기', source:'personal', sourceId:'', completed:false, order:2}
+    {id:'g3', date:TODAY, title:'가사 1절 외우기', source:'personal', sourceId:'', songId:'s2', completed:false, order:2}
   ],
   practicePlans:[{id:'day:'+TODAY, period:'day', date:TODAY, targetMinutes:30}]
 });
@@ -150,7 +150,9 @@ test('a 계획 row opens in place; 오늘 기록 연결 links today\'s record to
   await planRow(page, '허밍 롱톤 8초').locator('.vz-today-main').click();
   await expect(planRow(page, '허밍 롱톤 8초').locator('.vz-today-main')).toHaveAttribute('aria-expanded', 'true');
   const chips = planRow(page, '허밍 롱톤 8초').locator('.vz-today-panel .vz-today-chip');
-  await expect(chips).toHaveText(['오늘 기록 연결 · 호흡 · On My Own 15분','시간 적고 체크','세트로 하기']);
+  await expect(chips).toHaveText(['오늘 기록 연결 · 호흡 · On My Own 15분','시간 적고 체크','세트로 하기','녹음하기']);
+  // 녹음하기 opens the recorder carrying the goal (and its song when it has one), as the goal row's mic did.
+  await expect(planRow(page, '허밍 롱톤 8초').getByRole('link', {name:'녹음하기', exact:true})).toHaveAttribute('href', '#/record?goal=g2');
   await expect(sheets(page)).toHaveCount(0);
   await chips.first().click();
   await expect(card(page).locator('[data-extra]')).toHaveCount(0);
@@ -165,7 +167,11 @@ test('a 계획 row opens in place; 오늘 기록 연결 links today\'s record to
   expect(await todayMinutes(page)).toBe(27);
   // The record is not offered to another goal any more.
   await planRow(page, '가사 1절 외우기').locator('.vz-today-main').click();
-  await expect(planRow(page, '가사 1절 외우기').locator('.vz-today-panel .vz-today-chip')).toHaveText(['시간 적고 체크','세트로 하기']);
+  await expect(planRow(page, '가사 1절 외우기').locator('.vz-today-panel .vz-today-chip')).toHaveText(['시간 적고 체크','세트로 하기','녹음하기']);
+  await expect(planRow(page, '가사 1절 외우기').getByRole('link', {name:'녹음하기', exact:true})).toHaveAttribute('href', '#/record?goal=g3&song=s2');
+  await planRow(page, '가사 1절 외우기').getByRole('link', {name:'녹음하기', exact:true}).click();
+  await expect(page).toHaveURL(/#\/record\?goal=g3&song=s2$/);
+  await expect(page.locator('[data-record-goal]')).toHaveText('목표: 가사 1절 외우기');
   // The goal picker keeps a goal with a linked record (unticking it there never leaves the record without its goal).
   expect(await page.evaluate(() => VzipStudentHomeModel.keptGoal({...VZ.db, dailyGoals:[]}, {...VZ.db.dailyGoals.find(g => g.id === 'g2'), completed:false}))).toBe('recorded');
 });
