@@ -52,7 +52,7 @@ test('#/next-practice: one ranked list — every source on one row, 담김, 목�
   await expect(a.locator('.np-why')).toContainText('On My Own');
   await expect(a.locator('[data-np-chip]')).toHaveText(['숙제']);
   await expect(a.locator('[data-np-go]')).toHaveText('따라 하기');
-  await expect(a.locator('[data-np-go]')).toHaveAttribute('href', '#/guided-practice/homework%3AhwA');
+  await expect(a.locator('[data-np-go]')).toHaveAttribute('href', '#/practice-set?guide=homework%3AhwA');
   // The homework that is already today's goal: ONE row with both sources, shown as 담김.
   await expect(b.locator('[data-np-chip]')).toHaveText(['숙제', '오늘 목표']);
   await expect(b.locator('[data-np-added]')).toHaveText('목표에 담김 ✓');

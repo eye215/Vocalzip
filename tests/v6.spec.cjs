@@ -3324,7 +3324,9 @@ test('AI exercise appears inline in the same card form and follow-along uses its
  await page.goto('/#/song/s1');await page.goto('/#/vocal-lab/s1');await labClear(page); await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');
  await page.reload();await labClear(page); await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('[data-ai-status]')).toContainText('저장된 AI 추천');expect(await page.evaluate(()=>VZ.db.practices.length)).toBe(before);
  await page.evaluate(()=>VZ.practiceSheet=input=>window.__recordPreset=input);await card.getByRole('button',{name:'연습 기록에 담기'}).click();expect(await page.evaluate(()=>__recordPreset.preset.minutes)).toBe(4);
- await card.getByRole('link',{name:'따라 하기'}).click();await expect(page.locator('.gp-screen h2')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('.gp-instruction h3')).toHaveText('가사 한 줄을 읽어요.');
+ await card.getByRole('link',{name:'따라 하기'}).click();
+ // 따라 하기 is a set of one step in 오늘의 연습 (2026-11-26): the saved steps are what that step says to do.
+ await expect(page).toHaveURL(/#\/practice-set$/);await expect(page.locator('[data-pset-run] [data-run-say]')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('[data-pset-run] .dset-guide-lines li').first()).toHaveText('가사 한 줄을 읽어요.');
 });
 
 test('v4 IA: 보관함 survives as 내 곡 › 전체 녹음 with the old route and no data change', async ({page}) => {

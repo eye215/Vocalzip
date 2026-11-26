@@ -53,16 +53,20 @@ function goalOf(it, goals, date) {
 function doneByRecord(it, practices, runs) {
   const a = it.action || {};
   if (a.kind === 'skill' && a.exercise) return runs.some(r => list(r.dailySet?.items).some(x => x.exercise === a.exercise && x.state === 'done'));
-  if (a.kind === 'practice-tip') return practices.some(p => p.guidedExerciseKey === 'analysis:' + a.tipKey);
-  if (a.kind === 'homework') return practices.some(p => p.guidedExerciseKey === 'homework:' + a.assignmentId);
+  // 따라 하기: a row of the old screen (guidedExerciseKey), or a set of one step whose step is 'guide:<key>'.
+  const guided = key => practices.some(p => p.guidedExerciseKey === key) || runs.some(r => list(r.dailySet?.items).some(x => x.id === 'guide:' + key && x.state === 'done'));
+  if (a.kind === 'practice-tip') return guided('analysis:' + a.tipKey);
+  if (a.kind === 'homework') return guided('homework:' + a.assignmentId);
   return false;
 }
-/** The way to start an item that exists today: 따라 하기 (연습 따라 하기), 오늘의 연습, the song's 레슨 지적 체크, … */
+const guideHref = (key, songId = '') => V.guideHref ? V.guideHref(key, songId) : '#/practice-set?guide=' + encodeURIComponent(key) + (songId ? '&song=' + encodeURIComponent(songId) : '');
+/** The way to start an item that exists today: 따라 하기 (a set of one step), 오늘의 연습, the song's 레슨 지적 체크, … */
 function goOf(it) {
   const a = it.action || {}, enc = encodeURIComponent;
   switch (a.kind) {
-    case 'homework': return {href:'#/guided-practice/' + enc('homework:' + a.assignmentId), label:'따라 하기'};
-    case 'practice-tip': return {href:'#/guided-practice/' + enc('analysis:' + a.tipKey) + (a.songId ? '?song=' + enc(a.songId) : ''), label:'따라 하기'};
+    // 따라 하기: a set of one step in 오늘의 연습 (VZ.guideHref, app/guided-practice.js).
+    case 'homework': return {href:guideHref('homework:' + a.assignmentId), label:'따라 하기'};
+    case 'practice-tip': return {href:guideHref('analysis:' + a.tipKey, a.songId || ''), label:'따라 하기'};
     case 'skill': return {href:'#/practice-set', label:'오늘의 연습에서 하기'};
     case 'plan': return {href:'#/practice-set', label:'오늘의 연습으로'};
     case 'lesson-point': return {href:a.href || '#/song/' + enc(a.songId || ''), label:'곡에서 체크'};
