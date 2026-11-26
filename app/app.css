@@ -779,3 +779,10 @@ body .sheet-page #practice-log .vz-practice-same .chip{justify-self:start;min-he
 .tidy-foot{position:sticky;bottom:calc(var(--nav-h) + var(--safe-b) + 8px);padding:8px 0;z-index:2}
 .tidy-head .sec .muted{margin-left:6px;font-weight:600}
 body[data-vz-route="library-tidy"] .vz-collection-record{display:none!important} /* the delete bar sits where it would */
+/* 베스트 테이크 후보 (app/repertoire.js › 대표 테이크 선택) */
+.archive-best{display:grid;gap:8px;margin:0 0 16px;padding:12px;border-radius:16px;background:#F4EEFF}
+.archive-best h3{margin:0;font-size:15px;line-height:21px}
+.archive-best>p{margin:0}
+.archive-best-row{display:grid;gap:4px;padding:8px;border-radius:14px;background:#fff}
+.archive-best-why{margin:0 4px;color:var(--ink)}
+.archive-best-row .chip{justify-self:start;min-height:40px}
