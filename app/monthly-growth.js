@@ -328,7 +328,9 @@ async function mount(host,{kind='month',month='',onMonth=null}={}){
     if(state)state.textContent='요약 데이터를 분석하고 있어요. 화면을 닫으면 완료 결과가 저장되지 않을 수 있어요.';
     try{
       const response=await window.vzipCloudCoach(evidence);
-      if(!host.isConnected||my!==request||!window.vzipCloudSignedIn?.()||owner!==window.vzipCloudUserId?.()||
+      // ‹ › to another period while it runs (a new report in the same host) keeps the result for its own month; leaving
+      // 성장 (host gone) or another account does not.
+      if(!host.isConnected||!window.vzipCloudSignedIn?.()||owner!==window.vzipCloudUserId?.()||
           origin!==window.vzipCloudSessionId?.()||response?.mode!=='monthly'||response.month!==month)
         throw Error('화면이나 계정이 변경되어 결과를 저장하지 않았어요.');
       const note=String(response.note||'').trim().slice(0,1800);
@@ -343,7 +345,7 @@ async function mount(host,{kind='month',month='',onMonth=null}={}){
       if(!ok)throw Error('AI 리포트 저장에 실패했어요.');
       // A different month can be selected while the model is generating.
       // Never replace the currently displayed month's card with the old result.
-      if(visibleSerial===renderSerial&&selected===month)render();
+      if(my===request&&visibleSerial===renderSerial&&selected===month)render();
       V.toast('월간 AI 리포트를 저장했어요.');
     }catch(err){if(state?.isConnected)state.textContent=err.message||'AI 리포트 생성에 실패했어요.';V.toast('월간 분석에 실패했어요. 기존 기록은 유지돼요.','error');}
     finally{monthlyAiBusy=false;if(aiButton.isConnected){aiButton.disabled=false;aiButton.textContent='AI 월간 종합 분석하기';}}

@@ -54,23 +54,16 @@ async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[
   };
  },{recordings,plans,goals,reports,practices});
  for(const f of scripts)await page.addScriptTag({path:path.resolve(__dirname,'..',f)});
- await page.evaluate(()=>{
-  const def=window.VZ.routes['growth-flow'];
-  const el=document.getElementById('test-root');
-  el.innerHTML=def.render();
-  def.mount(el);
- });
- await expect(page.locator('[data-growth-mode="overall"]')).toBeVisible();
- if(view==='monthly'){
-  await page.locator('[data-growth-mode="monthly"]').click();
-  await expect(page.locator('[data-growth-select]')).toBeVisible();
- }else{
-  await expect(page.locator('.growth-hero')).toBeVisible();
- }
+ await show(page,view==='monthly'?'month':'all');
+}
+/* The report of one period, as 성장 › 나 mounts it under its 주 · 월 · 전체 switch (큰 정리 3번; #/growth-flow leads there). */
+async function show(page,kind,month=''){
+ await page.evaluate(({kind,month})=>window.VZ.growthReport.mount(document.getElementById('test-root'),{kind,month}),{kind,month});
+ if(kind==='month')await expect(page.locator('[data-mbs-scope="all"]')).toBeVisible();
+ else await expect(page.locator('.growth-hero')).toBeVisible();
 }
 test('empty library still shows current month and permits a song plan without a recording',async({page})=>{
  await boot(page);
- await expect(page.locator('[data-growth-select]')).toHaveValue('2026-11');
  await page.locator('details.growth-plan-expand').last().locator('summary').click();
  await page.locator('[data-plan-form] [name=song]').selectOption('song-1');
  await page.locator('[data-plan-form] [name=metric]').selectOption('stability');
@@ -121,10 +114,9 @@ test('monthly AI is explicit opt-in and month switching never replaces a differe
  expect(await page.evaluate(()=>window.__coachCalls)).toBe(0);
  await page.evaluate(()=>{window.vzipCloudCoach=async data=>{window.__coachCalls++;return new Promise(resolve=>window.__releaseCoach=()=>resolve({mode:'monthly',month:data.month,note:'요약: 11월 확인'}));};});
  await page.locator('[data-monthly-ai-run]').click();
- await page.locator('[data-growth-select]').selectOption('2026-10');
+ await show(page,'month','2026-10'); // 나's ‹ : the previous month's report
  await page.evaluate(()=>window.__releaseCoach());
  await expect.poll(()=>page.evaluate(()=>VZ.db.monthlyAiReports.length)).toBe(1);
- await expect(page.locator('[data-growth-select]')).toHaveValue('2026-10');
  await expect(page.locator('[data-monthly-ai]')).not.toContainText('11월 확인');
  expect(await page.evaluate(()=>window.__coachCalls)).toBe(1);
 });
@@ -187,7 +179,7 @@ test('song growth listening evidence excludes training-only and unassigned sessi
  await boot(page,{practices});
  await expect(page.locator('.growth-listening')).toHaveCount(1);
  await expect(page.locator('.growth-listening')).toContainText('지정 곡의 짧은 소리');
- await expect(page.locator('.growth-page')).not.toContainText('훈련 전용 코멘트');
+ await expect(page.locator('#test-root')).not.toContainText('훈련 전용 코멘트');
  await page.evaluate(()=>{window.vzipCloudCoach=async evidence=>{
    window.__coachEvidence=evidence;
    return {mode:'monthly',month:evidence.month,note:'요약: 곡의 기록 확인'};
@@ -221,10 +213,10 @@ test('AI 청취 관찰 also lists 오늘의 연습 녹음 comments (run-row item
  await expect(quotes.first()).toContainText('2026-11-09 · 오늘의 연습');
  await expect(quotes.first()).toContainText('AI 제안: 한 번 더');
  await expect(quotes.nth(4)).toContainText('방 첫째'); // newest first: the oldest room comment drops out of the five
- await expect(page.locator('.growth-page')).not.toContainText('방 영번째');
- await expect(page.locator('.growth-page')).toContainText('AI 청취 코멘트 6건');
- await expect(page.locator('.growth-page')).not.toContainText('노래 없는 세트');
- await expect(page.locator('.growth-page')).not.toContainText('지난달 세트');
+ await expect(page.locator('#test-root')).not.toContainText('방 영번째');
+ await expect(page.locator('#test-root')).toContainText('AI 청취 코멘트 6건');
+ await expect(page.locator('#test-root')).not.toContainText('노래 없는 세트');
+ await expect(page.locator('#test-root')).not.toContainText('지난달 세트');
 });
 
 test('all-time dashboard combines lifetime counts, consistent same-song metrics, monthly chart and opt-in overall AI',async({page})=>{
@@ -253,9 +245,8 @@ test('all-time dashboard combines lifetime counts, consistent same-song metrics,
  await page.locator('[data-overall-ai-run]').click();
  await expect.poll(()=>page.evaluate(()=>VZ.db.overallAiReports.length)).toBe(1);
  expect(await page.evaluate(()=>window.__coachCalls)).toBe(1);
- await page.locator('[data-growth-mode="monthly"]').click();
- await expect(page.locator('[data-growth-select]')).toBeVisible();
- await page.locator('[data-growth-mode="overall"]').click();
+ await show(page,'month');
+ await show(page,'all');
  await expect(page.locator('.growth-ai-note')).toContainText('기록을 확인했어요');
 });
 test('all-time with no analyzed recording explains missing measurements instead of displaying invented improvement',async({page})=>{
@@ -273,10 +264,8 @@ test('saved overall AI becomes four readable, escaped cards and quick jumps reta
  await page.evaluate(()=>{
   VZ.db.overallAiReports=[{id:'overall-ai:all',createdDate:'2026-11-11',
    note:'요약: 전반적인 녹음 기록을 정리했어요.\n좋아진 점: 음정 흔들림이 줄었어요.\n보완할 점: <script>alert(1)</script> 같은 곡 비교가 더 필요해요.\n다음 연습: 편한 음역으로 5분 반복해요.'}];
-  const el=document.getElementById('test-root');
-  el.innerHTML=VZ.routes['growth-flow'].render();
-  VZ.routes['growth-flow'].mount(el);
  });
+ await show(page,'all');
  await expect(page.locator('.growth-coach-part')).toHaveCount(4);
  await expect(page.locator('.growth-coach-part.growth-coach-better')).toContainText('음정 흔들림');
  await expect(page.locator('.growth-coach-part.growth-coach-action')).toContainText('5분');
@@ -314,7 +303,7 @@ test('growth cards stay within a 375px viewport even with twelve month bars',asy
  await page.addStyleTag({path:path.resolve(__dirname,'../app/monthly-growth.css')});
  await expect(page.locator('.growth-chart-point')).toHaveCount(12);
  const widths=await page.evaluate(()=>{
-  const host=document.querySelector('.growth-page');
+  const host=document.getElementById('test-root');
   const chart=document.querySelector('.growth-chart');
   return {viewport:window.innerWidth,document:document.documentElement.scrollWidth,
    host:host.getBoundingClientRect().width,chart:chart.getBoundingClientRect().width};
@@ -370,8 +359,7 @@ test('plan outcome v2: same-phrase preview, 판정 보류 with the growth reason
  await page.goto('about:blank');
  await boot(page,{recordings:media,plans,reports:[legacy]});
  await page.evaluate(()=>{VZ.db.songs.push({id:'song-2',title:'Second'});});
- await page.evaluate(()=>{const el=document.getElementById('test-root');el.innerHTML=VZ.routes['growth-flow'].render();VZ.routes['growth-flow'].mount(el);});
- await page.locator('[data-growth-mode="monthly"]').click();
+ await show(page,'month');
  await page.addStyleTag({path:path.resolve(__dirname,'../app/monthly-growth.css')});
  await page.addStyleTag({path:path.resolve(__dirname,'../app/growth-polish.css')});
  const items=page.locator('.growth-plan-item');

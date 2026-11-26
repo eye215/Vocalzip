@@ -67,8 +67,9 @@ test('current month stays available without recordings, and AI completion respec
  const js=file('app/monthly-growth.js');
  // 큰 정리 3번: the month is 나's (‹ › through any month); this month when none is asked for, with or without recordings.
  assert.match(js,/let selected=\/\^\\d\{4\}-\\d\{2\}\$\/\.test\(month\)\?month:currentKey/);
- assert.match(js,/visibleSerial===renderSerial&&selected===month/);
- assert.match(js,/my!==request\|\|!window\.vzipCloudSignedIn/);
+ // ‹ › while it runs: the result is still saved for its own month, and drawn only if that report is still the one shown.
+ assert.match(js,/my===request&&visibleSerial===renderSerial&&selected===month/);
+ assert.match(js,/if\(!host\.isConnected\|\|!window\.vzipCloudSignedIn/);
  assert.doesNotMatch(js,/btn\.onclick=\(\)=>\{selected=month;render\(\)/);
 });
 
