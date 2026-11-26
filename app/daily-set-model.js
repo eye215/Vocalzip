@@ -35,7 +35,8 @@
  *   (app/practice-set-model.js save), so time is never counted twice and a song keeps its minutes.
  * 따라 하기 (2026-11-26) is a set of ONE step (kind 'next', step.guide, mode 'guide'; app/guided-practice.js): saved as this
  *   same run row — a homework step puts the assignment in completed / assignmentReps (one practice, 'N회'; never done) —
- *   and its done step checks today's goal made from it. Its step id 'guide:<key>' tells such a run (isGuideRun).
+ *   and its done step checks today's goal made from it; with a song it is that song's row (songId, practiceMode 'song').
+ *   Its step id 'guide:<key>' tells such a run (isGuideRun).
  * Time: only seconds the runner was active on a step (or minutes typed for an own step); a recording's length never. */
 (function(root,factory){
   const node=typeof module==='object'&&module.exports;
@@ -509,8 +510,11 @@ function save(db,s,rows,{now=Date.now(),category=null}={}){
     const source=st.assignmentId||st.guide.key;
     for(const g of live(db,'dailyGoals'))if(source&&g.date===s.date&&g.sourceId===source&&g.completed!==true){g.completed=true;checked++;}
   }
+  // 따라 하기 of a song (a homework with a song, a song's tip): the one row is that song's practice, as the old screen's
+  // row was, so 곡별 연습량 counts it. Its step keeps no row of its own (kind 'next'), so the minutes stay in this row only.
+  const guideSong=s.steps.length===1&&s.steps[0].guide&&s.steps[0].songId?String(s.steps[0].songId):'';
   const take=rest.find(st=>st.kind==='take');
-  const row={...old,id,date:s.date,minutes,manualMinutes:minutes,practiceTimeSource:'practice-set',practiceMode:'training',songId:'',
+  const row={...old,id,date:s.date,minutes,manualMinutes:minutes,practiceTimeSource:'practice-set',practiceMode:guideSong?'song':'training',songId:guideSong,
     categoryLabel:'오늘의 연습',detail:'오늘의 연습',technique:items.filter(x=>!x.row&&x.minutes>0).map(x=>({name:x.title,minutes:x.minutes})),
     memo:'[오늘의 연습] '+items.length+'개 중 '+did+'개',mediaIds:media,completed:homework,assignmentReps:Object.fromEntries(homework.map(h=>[h,1])),
     assignmentNotes:old?.assignmentNotes||{},practiceSetId:s.id,

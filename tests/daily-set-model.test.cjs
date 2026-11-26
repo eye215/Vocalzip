@@ -500,6 +500,15 @@ test('따라 하기 is a set of one guide step: the run row counts the homework 
   P.play(t,now);P.tick(t,now+60000);D.finishItem(t,{state:'done',result:{mode:'guide',timer:true},now:now+60000});D.save(rec,t,[],{now});
   assert.equal(rec.dailyGoals.find(g=>g.id==='g9').completed,true);assert.equal(rec.dailyGoals.find(g=>g.id==='g1').completed,false);
   assert.deepEqual(rec.practices[0].completed,[]);assert.equal(rec.practices[0].dailySet.items[0].timer,true);
+  // With a song: the one run row is that song's (곡별 연습량), and no second song row holds the same minutes.
+  const sg=seed(),u=P.start([{...step,songId:'s1'}],{id:'u',date:TODAY,now});
+  P.play(u,now);P.tick(u,now+120000);D.finishItem(u,{state:'done',result:{mode:'guide'},now:now+120000});D.save(sg,u,[],{now});
+  assert.equal(sg.practices.length,1);
+  assert.deepEqual([sg.practices[0].songId,sg.practices[0].practiceMode,sg.practices[0].minutes],['s1','song',2]);
+  assert.equal(sg.practices.filter(p=>p.songId==='s1').reduce((n,p)=>n+Time.actualMinutes(p),0),2);
+  assert.deepEqual(sg.practices[0].completed,['a1']);
+  // Without a song (and any full set) the row stays training with no song.
+  assert.deepEqual([run.songId,run.practiceMode],['','training']);
   // A full set's run is not a 따라 하기.
   assert.equal(D.isGuideRun({dailySet:{items:[{id:'ex-loosen-neck'},{id:'next-hw-a1'}]}}),false);
 });
