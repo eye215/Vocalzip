@@ -83,12 +83,15 @@ body:not(.vz-home-mode) .vz-collection-record {
   right:max(var(--vz-nav-inset),calc((100vw - var(--vz-content-max))/2 + var(--vz-nav-inset)));
   bottom:calc(max(var(--vz-nav-bottom),env(safe-area-inset-bottom)) + var(--vz-floating-bottom));
   width:var(--vz-floating-size); min-width:var(--vz-floating-size); height:var(--vz-floating-size); padding:0; border:0; border-radius:50%;
-  background:var(--vz-gradient-floating);
+  background:var(--vz-record-bg,#14101C);
   color:#fff; text-decoration:none;
-  box-shadow:var(--vz-shadow-floating);
+  box-shadow:var(--vz-record-shadow,0 8px 20px rgba(20,16,28,.26));
   transition:filter .14s,transform .14s;
 }
 body:not(.vz-home-mode) .vz-collection-record i { font-size:22px; }
+/* 녹음 버튼 (2026-11-27): 흰 동그라미 + 도는 보라 빛 테두리 + 소리 물결 마이크. 동작 줄이기면 멈춰요. */
+body:not(.vz-home-mode) .vz-collection-record{background:transparent;color:#5B1FC2;isolation:isolate;box-shadow:0 6px 18px rgba(122,50,245,.26)}body:not(.vz-home-mode) .vz-collection-record::before{content:"";position:absolute;inset:-2.5px;border-radius:50%;z-index:-1;background:conic-gradient(from 0deg,#C9AEFB,#7A32F5,#E9DDFF,#9A5BFF,#C9AEFB);animation:vzMicSpin 3.2s linear infinite}body:not(.vz-home-mode) .vz-collection-record::after{content:"";position:absolute;inset:0;border-radius:50%;z-index:-1;background:#fff}body:not(.vz-home-mode) .vz-collection-record .vz-mic-anim{display:block;width:40px;height:40px;overflow:visible;color:#5B1FC2}body:not(.vz-home-mode) .vz-collection-record .vz-mic-body,body:not(.vz-home-mode) .vz-collection-record .vz-mic-wave{transform-box:fill-box;transform-origin:center}body:not(.vz-home-mode) .vz-collection-record .vz-mic-body{animation:vzMicBob 1.6s ease-in-out infinite}body:not(.vz-home-mode) .vz-collection-record .vz-mic-wave{stroke:#9A5BFF;animation:vzMicWave 1.6s ease-out infinite}body:not(.vz-home-mode) .vz-collection-record .vz-mic-wave2{animation-delay:.5s}@keyframes vzMicSpin{to{transform:rotate(360deg)}}@keyframes vzMicBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.2px)}}@keyframes vzMicWave{0%{opacity:0;transform:scale(.6)}30%{opacity:1}100%{opacity:0;transform:scale(1.25)}}@media(prefers-reduced-motion:reduce){body:not(.vz-home-mode) .vz-collection-record::before,body:not(.vz-home-mode) .vz-collection-record .vz-mic-body,body:not(.vz-home-mode) .vz-collection-record .vz-mic-wave{animation:none}body:not(.vz-home-mode) .vz-collection-record .vz-mic-wave2{opacity:0}}
+
 body:not(.vz-home-mode) .vz-collection-record:active { filter:brightness(.9); transform:scale(.98); }
 body.vz-record-mode .vz-collection-record,
 body[data-vz-route="vocal-lab"] .vz-collection-record,

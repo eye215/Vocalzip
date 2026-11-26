@@ -2,7 +2,7 @@
  * Demo scripts/dialogs stay inert; only root markup and style blocks are used. */
 import {createTodayCard,TODAY_CARD_CSS} from './today-card-html.js?v=today1-20261126';
 export const FLOATING_HOME_SOURCE = "4985592d5e93a09ba1300cf57ba4eee866db531b";
-const tokenAsset=new URL("./tokens.css?v=12",import.meta.url);
+const tokenAsset=new URL("./tokens.css?v=14",import.meta.url);
 const asset=new URL("./Vocalzip_Floating_Record_Home.html?v="+FLOATING_HOME_SOURCE.slice(0,12),import.meta.url);
 let sourcePromise;
 async function source(){
@@ -282,12 +282,12 @@ export async function createFloatingHome(opts={}){
  const sharedShell=el("style",`/* Match the common four-tab dock and circular recording action. */
 #vocalzip-refined-preview .vz-phone{background:var(--vz-color-canvas);color:var(--vz-color-ink);font-family:var(--vz-font);letter-spacing:var(--vz-tracking);padding-inline:var(--vz-page-gutter)}
 #vocalzip-refined-preview .vz-card{padding:var(--vz-card-padding);border-radius:var(--vz-radius-card)}
-#vocalzip-refined-preview .vz-floating-record{background:var(--vz-gradient-floating)}
+#vocalzip-refined-preview .vz-floating-record{background:transparent;color:#5B1FC2;isolation:isolate;box-shadow:0 6px 18px rgba(122,50,245,.26)}#vocalzip-refined-preview .vz-floating-record::before{content:"";position:absolute;inset:-2.5px;border-radius:50%;z-index:-1;background:conic-gradient(from 0deg,#C9AEFB,#7A32F5,#E9DDFF,#9A5BFF,#C9AEFB);animation:vzMicSpin 3.2s linear infinite}#vocalzip-refined-preview .vz-floating-record::after{content:"";position:absolute;inset:0;border-radius:50%;z-index:-1;background:#fff}#vocalzip-refined-preview .vz-floating-record .vz-mic-anim{display:block;width:40px;height:40px;overflow:visible;color:#5B1FC2}#vocalzip-refined-preview .vz-floating-record .vz-mic-body,#vocalzip-refined-preview .vz-floating-record .vz-mic-wave{transform-box:fill-box;transform-origin:center}#vocalzip-refined-preview .vz-floating-record .vz-mic-body{animation:vzMicBob 1.6s ease-in-out infinite}#vocalzip-refined-preview .vz-floating-record .vz-mic-wave{stroke:#9A5BFF;animation:vzMicWave 1.6s ease-out infinite}#vocalzip-refined-preview .vz-floating-record .vz-mic-wave2{animation-delay:.5s}@keyframes vzMicSpin{to{transform:rotate(360deg)}}@keyframes vzMicBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.2px)}}@keyframes vzMicWave{0%{opacity:0;transform:scale(.6)}30%{opacity:1}100%{opacity:0;transform:scale(1.25)}}@media(prefers-reduced-motion:reduce){#vocalzip-refined-preview .vz-floating-record::before,#vocalzip-refined-preview .vz-floating-record .vz-mic-body,#vocalzip-refined-preview .vz-floating-record .vz-mic-wave{animation:none}#vocalzip-refined-preview .vz-floating-record .vz-mic-wave2{opacity:0}}
 #vocalzip-refined-preview .vz-nav{box-sizing:border-box;height:var(--vz-nav-height);padding:var(--vz-nav-padding);border:1px solid var(--vz-nav-border,rgba(255,255,255,.68));border-radius:999px;background:var(--vz-nav-surface,rgba(255,255,255,.58));box-shadow:var(--vz-nav-shadow,0 5px 20px rgba(55,33,85,.045));-webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));backdrop-filter:blur(var(--vz-nav-blur,24px))}
 #vocalzip-refined-preview .vz-nav{grid-template-columns:repeat(4,minmax(0,1fr));}\n#vocalzip-refined-preview .vz-nav-item{box-sizing:border-box;height:var(--vz-nav-item-height);min-height:var(--vz-nav-item-height);gap:2px;border-radius:999px;font-size:var(--vz-type-nav-size);font-weight:var(--vz-font-medium)}
 #vocalzip-refined-preview .vz-nav-item.vz-active{background:var(--vz-color-selected-bg);color:var(--vz-nav-active-label);font-weight:600}
 #vocalzip-refined-preview .vz-nav-item i{font-size:var(--vz-icon-tool-size)}
-#vocalzip-refined-preview .vz-floating-record{width:var(--vz-floating-size);min-width:var(--vz-floating-size);height:var(--vz-floating-size);bottom:calc(max(var(--vz-nav-bottom),env(safe-area-inset-bottom)) + var(--vz-floating-bottom));box-shadow:var(--vz-shadow-floating)}
+#vocalzip-refined-preview .vz-floating-record{width:var(--vz-floating-size);min-width:var(--vz-floating-size);height:var(--vz-floating-size);bottom:calc(max(var(--vz-nav-bottom),env(safe-area-inset-bottom)) + var(--vz-floating-bottom));box-shadow:0 6px 18px rgba(122,50,245,.26)}
 @media(prefers-reduced-transparency:reduce),(prefers-contrast:more){#vocalzip-refined-preview .vz-nav{background:#fff;-webkit-backdrop-filter:none;backdrop-filter:none}}
 `);
  shadow.append(sharedShell);
@@ -295,7 +295,7 @@ export async function createFloatingHome(opts={}){
   const svg=button.querySelector('svg');if(!svg)return;
   const icon=el('i');icon.setAttribute('aria-hidden','true');icon.dataset.glyph=['\ue2c2','\ue340','\ue10a','\ue150'][i];svg.replaceWith(icon);
  });
- const recordIcon=el('i');recordIcon.setAttribute('aria-hidden','true');recordIcon.dataset.glyph='\ue326';root.querySelector('.vz-floating-record svg').replaceWith(recordIcon);
+ root.querySelector('.vz-floating-record svg').outerHTML='<svg class="vz-mic-anim" width="40" height="40" viewBox="-3.5 0.5 31 23" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g class="vz-mic-body"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 10.5a6.5 6.5 0 0 0 13 0"/><path d="M12 17v4"/></g><path class="vz-mic-wave" d="M2.5 6.5a8 8 0 0 0 0 9"/><path class="vz-mic-wave" d="M21.5 6.5a8 8 0 0 1 0 9"/><path class="vz-mic-wave vz-mic-wave2" d="M-0.5 4.5a11 11 0 0 0 0 13"/><path class="vz-mic-wave vz-mic-wave2" d="M24.5 4.5a11 11 0 0 1 0 13"/></svg>'; // 소리 물결 마이크 (공통 녹음 버튼과 같은 그림)
  const q=selector=>root.querySelector(selector);
  q("main").setAttribute("role","presentation");
  root.prepend(el("h1","홈","vz-visually-hidden"));

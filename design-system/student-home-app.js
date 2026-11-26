@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=today1-20261126';
+import {createFloatingHome} from './student-home-html.js?v=mic2-20261127';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
