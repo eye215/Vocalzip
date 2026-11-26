@@ -324,7 +324,7 @@ test('settings changes the default daily target on home',async({page})=>{
  await phoneWidth(page); // the one-line 이번 주 row is the phone layout; tablets show the full 주간 연습 card
  const value=seed();value.practicePlans=[];
  await boot(page,value);
- await page.getByRole('button',{name:'프로필',exact:true}).click();
+ await page.getByRole('button',{name:'설정',exact:true}).click();
  await page.locator('[data-daily-target]').click();
  const sheet=page.getByRole('dialog',{name:'하루 연습 목표 시간'});await sheet.locator('input[name=minutes]').fill('45');
  await sheet.getByRole('button',{name:'저장'}).click();
@@ -408,7 +408,7 @@ test('지금 할 것, summary rows, recent songs and profile retain their real d
  await boot(page);const before=await db(page);
  await expect(page.locator('.vz-summary-row')).toHaveCount(3);
  for(const [i,key] of ['lesson','stage','week'].entries())await expect(page.locator('.vz-summary-row').nth(i)).toHaveAttribute('data-row',key);
- for(const [name,route]of [['숙제 호흡을 길게 유지하기 보기','homework'],['다음 레슨, 11.6 (금) 18:30, D-2','lesson/l1'],[/^(공연|오디션|무대), 가을 뮤지컬 오디션, D-4$/,'show/stage1'],['오늘 연습 30분, 오늘 목표 30분, 오늘 달성률 100%, 이번 주 연습 30분, 목표 3시간, 이번 주 달성률 17%, 자세히 보기','calendar?date='+TODAY],['This Is the Moment 연습하기','record?song=s1'],['프로필','settings']]){
+ for(const [name,route]of [['숙제 호흡을 길게 유지하기 보기','homework'],['다음 레슨, 11.6 (금) 18:30, D-2','lesson/l1'],[/^(공연|오디션|무대), 가을 뮤지컬 오디션, D-4$/,'show/stage1'],['오늘 연습 30분, 오늘 목표 30분, 오늘 달성률 100%, 이번 주 연습 30분, 목표 3시간, 이번 주 달성률 17%, 자세히 보기','calendar?date='+TODAY],['This Is the Moment 연습하기','record?song=s1'],['설정','settings']]){
   await page.goto('/#/home');await ready(page);await page.getByRole('button',{name,exact:typeof name==='string'}).click();
   // The 오늘 · 이번 주 row first shows its numbers and where the target comes from; the calendar is one tap further.
   if(route.startsWith('calendar'))await page.getByRole('dialog',{name:'이번 주 연습',exact:true}).getByRole('button',{name:'기록에서 보기',exact:true}).click();
