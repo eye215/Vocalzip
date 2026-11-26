@@ -73,7 +73,7 @@ test('browsers without the Navigation API: back still stays and asks',async({pag
  await expect(ask(page)).toBeVisible();await expect(sheet).toBeVisible();expect(await page.evaluate(()=>location.hash)).toBe('#/homework');
  await ask(page).getByRole('button',{name:'닫기',exact:true}).click();
  await expect(sheet).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>location.hash)).toBe('#/lessons');
- await expect(page.locator('#top h1')).toHaveText('레슨');
+ await expect(page.locator('#top h1')).toHaveText('레슨 목록');
 });
 
 test('lesson schedule: a status or song change counts as an edit; a stacked sheet closes on its own',async({page})=>{

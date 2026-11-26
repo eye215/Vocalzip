@@ -242,7 +242,7 @@ test('a 성장 screen opened with nothing behind it: 뒤로 goes to its 성장 t
   await expect(current(page)).toHaveText('나');
   // Screens of the other menus keep their own fallback (오늘).
   await page.evaluate(() => { location.hash = '#/lessons'; });
-  await expect(page.locator('#top h1')).toHaveText('레슨');
+  await expect(page.locator('#top h1')).toHaveText('레슨 목록');
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/home$/);
 });
