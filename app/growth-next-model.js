@@ -3,8 +3,9 @@
  * changed: each source adapter reads data the screen has already loaded, through the model that source already has,
  * and the list is derived on the fly.
  *
- *   VzipGrowthNext.build({db, today, overall?, monthly?, tips?, precision?, limit = 5, aiDays = 30, pointDays = 30})
- *     → {items, more, total}
+ *   VzipGrowthNext.build({db, today, overall?, monthly?, tips?, precision?, limit = 5, aiDays = 30, pointDays = 30, keepDone = false})
+ *     → {items, more, total}   (keepDone: a homework done today stays in, marked done — for 다음 연습 목록's 오늘 한 것)
+ *   Every screen reads it through VZ.nextPractice (app/next-practice.js), which gathers the same inputs once.
  *   VzipGrowthNext.merge(candidates, {limit}) → the same, from candidates made by the adapters below
  *
  * Sources (adapter → what it reads, through which model):
@@ -83,7 +84,7 @@ function dueText(due, today) {
   return '숙제 · ' + (d <= 0 ? '오늘까지' : d === 1 ? '내일까지' : md(due) + '까지 (D-' + d + ')');
 }
 /** Open assignments as 다음 연습 추천 reads them (practice-review-model context: started, not past due, not done). */
-function fromHomework(db, {today} = {}) {
+function fromHomework(db, {today, keepDone = false} = {}) {
   if (!isDay(today)) return [];
   const R = dep.review();
   const open = R ? R.context(db || {}, {today, start:today}).homework : [];
@@ -91,8 +92,10 @@ function fromHomework(db, {today} = {}) {
   // A practice record of today that says the homework was done (연습 기록 › "숙제 했나요? 했어요", a finished 오늘의 연습,
   // 따라 하기) counts as done for today too: it is not offered again first in today's set (1.0 점검, 2026-11-24).
   for (const p of live(db, 'practices')) if (p.date === today) for (const id of list(p.completed)) doneToday.add(id);
-  return open.filter(t => !doneToday.has(t.id)).map((t, i) => item('homework', {id:t.id, title:t.title, why:dueText(t.dueDate, today), songId:t.songId,
-    due:t.dueDate || '', action:{kind:'homework', assignmentId:t.id, ...(t.songId ? {songId:t.songId} : {})}, links:['assignment:' + t.id], order:i}));
+  // keepDone (다음 연습 목록, app/next-practice.js): one done today stays, marked `done`, so the list can show it under 오늘 한 것.
+  return open.filter(t => keepDone || !doneToday.has(t.id)).map((t, i) => ({...item('homework', {id:t.id, title:t.title, why:dueText(t.dueDate, today), songId:t.songId,
+    due:t.dueDate || '', action:{kind:'homework', assignmentId:t.id, ...(t.songId ? {songId:t.songId} : {})}, links:['assignment:' + t.id], order:i}),
+    ...(doneToday.has(t.id) ? {done:true} : {})}));
 }
 
 /* ---------- 레슨 지적 체크 ---------- */
@@ -301,10 +304,10 @@ function merge(candidates, {limit = LIMIT} = {}) {
  * Every source at once. db: the app's records; today: 'YYYY-MM-DD'; overall / monthly / tips / precision: what the
  * screen already computed (see fromMeasures, fromPrecision) — left out, that source adds nothing.
  */
-function build({db = {}, today, overall = null, monthly = null, tips = null, tipsSongId = '', precision = null, limit = LIMIT, aiDays = AI_DAYS, pointDays = POINT_DAYS} = {}) {
+function build({db = {}, today, overall = null, monthly = null, tips = null, tipsSongId = '', precision = null, limit = LIMIT, aiDays = AI_DAYS, pointDays = POINT_DAYS, keepDone = false} = {}) {
   if (!isDay(today)) throw Error('오늘 날짜를 확인해 주세요.');
   return merge([
-    ...fromHomework(db, {today}),
+    ...fromHomework(db, {today, keepDone}),
     ...fromLessonPoints(db, {today, days:pointDays}),
     ...fromSkills(db, {today, tips}),
     ...fromMeasures({overall, monthly, tips, songId:tipsSongId}),

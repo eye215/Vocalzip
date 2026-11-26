@@ -25,6 +25,12 @@ test('homework ranks first, the one due soonest first; done, past-due and checke
   assert.equal(N.fromHomework(logged(TODAY), {today:TODAY}).some(x => x.id === 'homework:hw-late'), true);
   assert.equal(N.fromHomework(logged('2026-11-01'), {today:TODAY}).some(x => x.id === 'homework:hw-soon'), true);
   assert.equal(N.fromHomework(logged(TODAY, {deleted:{practices:['p-hw']}}), {today:TODAY}).some(x => x.id === 'homework:hw-soon'), true);
+  // keepDone (다음 연습 목록's 오늘 한 것): the one done today stays, marked done; the others are as without it.
+  const kept = N.fromHomework(logged(TODAY), {today:TODAY, keepDone:true});
+  assert.equal(kept.find(x => x.id === 'homework:hw-soon')?.done, true);
+  assert.equal(kept.find(x => x.id === 'homework:hw-late')?.done, undefined);
+  assert.equal(N.build({db:logged(TODAY), today:TODAY, keepDone:true, limit:50}).items.find(x => x.id === 'homework:hw-soon')?.done, true);
+  assert.equal(N.build({db:logged(TODAY), today:TODAY, limit:50}).items.some(x => x.id === 'homework:hw-soon'), false);
 });
 
 test('the order of the sources: 숙제 > 놓친 레슨 지적 > 기본기 > 측정 기반 > 정밀 측정 > 목표·계획 > AI 초안', () => {
