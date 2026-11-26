@@ -1435,7 +1435,7 @@ test('Growth counts practice time once and shows empty state without invented sc
   await expect(page.getByText('음정·호흡·발성은 평가하지 않아요')).toBeVisible();
 });
 
-test('Settings keeps the cloud account panel across re-renders and exports a backup', async ({page}) => {
+test('Settings keeps the cloud account panel across re-renders; records are backed up from 내 데이터 내보내기', async ({page}) => {
   await boot(page, {media:false});
   await page.goto('/#/settings');
   await expect(page.locator('#cloud-user')).toContainText('test@example.invalid');
@@ -1443,10 +1443,13 @@ test('Settings keeps the cloud account panel across re-renders and exports a bac
   await page.goto('/#/settings');
   await page.getByText('동기화·백업 도구').click();
   await expect(page.locator('#cloud-logout')).toBeVisible();
+  // One records backup: 설정 › 내 데이터 내보내기 (the old 기록 백업·복원 block is gone).
+  await expect(page.getByText('기록 백업·복원')).toHaveCount(0);
+  await page.getByRole('link', {name:/내 데이터 내보내기/}).click();
   const download = page.waitForEvent('download');
-  await page.getByText('기록 백업·복원').click();
-  await page.getByRole('button', {name:'기록 내보내기'}).click();
-  expect((await download).suggestedFilename()).toMatch(/^vocalzip-backup-/);
+  await page.getByRole('button', {name:'기록 JSON'}).click();
+  expect((await download).suggestedFilename()).toMatch(/^vocalzip-records-/);
+  await expect(page.locator('.vz-export [data-import-json]')).toHaveCount(1);
 });
 
 test('Sheets fit the iPhone width and inputs do not overflow', async ({page}) => {
@@ -2328,7 +2331,7 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   // 노래 연습실 opens from 오늘 › 연습하기 only (one door for the things you do), not from 설정 too.
   expect(await rows('practice')).toEqual(['하루 연습 목표 시간', '트레이닝 항목']);
   await expect(page.locator('.vz-settings a[href="#/practice-room"]')).toHaveCount(0);
-  expect((await rows('files')).filter(s => !s.startsWith('굿노트'))).toEqual(['처리 내역', '저장 공간', '녹음 정리', '녹음 찾기 (이 기기)', '내 데이터 내보내기', '기록 백업·복원']);
+  expect((await rows('files')).filter(s => !s.startsWith('굿노트'))).toEqual(['처리 내역', '저장 공간', '녹음 정리', '녹음 찾기 (이 기기)', '내 데이터 내보내기']);
   expect(await rows('more')).toEqual(['공유 중인 링크', '녹음 중 블루투스 시험']);
   await expect(page.locator('.vz-settings-account [data-cloud]')).toBeVisible();
   await expect(page.locator('#cloud-upload')).toBeHidden();
@@ -2338,12 +2341,14 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   await expect(page.locator('#cloud-logout')).toBeVisible();
   await expect(page.locator('#cloud-upload')).toBeVisible();
   await expect(page.locator('#cloud-media-upload')).toBeVisible();
+  // 클라우드 기록 합쳐서 불러오기 = 지금 동기화 + reload: hidden, its element (and handler) kept.
+  await expect(page.locator('#cloud-download')).toHaveCount(1);
+  await expect(page.locator('#cloud-download')).toBeHidden();
+  await expect(page.locator('.cloud-more').getByRole('button', {name:/합쳐서 불러오기/})).toHaveCount(0);
   await expect(page.locator('.vz-settings').getByRole('link', {name:'레슨비 정산'})).toHaveCount(0);
   await expect(page.locator('[data-storage-status]')).not.toHaveText('확인 중…');
-  await expect(page.locator('[data-export]')).toBeHidden();
-  await page.getByText('기록 백업·복원').click();
-  await expect(page.locator('[data-export]')).toBeVisible();
-  await expect(page.locator('[data-import-json]')).toHaveCount(1);
+  // Records backup/restore lives on 내 데이터 내보내기 only.
+  await expect(page.locator('.vz-settings [data-export], .vz-settings [data-import-json]')).toHaveCount(0);
   await expect(page.getByRole('navigation', {name:'주요 메뉴'})).toBeVisible(); // ordinary screens keep the same bottom menu as Home (shared-nav.css)
   await page.setViewportSize({width:320,height:700});
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

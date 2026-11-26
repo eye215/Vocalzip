@@ -55,3 +55,5 @@ body[data-vz-route="data-export"] .vz-collection-record{display:none!important}
 .vz-export-parts li[data-status="saved"] small{color:var(--vz-color-success)}
 .vz-export-parts li[data-status="failed"] small{color:var(--vz-color-danger);font-weight:600}
 @media(prefers-reduced-motion:reduce){.vz-export-bar::after{transition:none}}
+.vz-export-import{cursor:pointer}
+.vz-export-import:focus-within{outline:2px solid var(--vz-color-accent);outline-offset:2px}

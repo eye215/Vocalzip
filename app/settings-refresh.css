@@ -42,14 +42,6 @@ body[data-vz-route="settings"] #view{padding-bottom:12px}
 .vz-settings-list[data-auto-analysis] .item .item-sub{display:block}
 .vz-settings-list[data-auto-analysis] .item .switch{flex:none}
 .vz-settings-list[data-auto-analysis]>p{margin:0!important;padding:0 16px 14px!important;color:var(--vz-color-ink-muted);font-size:12px;line-height:18px}
-.vz-settings-backup{border-top:1px solid #F2F0F6}
-.vz-settings-backup summary{cursor:pointer;list-style:none}
-.vz-settings-backup summary::-webkit-details-marker{display:none}
-.vz-settings-backup[open] summary .chev{transform:rotate(180deg)}
-.vz-settings-backup-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 14px}
-.vz-settings-backup-actions p{grid-column:1/-1;margin:0;color:var(--vz-color-ink-muted);font-size:12px;line-height:18px}
-.vz-settings-backup-actions button,.vz-settings-backup-actions label{display:grid;place-items:center;min-height:44px;padding:8px;border:0;border-radius:12px;background:var(--vz-color-accent-soft);color:var(--vz-color-accent);font-size:13px;font-weight:600;text-align:center;cursor:pointer}
-.vz-settings-backup-actions label:focus-within{outline:2px solid var(--vz-color-accent);outline-offset:2px}
 .vz-settings-cloud #vzip-cloud-root .cloud-account{display:flex;align-items:center;gap:11px;margin:0;min-width:0}
 .vz-settings-cloud #vzip-cloud-root .cloud-account>div{min-width:0}
 .vz-settings-cloud #vzip-cloud-root .cloud-account>.ph-fill{display:grid;place-items:center;flex:none;width:48px;height:48px;border-radius:50%;background:#F0E3FF;color:var(--vz-color-accent);font-size:27px}
