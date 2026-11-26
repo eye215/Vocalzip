@@ -1,6 +1,7 @@
 /* 성장 (#385 통합, then 성장 개편 안 B — scratchpad GROWTH_B_PLAN, phases 2–4): one 성장 menu with three tabs.
- *   이번 달  #/vocal-growth — app/growth-month.js: 한 것 · 달라진 것 · 다음 연습 · 지난 흐름 보기 (주간·월별·전체 inside).
- *            지난 흐름 (#/growth-flow?period=week|month|all) is its sub-page: the former 결과 리포트 screens, unchanged.
+ *   나       #/vocal-growth — app/growth-month.js: the report of one period (주 · 월 · 전체 with ‹ ›; 큰 정리 3번): 한 것 ·
+ *            달라진 것 (곡마다 자세히 folded) · that period's 주간 요약 / 월별 / 전체 리포트. #/growth-flow?period=… and
+ *            #/growth-changes (the former sub-pages) lead there.
  *   곡       #/vocal-analysis — the songs with an analysed take, each with ONE word (좋아진 방향 · 비슷함 · 판정 보류 ·
  *            녹음 하나 …) from the verdict every 성장 screen shares (VZ.growthSong below, app/growth-song-model.js), then
  *            곡 하나 (#/growth-song/<songId>, app/vocal-lab.js + app/growth-song-page.js; #/vocal-lab/<id> leads there):

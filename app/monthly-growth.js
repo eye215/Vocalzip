@@ -133,15 +133,6 @@ V.growthSongMenu=songMenu;
 function chooseSong(list,picked,done){
  songMenu(list.map(s=>({...s,line:'이번 달 '+s.takes+'개 · <span data-mbs-status="'+s.status+'">'+SONG_STATUS[s.status]+'</span>'})),picked,done);
 }
-/** 무엇이 달라졌나 opened for one song (#/growth-flow?period=all&gc=<songId>): open and scroll to that song's line. */
-function focusChange(host,songId){
- if(/[?&]gc=/.test(location.hash))try{window.history.replaceState(null,'','#/growth-flow?period=all');}catch{}
- const line=[...host.querySelectorAll('[data-gc-song]')].find(x=>x.dataset.gcSong===songId);
- if(!line)return;
- const more=line.closest('details');if(more)more.open=true;
- const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
- line.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
-}
 function archiveMonths(months){
  const today=ym(V.today()),stored=new Set((V.db.monthlyGrowthReports||[]).map(r=>r.month));
  const pending=[...months.keys()].filter(k=>k<today&&!stored.has(k)&&months.get(k).some(valid));
@@ -220,6 +211,13 @@ function monthlyAiEvidence(month,rows,items){
  return {mode:'monthly',month,recordingCount:items.length,
     analysisCount:items.filter(valid).length,metrics,observations};
 }
+/** What 보내기 sends, said before anything is sent: the card's own words with this month's counts. */
+function monthlySendText(x){
+ const names=(x.metrics||[]).map(m=>G.METRICS.find(d=>d.id===m.key)?.title||m.key).join('·')||'음정 정확도·음정 안정성·호흡 유지';
+ return '버튼을 누를 때만 아래 측정 요약과 기존 AI 청취 텍스트가 AI 서버로 전송돼요.\n· '+x.month.replace('-','년 ')+'월 측정 요약 — 곡 녹음 '+x.recordingCount+'개, 분석 가능 '+x.analysisCount+'개, '+names+'의 지난달 비교 결과(판정 보류 포함)\n'+
+  '· 저장된 AI 청취 코멘트 '+(x.observations||[]).length+'건 (곡 이름·날짜·들린 특징·다음 시도, 최대 5건)\n'+
+  '원본 음원은 보내지 않으며, 음역·최고음 값도 보내지 않아요. AI 의견은 참고용이에요.';
+}
 function monthlyAiCard(month){
  const found=(V.db.monthlyAiReports||[]).find(x=>x.id==='monthly-ai:'+month);
  return '<section class="card growth-section" data-monthly-ai><h2>AI 월간 종합 코치</h2>'+
@@ -248,87 +246,52 @@ function history(months){
   return '<button type="button" class="growth-month" data-month="'+key+'"><strong>'+e(key.replace('-','년 ')+'월')+'</strong><span class="small muted">곡 녹음 '+ms.length+'개 · 분석 가능 '+eligible+'개</span></button>';
  }).join('')+'</div></section>';
 }
-async function mount(host){
+/** The report of one period into host (성장 › 나, app/growth-month.js; 큰 정리 3번): kind 'month' (month 'YYYY-MM', this
+ * month by default) or 'all'. What #/growth-flow showed for that period, with its renderers and numbers; the period is
+ * chosen above it (나's 주 · 월 · 전체 and ‹ ›). onMonth(key): 지난 기록's month buttons. */
+async function mount(host,{kind='month',month='',onMonth=null}={}){
  const my=++request;
  try {
   const items=await M.list();if(my!==request||!host.isConnected)return;
   const songItems=V.growthModel(items).songItems;
   const months=group(songItems); archiveMonths(months);
-  const keys=[...new Set([ym(V.today()),...months.keys(),...(V.db.monthlyGrowthReports||[]).map(r=>r.month),...(V.db.practicePlans||[]).filter(p=>p.kind==='monthly-vocal').map(p=>ym(p.sourceMonth||p.startDate))].filter(Boolean))].sort().reverse();
   const currentKey=ym(V.today());
-  let selected=keys.includes(currentKey)?currentKey:keys[0];
-  // 지난 흐름 (#/growth-flow): ?period=month is 월별 분석, anything else 전체 분석 (?period=week is 주간 요약's).
-  const query=new URLSearchParams(location.hash.split('?')[1]||'');
-  let mode=query.get('period')==='month'?'monthly':'overall';
-  // 월별 분석 › 곡별: the chosen song (kept while months change); gc: 무엇이 달라졌나 opened for one song.
-  let songPick=readSongPick(),focusSong=query.get('gc')||'';
+  let selected=/^\d{4}-\d{2}$/.test(month)?month:currentKey;
+  const mode=kind==='all'?'overall':'monthly';
+  // 월별 › 곡별: the last song chosen (its screen opens at this month).
+  let songPick=readSongPick();
   if(songPick&&!V.song(songPick))songPick='';
   // After archiveMonths (it may save a past month's report): the model is asked for again, never taken from before.
   const overall=V.growthModel(items).overall;
   const overallUi=window.VzipOverallGrowthUI;
   // 전체 음역 흐름 (app/growth-range-ui.js): its own selection of the whole list (곡·보이스 체크·트레이닝·레슨 녹음).
   const rangeUi=window.VzipGrowthRangeUI;
-  const pageHead='<header class="growth-page-header"><div><p class="growth-eyebrow">VOCAL.zip · GROWTH</p><h2>보컬 성장</h2><p>녹음에서 확인한 변화와 다음 연습을 한곳에서</p></div></header>';
-  // The period control of 결과 리포트 (design guide §26): smaller than the 성장 tabs above and inside the content.
-  const tabs=()=>'<div class="growth-view-tabs growth-range" role="group" aria-label="성장 분석 범위"><span class="growth-range-label" aria-hidden="true">기간</span>'+
-   '<button type="button" data-growth-mode="overall" aria-pressed="'+(mode==='overall')+'" class="'+(mode==='overall'?'active':'')+'">전체 분석</button>'+
-   '<button type="button" data-growth-mode="monthly" aria-pressed="'+(mode==='monthly')+'" class="'+(mode==='monthly'?'active':'')+'">월별 분석</button>'+
-   (window.VzipWeeklySummary?'<a class="growth-weekly-tab" href="#/growth-flow?period=week" data-growth-replace data-growth-period="week">주간 요약</a>':'')+'</div>';
-  const bindTabs=()=>host.querySelectorAll('[data-growth-mode]').forEach(btn=>btn.onclick=()=>{
-   if(btn.dataset.growthMode===mode)return;
-   mode=btn.dataset.growthMode;
-   // The address follows the period (no new history entry), so a reload or 뒤로 from a screen opened here keeps it.
-   // window.history: this file has its own history() (the 월별 기록 card). The period is also this device's 성장 period.
-   try{window.history.replaceState(null,'',mode==='monthly'?'#/growth-flow?period=month':'#/growth-flow?period=all');}catch{}
-   V.growthPeriod?.set(mode==='monthly'?'month':'all');
-   render();
-  });
+  // The page head, the period tabs and the month picker of #/growth-flow are 나's period switch and ‹ › now.
   let renderSerial=0;
   const render=()=>{
    renderSerial++;
    const visibleSerial=renderSerial;
    if(mode==='overall'&&overall&&overallUi){
-    // 무엇이 달라졌나 (app/growth-changes-ui.js): only comparable changes, above the existing report (whose numbers it leaves alone).
-    host.innerHTML=pageHead+tabs()+(window.VzipGrowthChangesUI?'<div class="gc-host" data-growth-changes></div>':'')+'<div data-overall-body>'+overallUi.render(overall,undefined,{range:rangeUi?.html(items)||''})+'</div>'+
+    // 무엇이 달라졌나 for 전체 is 나's 달라진 것 › 곡마다 자세히, above this report.
+    host.innerHTML='<div data-overall-body>'+overallUi.render(overall,undefined,{range:rangeUi?.html(items)||''})+'</div>'+
       '<p class="small muted growth-disclaimer">표시되는 수치는 음성 측정에 기반한 참고 정보이며 발성 건강, 감정 표현 또는 악보 대비 정확성을 평가하지 않아요. 전·후 비교는 서로 다른 날 부른 동일 곡을 사용합니다.</p>';
-    bindTabs();
     overallUi.bind(host.querySelector('[data-overall-body]'),overall,{rerender:render});
     rangeUi?.bind(host,items);
-    const changes=window.VzipGrowthChangesUI?.mount(host.querySelector('[data-growth-changes]'),items);
-    if(focusSong){const id=focusSong;focusSong='';Promise.resolve(changes).then(()=>{if(host.isConnected)focusChange(host,id);});}
     return;
    }
-   if(!keys.length){host.innerHTML=pageHead+tabs()+'<div class="empty"><p>아직 날짜가 있는 녹음이 없어요.</p></div>';bindTabs();return;}
    const prev=previousMonth(selected);
    const current=months.get(selected)||[],previous=months.get(prev)||[];
-   // 곡별 (큰 정리 2번): one song's month is the song screen with that month's chip (#/growth-song/<id>?month=), the same
+   // 곡별 (큰 정리 2번): one song's month is the song screen at that month's chip (#/growth-song/<id>?month=), with the same
    // numbers (V.monthlyGrowthDetail); this report is always the whole month.
-   const songOn=false;
-   const own=songOn?current.filter(m=>m.songId===songPick):current;
-   const rows=monthlyRows(selected,months,songOn?songPick:'');
-   const validCount=own.filter(valid).length;
-   const songName=songOn?songTitleOf(songPick):'';
-   const hadPrevious=songOn?previous.some(m=>m.songId===songPick):previous.length>0;
-   const changeIds=songOn?(window.VzipGrowthChangesUI?.songs?.(items)||[]):[];
+   const rows=monthlyRows(selected,months);
+   const validCount=current.filter(valid).length;
    const scope='<div class="growth-song-scope" role="group" aria-label="월별 분석 범위">'+
-     '<button type="button" data-mbs-scope="all" aria-pressed="'+!songOn+'">전체</button>'+
+     '<button type="button" data-mbs-scope="all" aria-pressed="true">전체</button>'+
      '<button type="button" data-mbs-scope="song" aria-pressed="false" aria-haspopup="dialog"><span>곡별</span><i class="ph ph-caret-down" aria-hidden="true"></i></button></div>';
-   const tiles=songOn?
-     '<div class="growth-month-overview" data-mbs-tiles><div><span>이 곡 녹음</span><strong>'+own.length+'</strong><small>개</small></div>'+
-     '<div><span>분석 가능</span><strong>'+validCount+'</strong><small>개</small></div>'+
-     '<div><span>지난달 대비 비교</span><strong>'+rows.filter(r=>r.c).length+'</strong><small>항목</small></div></div>':
-     '<div class="growth-month-overview"><div><span>곡 녹음</span><strong>'+current.length+'</strong><small>개</small></div>'+
+   const tiles='<div class="growth-month-overview"><div><span>곡 녹음</span><strong>'+current.length+'</strong><small>개</small></div>'+
      '<div><span>분석 가능한 녹음</span><strong>'+validCount+'</strong><small>개</small></div>'+
      '<div><span>같은 곡 비교</span><strong>'+rows.filter(r=>r.c).length+'</strong><small>항목</small></div></div>';
-   const songLinks=songOn?'<div class="growth-song-links"><a class="btn sm ghost" href="#/growth-song/'+encodeURIComponent(songPick)+'" data-mbs-link="lab"><i class="ph ph-waveform" aria-hidden="true"></i>이 곡 자세히</a>'+
-     (changeIds.includes(songPick)?'<a class="btn sm ghost" href="#/growth-flow?period=all&amp;gc='+encodeURIComponent(songPick)+'" data-growth-replace data-mbs-link="changes"><i class="ph ph-arrows-left-right" aria-hidden="true"></i>무엇이 달라졌나</a>':'')+'</div>'+
-     '<p class="small muted growth-song-note" data-mbs-only>곡별 보기는 변화만 보여요. AI 코치·다음 연습·계획·지난 기록은 전체에서 볼 수 있어요.</p>':'';
-   host.innerHTML=pageHead+tabs()+
-   '<header class="growth-intro"><div><p class="growth-eyebrow">MONTHLY REVIEW</p><h2>이번 달의 변화</h2></div>'+
-    '<label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label></header>'+
-   scope+tiles+(songOn?songLinks+
-   '<div class="growth-month-group" data-month-section="results">'+narrative(rows,selected,hadPrevious?prev:'',songName)+
-     '<div class="growth-month-section-title"><h3>6가지 성장 지표</h3><small>이 곡의 지난달 녹음과만 비교 · 근거가 부족하면 판정 보류</small></div>'+rowsHtml(rows)+'</div>':
+   host.innerHTML=scope+tiles+
    '<nav class="growth-jumps growth-month-jumps" aria-label="월별 성장 빠른 이동">'+
      '<button type="button" data-monthly-jump="results">변화</button>'+
      '<button type="button" data-monthly-jump="ai">AI 코치</button>'+
@@ -341,7 +304,7 @@ async function mount(host){
    '<div class="growth-month-group" data-month-section="practice">'+prescriptions(rows)+'<div data-monthly-plans></div></div>'+
    '<details class="growth-secondary"><summary><span><i class="ph ph-waveform" aria-hidden="true"></i> AI 청취 기록</span><small>저장된 청취 의견</small></summary>'+listeningEvidence(selected)+'</details>'+
    '<details class="growth-secondary" data-month-section="history"><summary><span><i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i> 지난 기록·보관 리포트</span><small>월별 기록과 보관 결과</small></summary>'+
-     archiveCard(selected)+history(months)+'</details>')+
+     archiveCard(selected)+history(months)+'</details>'+
    '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있어요. 동일 곡의 전월 기록만 개선·악화로 비교하고, 최고음 하나로 실력 변화를 판단하지 않아요. 파사지오는 음정 데이터만으로 판별할 수 없어 참고로만 보여 줘요. 호흡 지지·발성 건강·감정 표현은 이 수치로 판단하지 않아요. AI 분석은 버튼을 누를 때만 실행해요.</p>';
 
    const aiButton=host.querySelector('[data-monthly-ai-run]');
@@ -354,6 +317,11 @@ async function mount(host){
     if(!evidence.analysisCount&&!evidence.observations.length){
       V.toast('이달에 분석 가능한 녹음이나 청취 코멘트가 없어요.','error');return;
     }
+    // Asked first (큰 정리 3번): what is sent is said, and nothing goes out before 보내기 or after 취소.
+    monthlyAiBusy=true;aiButton.disabled=true;
+    const ok=await V.confirm('AI 월간 종합 받기',monthlySendText(evidence),{ok:'보내기'});
+    monthlyAiBusy=false;aiButton.disabled=false;
+    if(!ok||my!==request||!host.isConnected)return;
     const month=selected,owner=window.vzipCloudUserId?.(),origin=window.vzipCloudSessionId?.();
     const state=host.querySelector('[data-monthly-ai-state]');
     monthlyAiBusy=true;aiButton.disabled=true;aiButton.textContent='AI 분석 중…';
@@ -381,7 +349,6 @@ async function mount(host){
     finally{monthlyAiBusy=false;if(aiButton.isConnected){aiButton.disabled=false;aiButton.textContent='AI 월간 종합 분석하기';}}
    };
 
-   bindTabs();
    host.querySelectorAll('[data-monthly-jump]').forEach(button=>button.onclick=()=>{
     const target=host.querySelector('[data-month-section="'+button.dataset.monthlyJump+'"]');
     if(button.dataset.monthlyJump==='history'&&target?.tagName==='DETAILS')target.open=true;
@@ -394,16 +361,16 @@ async function mount(host){
     // The chosen song opens on its own screen at this month (kept on this device as the last choice).
     chooseSong(list,songPick,id=>{songPick=id;saveSongPick(id);V.nav('#/growth-song/'+encodeURIComponent(id)+'?month='+selected);});
    };
-   if(!songOn)V.monthlyPracticePlans?.(host.querySelector('[data-monthly-plans]'),selected,songItems,rows);
-   if(!songOn)V.nextPractice?.bindTop?.(host.querySelector('[data-month-section="practice"]'));
+   V.monthlyPracticePlans?.(host.querySelector('[data-monthly-plans]'),selected,songItems,rows);
+   V.nextPractice?.bindTop?.(host.querySelector('[data-month-section="practice"]'));
    host.querySelectorAll('[data-growth-goal]').forEach(b=>b.onclick=()=>{
     const d=definitions.find(x=>x.id===b.dataset.growthGoal);
     if(!d)return;
     if(saveGrowthGoal(d,selected)){b.disabled=true;b.textContent='추가됨';V.toast('오늘의 목표에 추가했어요.');}
     else V.toast('이미 오늘의 목표에 있어요.');
    });
-   host.querySelector('[data-growth-select]').onchange=ev=>{selected=ev.target.value;render();};
-   host.querySelectorAll('[data-month]').forEach(b=>b.onclick=()=>{selected=b.dataset.month;render();window.scrollTo({top:0,behavior:'smooth'});});
+   // 지난 기록's months: that month in 나 (its ‹ › and address follow).
+   host.querySelectorAll('[data-month]').forEach(b=>b.onclick=()=>{if(onMonth)onMonth(b.dataset.month);else{selected=b.dataset.month;render();}window.scrollTo({top:0,behavior:'smooth'});});
   };
   render();
  }catch(err){if(my===request)host.innerHTML='<div class="empty"><p>녹음 목록을 불러오지 못했어요.</p><p class="small muted">'+e(err.message)+'</p></div>';}
@@ -428,22 +395,19 @@ V.monthlyGrowthDetail=(items,{month,songId='',practice=false}={})=>{
   '<div class="growth-month-section-title"><h3>6가지 성장 지표</h3><small>'+(songOn?'이 곡의 지난달 녹음과만 비교':'지난달과 같은 곡만 비교')+' · 근거가 부족하면 판정 보류</small></div>'+rowsHtml(rows)};
 };
 
-/* ---------- 지난 흐름 (#/growth-flow) ---------- */
-// 성장 개편 안 B (phase 2): 결과 리포트's 전체 분석 · 월별 분석 · 주간 요약, unchanged, as the sub-page "지난 흐름 보기" of
-// 성장 › 이번 달 (app/growth-month.js). ?period=all | month | week; the period row inside switches between them in
-// place (one history entry). 주간 has no AI coach: the coach server takes a month or the whole record only.
-V.route('growth-flow',{title:'지난 흐름',back:true,tab:'growth',noAutoRefresh:true,
- render:r=>r?.query?.get('period')==='week'&&V.weeklySummary?
-  '<p class="growth-flow-note" data-flow-week-ai><i class="ph ph-info" aria-hidden="true"></i><span>주간 AI 코치는 아직 없어요. AI 코치는 월별·전체에서 쓸 수 있어요.</span></p><div class="ws-page" data-weekly-summary></div>':
-  '<div data-growth class="growth-page">' + (window.VZ.loadingRows?.() ?? '<p class="muted" role="status">불러오는 중…</p>') + '</div>',
+/* ---------- the report of 성장 › 나 (큰 정리 3번) ---------- */
+V.growthReport={mount,leave:()=>{request++;}};
+/** 지난 흐름 (#/growth-flow?period=week|month|all, with week= / month= / gc=) was its own screen: it is 성장 › 나 with that
+ * period chosen now. The address leads there (replaced, one history entry). */
+V.route('growth-flow',{title:'성장',tab:'growth',noAutoRefresh:true,
+ render:()=>'',
  mount(main,r){
-  const period=r?.query?.get('period');
-  const weekly=main.querySelector('[data-weekly-summary]');
-  if(weekly){V.growthPeriod?.set('week');V.weeklySummary.mount(weekly,r.query);return;}
-  V.growthPeriod?.set(period==='month'?'month':'all');
-  mount(main.querySelector('[data-growth]'));
- },
- leave(){request++;V.weeklySummary?.leave?.();}
+  const q=r?.query,period=q?.get('period');
+  const kind=period==='week'||period==='month'?period:'all';
+  // 전체 showed 무엇이 달라졌나 on top: it opens with 곡마다 자세히 (that card) open.
+  const extra=kind==='week'&&q?.get('week')?'&week='+encodeURIComponent(q.get('week')):kind==='month'&&q?.get('month')?'&month='+encodeURIComponent(q.get('month')):kind==='all'?(q?.get('gc')?'&gc='+encodeURIComponent(q.get('gc')):'&changes=1'):'';
+  location.replace('#/vocal-growth?period='+kind+extra);
+ }
 });
-window.addEventListener('vzip:analysis-saved',()=>{if(document.body.dataset.vzRoute==='growth-flow'){const host=document.querySelector('[data-growth]');if(host)mount(host);}});
+
 })();

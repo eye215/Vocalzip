@@ -54,14 +54,15 @@
   .growth-top-tabs{max-width:536px}
   .growth-hub-cols{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);column-gap:24px;align-items:start}
   .growth-hub-hint{display:flex}
-  /* 결과 리포트: the cards keep their inside; the six measures sit three across and AI 코치 beside 다음 연습. */
-  body[data-vz-route="growth-flow"] :is(.growth-stats-grid,.growth-metrics){grid-template-columns:repeat(3,minmax(0,1fr))}
-  body[data-vz-route="growth-flow"] [data-overall-body]{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px;grid-auto-flow:row dense;align-items:start}
-  body[data-vz-route="growth-flow"] [data-overall-body]>*{grid-column:1/-1}
-  body[data-vz-route="growth-flow"] [data-overall-body]>[data-growth-anchor="coach"]{grid-column:1}
-  body[data-vz-route="growth-flow"] [data-overall-body]>[data-growth-anchor="practice"]{grid-column:2}
+  /* The reports of 성장 › 나 (큰 정리 3번; they were #/growth-flow): the cards keep their inside; the six measures sit
+   * three across and AI 코치 beside 다음 연습. */
+  body[data-vz-route="vocal-growth"] [data-gm-report] :is(.growth-stats-grid,.growth-metrics){grid-template-columns:repeat(3,minmax(0,1fr))}
+  body[data-vz-route="vocal-growth"] [data-gm-report] [data-overall-body]{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px;grid-auto-flow:row dense;align-items:start}
+  body[data-vz-route="vocal-growth"] [data-gm-report] [data-overall-body]>*{grid-column:1/-1}
+  body[data-vz-route="vocal-growth"] [data-gm-report] [data-overall-body]>[data-growth-anchor="coach"]{grid-column:1}
+  body[data-vz-route="vocal-growth"] [data-gm-report] [data-overall-body]>[data-growth-anchor="practice"]{grid-column:2}
   /* 주간 요약: cards flow down two columns; the period control, the week switch and the note span both. */
-  body[data-vz-route="growth-flow"] .ws-page{display:block;columns:2;column-gap:24px}
-  body[data-vz-route="growth-flow"] .ws-page>*{break-inside:avoid;margin:0 0 12px}
-  body[data-vz-route="growth-flow"] .ws-page>:is(.growth-view-tabs,.ws-week,.ws-disclaimer,.ws-note,.ws-empty-card){column-span:all}
+  body[data-vz-route="vocal-growth"] .ws-page[data-gm-report]{display:block;columns:2;column-gap:24px}
+  body[data-vz-route="vocal-growth"] .ws-page[data-gm-report]>*{break-inside:avoid;margin:0 0 12px}
+  body[data-vz-route="vocal-growth"] .ws-page[data-gm-report]>:is(.growth-view-tabs,.ws-week,.ws-disclaimer,.ws-note,.ws-empty-card){column-span:all}
 }

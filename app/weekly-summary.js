@@ -46,7 +46,7 @@ V.weeklySummaryHomeRow=()=>{
   const s=build(M.cached?.()||[],last,{today,growth:false});
   if(s.empty||s.start!==last)return null;
   return {key:'weekly',icon:'',label:'지난주 요약',value:'연습 '+W.minutesLabel(s.practice.minutes)+' · '+s.practice.days+'일',
-   aria:'지난주 요약 보기, 연습 '+W.minutesLabel(s.practice.minutes)+', '+s.practice.days+'일',action:()=>V.nav('#/growth-flow?period=week&week='+last)};
+   aria:'지난주 요약 보기, 연습 '+W.minutesLabel(s.practice.minutes)+', '+s.practice.days+'일',action:()=>V.nav('#/vocal-growth?period=week&week='+last)};   // 성장 › 나, 주 · 지난주 (큰 정리 3번)
  }catch{return null;}
 };
 
@@ -92,7 +92,7 @@ function growthCard(s){
  const items=g.items.map(x=>'<li class="ws-growth"><strong>'+e(x.title)+'</strong>'+
   (x.lines.length?x.lines.map(l=>'<p><span class="ws-state '+(STATE_CLASS[l.state]||'neutral')+'">'+e(l.title+' · '+l.label)+'</span><small>'+e(l.text)+'</small>'+(l.basis?'<small class="ws-basis">'+e(l.basis)+'</small>':'')+'</p>').join('')
    :'<p><span class="ws-state hold">판정 보류</span><small>'+e(x.holdText)+'</small></p>')+'</li>').join('');
- return card('growth','성장','<ul class="ws-growth-list">'+items+'</ul>'+(g.more?'<p class="ws-note">분석한 곡 '+g.more+'곡 더 · <a href="#/growth-flow?period=all" data-growth-replace>성장 분석 보기</a></p>':'')+
+ return card('growth','성장','<ul class="ws-growth-list">'+items+'</ul>'+(g.more?'<p class="ws-note">분석한 곡 '+g.more+'곡 더 · <a href="#/vocal-growth?period=all" data-growth-replace>성장 분석 보기</a></p>':'')+
   '<p class="ws-note">이번 주 녹음과 그 전에 부른 같은 곡을 비교해요. 최고음이나 파사지오로는 판단하지 않아요.</p>');
 }
 function lessonsCard(s){
@@ -109,15 +109,9 @@ function optionalCards(s){
  if(s.practiceSet){const p=s.practiceSet;out+=card('practice-set','오늘의 연습','<ul class="ws-rows">'+row('완료한 세트',p.sessions+'세트 · '+p.days+'일')+(p.minutes?row('세트 연습 시간',W.minutesLabel(p.minutes)):'')+'</ul><p class="ws-note">위 연습 시간에 이미 포함돼 있어요.</p>');}
  return out;
 }
+/** The week's report: its parts in order. 성장 › 나 (주, app/growth-month.js) has the period switch and ‹ › above it. */
 function page(s){
- const b=badge(s);
- return '<div class="growth-view-tabs growth-range ws-tabs" role="group" aria-label="성장 분석 범위"><span class="growth-range-label" aria-hidden="true">기간</span>'+
-   '<button type="button" data-ws-tab="#/growth-flow?period=all">전체 분석</button><button type="button" data-ws-tab="#/growth-flow?period=month">월별 분석</button>'+
-   '<button type="button" class="active" aria-pressed="true">주간 요약</button></div>'+
-  '<nav class="ws-week" aria-label="주 선택"><button type="button" class="ws-nav" data-ws-move="-1" aria-label="이전 주"'+(s.canPrevious?'':' disabled')+'><i class="ph ph-caret-left" aria-hidden="true"></i></button>'+
-   '<div class="ws-week-label"><strong data-ws-range>'+e(weekTitle(s))+'</strong><small>'+e(b||'월–일 · 한국 시간')+'</small></div>'+
-   '<button type="button" class="ws-nav" data-ws-move="1" aria-label="다음 주"'+(s.canNext?'':' disabled')+'><i class="ph ph-caret-right" aria-hidden="true"></i></button></nav>'+
-  (s.empty?'<section class="ws-card ws-empty-card" data-ws-empty><h2>기록이 없는 주예요</h2><p>이 주에는 연습, 목표, 녹음, 레슨 기록이 없어요.</p>'+(s.current?'<a class="btn secondary" href="#/record">지금 녹음하기</a>':'')+'</section>'
+ return (s.empty?'<section class="ws-card ws-empty-card" data-ws-empty><h2>기록이 없는 주예요</h2><p>이 주에는 연습, 목표, 녹음, 레슨 기록이 없어요.</p>'+(s.current?'<a class="btn secondary" href="#/record">지금 녹음하기</a>':'')+'</section>'
    :hero(s)+goalsCard(s)+recordingsCard(s)+growthCard(s)+lessonsCard(s)+optionalCards(s)+
    '<section class="ws-card ws-share" aria-label="공유·저장"><h2>저장·공유</h2><div class="ws-share-buttons"><button type="button" class="btn secondary" data-ws-image><i class="ph ph-image" aria-hidden="true"></i> 이미지로 저장</button>'+
    '<button type="button" class="btn secondary" data-ws-copy><i class="ph ph-copy" aria-hidden="true"></i> 텍스트 복사</button></div><p class="ws-note" role="status" data-ws-share-state>이 기기에서만 만들어요. 서버로 보내지 않아요.</p></section>')+
@@ -186,22 +180,15 @@ async function copyText(text){
  document.body.append(ta);ta.select();let ok=false;try{ok=document.execCommand('copy');}catch{}ta.remove();return ok;
 }
 
-async function mount(host,query){
+/** The report of one week into host (성장 › 나 › 주): week 'YYYY-MM-DD' (its Monday; '' = this week). */
+async function mount(host,{week=''}={}){
  const my=++request;
- let weekStart=query?.get('week')||'',items=M.cached?.()||[];
+ let weekStart=week,items=M.cached?.()||[];
  const paint=()=>{
   const s=build(items,weekStart);
   if(!host.isConnected||my!==request)return;
   host.innerHTML=page(s);host.dataset.week=s.start;
   if(s.previousWeek)markSeen(s.start); // the home "지난주 요약" row has done its job
-  // 전체·월별·주간 are one place in the history (성장 통합): switching replaces the address instead of adding to it.
-  host.querySelectorAll('[data-ws-tab]').forEach(b=>b.onclick=()=>(V.growthHub?.go||V.nav)(b.dataset.wsTab));
-  host.querySelectorAll('[data-ws-move]').forEach(b=>b.onclick=()=>{
-   if(b.disabled)return;
-   weekStart=W.shift(s.start,7*Number(b.dataset.wsMove));
-   try{history.replaceState(null,'','#/growth-flow?period=week&week='+weekStart);}catch{}
-   paint();host.querySelector('[data-ws-move="'+b.dataset.wsMove+'"]:not([disabled])')?.focus();
-  });
   const state=host.querySelector('[data-ws-share-state]');
   const say=t=>{if(state)state.textContent=t;};
   const image=host.querySelector('[data-ws-image]');
@@ -222,12 +209,12 @@ async function mount(host,query){
  try{const fresh=await M.list();if(my!==request||!host.isConnected)return;items=fresh;paint();}
  catch(err){if(my===request&&host.isConnected&&!items.length)host.insertAdjacentHTML('afterbegin','<p class="ws-note" role="status">녹음 목록을 불러오지 못해 녹음·성장 항목은 빠졌을 수 있어요.</p>');}
 }
-/* 성장 개편 안 B (phase 2): 주간 요약 is the 주간 page of 지난 흐름 (#/growth-flow?period=week, app/monthly-growth.js),
- * under 성장 › 이번 달. Its old address moves there, keeping the week. Shared with 이번 달 (app/growth-month.js):
- * build (with the 연습 녹음 포함 switch) and the 성장 card. */
+/* 큰 정리 3번: 주간 요약 is the report of 성장 › 나 with 주 chosen (app/growth-month.js mounts it under the period switch;
+ * ‹ › there steps through the weeks). Its old addresses lead there, keeping the week. Shared with 나: build (with the
+ * 연습 녹음 포함 switch) and the 성장 card. */
 V.weeklySummary={mount,leave:()=>{request++;},build,growthHtml:s=>growthCard(s)};
 V.route('weekly-summary',{title:'성장',tab:'growth',noAutoRefresh:true,
  render:()=>'',
- mount(main,r){const week=r?.query?.get('week')||'';location.replace('#/growth-flow?period=week'+(week?'&week='+encodeURIComponent(week):''));}
+ mount(main,r){const week=r?.query?.get('week')||'';location.replace('#/vocal-growth?period=week'+(week?'&week='+encodeURIComponent(week):''));}
 });
 })();

@@ -789,7 +789,7 @@ function deepHtml(s,m){
     // data-precision-lab-entry: app/precision-report-ui.js adds its own link to this screen unless one is here already.
     (window.VzipPrecisionReport?deepLink('precision','#/precision-report','발성 정밀 리포트','표준 과제로 잰 결과를 과제별로 비교해요',' data-precision-lab-entry'):'')+
     deepLink('reports','#/lab-reports','리포트 보관함',reports?'저장한 리포트 '+reports+'개':'저장한 리포트가 아직 없어요')+
-    deepLink('basis','#/growth-flow?period=all','분석 기준','어떤 녹음을 세고 빼는지 · 전체 리포트의 맨 아래에 있어요')+
+    deepLink('basis','#/growth-basis','분석 기준','어떤 녹음을 세고, 무엇을 왜 비교에서 뺐는지 봐요')+
     deepLink('library','#/library','녹음을 직접 골라 분석','전체 녹음에서 선택한 뒤 분석을 눌러요')+
     deepLink('song','#/song/'+encodeURIComponent(s.song.id),'곡 상세','악보 · MR · 레슨 지적 · 녹음 목록');
 }

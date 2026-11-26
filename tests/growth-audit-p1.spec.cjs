@@ -201,6 +201,7 @@ test('small things: AI label after an error, chart at the newest point, 44px tap
   const run = page.locator('[data-overall-ai-run]');
   await expect(run).toHaveText('전체 코치 다시 분석');
   await run.click();
+  await page.locator('.sheet [data-ok]').click();                     // asked first (큰 정리 3번)
   await expect(page.locator('[data-overall-ai-state]')).toHaveText('서버 오류');
   await expect(run).toHaveText('전체 코치 다시 분석');               // was reset to "AI 전체 종합 분석하기"
   await expect(page.locator('.growth-ai-note')).toContainText('저장된 결과예요');

@@ -1,18 +1,22 @@
-/* 성장 › 이번 달 (#/vocal-growth) — the first tab of 성장 (성장 개편 안 B, phase 2). Four blocks for one period
- * (주간 · 월별 · 전체, 월별 by default, kept on this device):
+/* 성장 › 나 (#/vocal-growth) — the first tab of 성장: the report of ONE period (큰 정리 3번, 2026-11-27). On top 단계 in one
+ * row, then the period switch 주 · 월 · 전체 (월 by default, kept on this device) with ‹ › to step back and forward
+ * through weeks or months (전체 has none), and under it that period's report:
  *   ⓐ 한 것        entered practice minutes and days, recordings, 보이스 체크 days, lessons, 레슨 지적 체크 runs
- *                  (app/growth-month-model.js, 주간 요약's rules for any span)
- *   ⓑ 달라진 것     무엇이 달라졌나 for the period (app/growth-changes-ui.js with a period: the previous period vs this one,
- *                  same song, same method and version), 전체 · 곡별, the 연습 녹음 포함 switch (off by default — then the
- *                  numbers are 결과 리포트's), and 지표 자세히: 월별 분석's 이달의 변화 and six measures (전체: 전체 분석's six,
- *                  주간: 주간 요약's 성장 card)
- *   ⓒ 다음 연습     one list from every place that recommends something (VZ.nextPractice, app/next-practice.js, on
- *                  app/growth-next-model.js), top 3 and 더 보기 and a link to the whole list (#/next-practice),
- *                  each with where it came from and a way to start it
- *   ⓓ 지난 흐름 보기 → #/growth-flow (app/monthly-growth.js): the former 결과 리포트 screens with charts, 음역 흐름, AI 코치
- *                  (월별 · 전체 only), 지난 기록·보관 리포트 and 분석 기준
- * Read-only apart from 목표에 담기 (a daily goal, as 전체 분석's 목표 담기 makes it). The period, the switch and the chosen
- * song are per-device conveniences (localStorage), not part of the library. */
+ *                  (app/growth-month-model.js, 주간 요약's rules for any span) and 연습 시간 자세히 (#/practice-stats)
+ *   ⓑ 달라진 것     one line, and 곡마다 자세히 folded: 무엇이 달라졌나 for the period (app/growth-changes-ui.js with a
+ *                  period: the previous period vs this one, same song, same method and version), 곡별 (a song's own
+ *                  screen), the 연습 녹음 포함 switch (off by default — then the numbers are the reports')
+ *   ⓒ the report   what #/growth-flow showed for the period, with its own renderers and numbers: 주 → 주간 요약's parts
+ *                  (app/weekly-summary.js) and 다음 연습 (VZ.nextPractice, app/next-practice.js: top 3, 더 보기, the
+ *                  whole list); 월 → 월별 리포트 (app/monthly-growth.js: 이달의 변화 · 6가지 지표 · 음역 흐름 · AI 월간 종합 ·
+ *                  다음 연습 · 지난 기록); 전체 → 전체 리포트 (app/overall-growth-ui.js: 6가지 지표 · AI 전체 종합 · 흐름 ·
+ *                  음역 · 다음 연습 · 분석 기준)
+ * The address says the period when it was chosen here: ?period=week|month|all (&week=YYYY-MM-DD | &month=YYYY-MM);
+ * the old addresses (#/growth-flow?period=…, #/growth-changes, #/weekly-summary) lead here. ?changes=1 opens 곡마다
+ * 자세히; &gc=<songId> (전체) opens it at that song's line.
+ * Read-only apart from 목표에 담기 (a daily goal, as 전체 분석's 목표 담기 makes it) and the reports' own saving (월별 리포트's
+ * monthly archive, AI 종합 after 보내기). The period, the switch and the chosen song are per-device conveniences
+ * (localStorage), not part of the library. */
 (() => {
 'use strict';
 const V = window.VZ, M = V?.media, GM = window.VzipGrowthMonth;
@@ -23,12 +27,31 @@ const PRACTICE_KEY = 'vzip:growth-practice', SONG_KEY = 'vzip:monthly-growth-son
 const load = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
 const save = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch {} };
 const todayOf = () => window.VzipGrowthDataset?.koreaDay?.(Date.now()) || V.today();
-const PERIODS = [['week', '주간'], ['month', '월별'], ['all', '전체']];
+const PERIODS = [['week', '주'], ['month', '월'], ['all', '전체']];
 const WORDS = {
-  week:{done:'이번 주에 한 것', changes:'지난주와 비교', flow:'주마다의 기록 · 요일별 연습 시간과 지난주 비교', last:'지난주'},
-  month:{done:'이번 달에 한 것', changes:'지난달과 비교', flow:'달마다의 흐름 · 지난달과 같은 곡끼리 비교', last:'지난달'},
-  all:{done:'지금까지 한 것', changes:'처음과 최근 비교', flow:'처음부터 지금까지 · 같은 곡의 처음과 최근 비교', last:''}
+  week:{done:'이번 주에 한 것', then:'그 주에 한 것', compare:'그 주 기록', changes:'지난주와 비교', last:'지난주', step:'주'},
+  month:{done:'이번 달에 한 것', then:'그 달에 한 것', compare:'그 달 기록', changes:'지난달과 비교', last:'지난달', step:'달'},
+  all:{done:'지금까지 한 것', changes:'처음과 최근 비교', last:''}
 };
+const shiftDay = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+/** The period of kind that holds the day `at` (this one when left out): the model's span and words, said for a past one. */
+function periodAt(kind, at = '') {
+  const today = todayOf(), p = GM.period(kind, at && at <= today ? at : today);
+  if (p.kind === 'all') return {...p, current:true};
+  const current = p.from === GM.period(p.kind, today).from;
+  return {...p, current, compare:current ? p.compare : WORDS[p.kind].compare};
+}
+/** The earliest day anything was kept (a recording, a practice, a lesson): ‹ › does not step before it. */
+function firstDay(items) {
+  let first = '';
+  const take = d => { if (/^\d{4}-\d{2}-\d{2}$/.test(d || '') && (!first || d < first)) first = d; };
+  for (const m of items || []) take(V.growthDataset.dateOf(m));
+  for (const p of V.db.practices || []) take(String(p?.date || '').slice(0, 10));
+  for (const l of V.db.lessons || []) take(String(l?.date || '').slice(0, 10));
+  return first;
+}
+/** The address of 나 at this period (replaced, never added to the history). */
+const hashOf = p => '#/vocal-growth?period=' + p.kind + (p.kind === 'week' && !p.current ? '&week=' + p.from : p.kind === 'month' && !p.current ? '&month=' + p.from.slice(0, 7) : '');
 let request = 0, view = null;   // view: {host, items, period, practice, song, results}
 
 /* ---------- ⓐ 한 것 ---------- */
@@ -38,7 +61,7 @@ function doneHtml(v) {
   let d;
   try { d = GM.done(V.db, v.items, {from:p.from, to:p.to, prev:p.prev, today:todayOf()}); } catch (error) { console.error(error); return ''; }
   const pts = d.points;
-  return '<section class="gm-section gm-done" data-gm-section="done" aria-labelledby="gm-done-title"><header class="gm-head"><h2 id="gm-done-title">' + WORDS[p.kind].done + '</h2>' +
+  return '<section class="gm-section gm-done" data-gm-section="done" aria-labelledby="gm-done-title"><header class="gm-head"><h2 id="gm-done-title">' + (p.current ? WORDS[p.kind].done : WORDS[p.kind].then) + '</h2>' +
     '<p class="gm-basis" data-gm-basis="done">' + e(GM.compareText(p, d)) + '</p></header><ul class="gm-tiles">' +
     tile('minutes', '연습 시간', GM.minutesText(d.minutes), '직접 적은 시간') + tile('days', '연습한 날', d.days + '일') +
     tile('recordings', '녹음', d.recordings + '개') + tile('voice-check', '보이스 체크', d.voiceCheckDays + '일') +
@@ -54,6 +77,8 @@ const songHref = (id, p) => '#/growth-song/' + encodeURIComponent(id) + (p?.kind
 const changeOpts = v => ({period:v.period.from ? {from:v.period.from, to:v.period.to} : null, practice:v.practice});
 const STATE_LINE = {compare:k => ({week:'지난주 녹음과 견줄 수 있어요', month:'지난달 녹음과 견줄 수 있어요', all:'처음과 최근을 견줄 수 있어요'})[k],
   new:k => k === 'all' ? '견줄 다른 날 녹음이 없어요' : '이 기간 전 녹음이 없어요', hold:() => '판정 보류'};
+/** 지표 자세히 with the 연습 녹음 포함 switch on: the period's measures counted with 연습 takes (the report below counts
+ * song takes only, as 결과 리포트 always did — with the switch off they are the same numbers, so it is not repeated). */
 function detailHtml(v, song) {
   const k = v.period.kind;
   try {
@@ -83,13 +108,13 @@ function changesHtml(v) {
   const fallback = '';
   const toggle = '<label class="gm-switch"><input type="checkbox" role="switch" data-gm-practice' + (v.practice ? ' checked' : '') + '><span>연습 녹음 포함</span></label>';
   const note = v.practice ? '노래 연습실·트레이닝 연습 녹음도 넣어 견줘요. 끄면 결과 리포트와 같은 기준이에요.' : '곡 녹음만 견줘요. 노래 연습실·트레이닝 연습 녹음은 빼요.';
-  const detail = detailHtml(v, songOn ? v.song : '');
-  return '<section class="gm-section gm-changes" data-gm-section="changes" aria-labelledby="gm-changes-title"><header class="gm-head"><h2 id="gm-changes-title">달라진 것</h2>' +
+  const detail = v.practice ? detailHtml(v, '') : '';
+  return '<section class="gm-changes" data-gm-section="changes" aria-label="곡마다 자세히"><header class="gm-head">' +
     '<p class="gm-basis" data-gm-basis="changes">' + e(WORDS[k].changes + ' · 같은 곡을 같은 방법·같은 분석 버전으로 잰 녹음끼리') + '</p></header>' +
     '<div class="gm-tools">' + scope + toggle + '</div><p class="gm-note" data-gm-practice-note>' + e(note) + '</p>' + fallback +
     (C ? '<div class="gc-host" data-growth-changes></div>' : '') +
-    (detail ? '<details class="growth-secondary gm-detail" data-gm-detail><summary><span><i class="ph ph-chart-bar" aria-hidden="true"></i> 지표 자세히</span><small>' +
-      (k === 'month' ? '이달의 변화 · 6가지 지표' : k === 'all' ? '6가지 지표' : '이번 주 성장') + '</small></summary><div class="gm-detail-body">' + detail + '</div></details>' : '') + '</section>';
+    (detail ? '<details class="growth-secondary gm-detail" data-gm-detail><summary><span><i class="ph ph-chart-bar" aria-hidden="true"></i> 지표 자세히 · 연습 녹음 포함</span><small>' +
+      (k === 'month' ? '이달의 변화 · 6가지 지표' : k === 'all' ? '6가지 지표' : '이번 주 성장') + ' · 아래 리포트는 곡 녹음만 세요</small></summary><div class="gm-detail-body">' + detail + '</div></details>' : '') + '</section>';
 }
 function mountChanges(v, section) {
   const host = section.querySelector('[data-growth-changes]'), C = window.VzipGrowthChangesUI;
@@ -97,7 +122,10 @@ function mountChanges(v, section) {
   const list = C.songChoices(v.items, changeOpts(v)), song = '';
   const empty = v.period.from ? {verdicts:'이 기간에 남긴 들어 본 평가가 없어요. 곡 줄의 들어 보고 평가로 남길 수 있어요.',
     songs:'이 기간에 ' + WORDS[v.period.kind].last + ' 녹음과 견줄 같은 곡 녹음이 없어요. 같은 곡을 다시 녹음하고 분석하면 여기에 보여 드려요.'} : null;
-  C.mount(host, v.items, {...changeOpts(v), songId:song, head:false, ...(empty ? {empty} : {})});
+  const done = C.mount(host, v.items, {...changeOpts(v), songId:song, head:false, ...(empty ? {empty} : {})});
+  v.changesMounted = true;
+  // &gc=<songId> (the old 무엇이 달라졌나 link of a song): open and scroll to that song's line, once.
+  if (v.focus) { const id = v.focus; v.focus = ''; Promise.resolve(done).then(() => focusLine(v, id)); }
   // 곡별: the chosen song opens on its own screen — at this month's chip for 월별 (the same 지난달 대비 and measures).
   section.querySelector('[data-gm-scope="song"]').onclick = () => {
     if (!list.length) { V.toast('이 기간에는 곡 녹음이 없어요.'); return; }
@@ -105,6 +133,13 @@ function mountChanges(v, section) {
       id => { v.song = id; save(SONG_KEY, id); V.nav(songHref(id, v.period)); });
   };
   section.querySelector('[data-gm-practice]').onchange = ev => { v.practice = ev.target.checked; save(PRACTICE_KEY, v.practice ? '1' : ''); paintChanges(v); };
+}
+function focusLine(v, id) {
+  if (/[?&]gc=/.test(location.hash)) try { history.replaceState(null, '', hashOf(v.period)); } catch {}
+  const line = [...v.host.querySelectorAll('[data-gc-song]')].find(x => x.dataset.gcSong === id);
+  if (!line) return;
+  const more = line.closest('details:not([data-gm-changes-fold])'); if (more) more.open = true;
+  line.scrollIntoView({behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'start'});
 }
 function paintChanges(v) {
   const old = v.host.querySelector('[data-gm-section="changes"]');
@@ -144,8 +179,8 @@ function actionHtml(it, i) {
     case 'skill': return link('#/practice-set', '오늘의 연습에서 하기');
     case 'ai-draft': {
       const ref = a.ref?.kind;
-      if (ref === 'overall-ai') return link('#/growth-flow?period=all', 'AI 코치 보기');
-      if (ref === 'monthly-ai') return link('#/growth-flow?period=month', 'AI 코치 보기');
+      if (ref === 'overall-ai') return link('#/vocal-growth?period=all', 'AI 코치 보기');
+      if (ref === 'monthly-ai') return link('#/vocal-growth?period=month', 'AI 코치 보기');
       return link(a.href || '#/practice-review', ref === 'ai-review' ? 'AI 초안 보기' : '곡 분석에서 보기');
     }
     default: return '';
@@ -218,32 +253,62 @@ function lineHtml(v) {
     (line ? '<p class="gme-line-text" data-gme-line>' + e(line.text) + '</p><p class="gm-basis">' + e(line.basis) + '</p>' +
       (line.songId ? '<a class="gc-chip gm-act" href="' + e(songHref(line.songId, v.period)) + '" data-gme-listen><i class="ph ph-play" aria-hidden="true"></i>두 녹음 듣기</a>' : '')
       : '<p class="gm-empty" data-gme-line-empty>' + e(WORDS[v.period.kind].changes) + ' 견줄 같은 곡 녹음이 아직 없어요. 같은 곡을 다시 녹음하고 분석하면 여기에 한 줄로 알려 드려요.</p>') +
-    '<a class="gm-more-link" href="#/growth-changes" data-gme-changes><span>곡마다 자세히</span><i class="ph ph-arrow-right" aria-hidden="true"></i></a></section>';
+    '<details class="gme-more" data-gm-changes-fold' + (v.changesOpen ? ' open' : '') + '><summary class="gm-more-link" data-gme-changes><span>곡마다 자세히</span><i class="ph ph-caret-down" aria-hidden="true"></i></summary>' +
+    changesHtml(v) + '</details></section>';
 }
 
-/** 지난 흐름 (the reports by period, also in 기록): one link under 한 것. */
-const flowLink = v => '<a class="gm-more-link gme-flow" href="#/growth-flow?period=' + v.period.kind + '" data-gm-flow><span>지난 흐름 보기 · ' + e(WORDS[v.period.kind].flow) + '</span><i class="ph ph-arrow-right" aria-hidden="true"></i></a>';
-
 /* ---------- the screen ---------- */
+function barHtml(v) {
+  const p = v.period, k = p.kind, first = v.first || '';
+  const prev = k !== 'all' && !!first && first < p.from, next = k !== 'all' && !p.current;
+  const arrow = (dir, on) => '<button type="button" class="gm-step-btn" data-gm-move="' + dir + '" aria-label="' + (dir < 0 ? '이전 ' : '다음 ') + WORDS[k].step + '"' + (on ? '' : ' disabled') + '><i class="ph ph-caret-' + (dir < 0 ? 'left' : 'right') + '" aria-hidden="true"></i></button>';
+  return '<div class="gm-bar"><div class="growth-view-tabs growth-range gm-period" role="group" aria-label="성장 기간"><span class="growth-range-label" aria-hidden="true">기간</span>' +
+    PERIODS.map(([key, label]) => '<button type="button" data-gm-period="' + key + '" aria-pressed="' + (key === k) + '" class="' + (key === k ? 'active' : '') + '">' + label + '</button>').join('') + '</div>' +
+    '<div class="gm-step" data-gm-step>' + (k === 'all' ? '' : arrow(-1, prev)) + '<p class="gm-label" data-gm-label>' + e(p.label) + (k !== 'all' && p.current ? ' <small>' + (k === 'week' ? '이번 주' : '이번 달') + '</small>' : '') + '</p>' + (k === 'all' ? '' : arrow(1, next)) + '</div></div>';
+}
+/** The report of the period (what #/growth-flow showed), mounted by its own renderer. */
+function mountReport(v) {
+  const box = v.host.querySelector('[data-gm-report]'), p = v.period;
+  if (!box) return;
+  V.growthReport?.leave?.(); V.weeklySummary?.leave?.();
+  if (p.kind === 'week') { V.weeklySummary?.mount(box, {week:p.from}); return; }
+  V.growthReport?.mount(box, {kind:p.kind, month:p.from.slice(0, 7), onMonth:key => go(v, periodAt('month', key + '-01'))});
+}
+/** To another period: drawn again, the address replaced (no new history entry). */
+function go(v, p) {
+  v.period = p; V.growthPeriod?.set(p.kind);
+  try { history.replaceState(null, '', hashOf(p)); } catch {}
+  paint(v);
+}
 function paint(v) {
   if (!v.host.isConnected) return;
-  const k = v.period.kind;
-  const bar = '<div class="gm-bar"><div class="growth-view-tabs growth-range gm-period" role="group" aria-label="성장 기간"><span class="growth-range-label" aria-hidden="true">기간</span>' +
-    PERIODS.map(([key, label]) => '<button type="button" data-gm-period="' + key + '" aria-pressed="' + (key === k) + '" class="' + (key === k ? 'active' : '') + '">' + label + '</button>').join('') +
-    '</div><p class="gm-label" data-gm-label>' + e(v.period.label) + '</p></div>';
-  // 나: 단계 한 줄 · 달라진 한 줄 · 다음 연습 · 한 것. 달라진 것 자세히 (#/growth-changes): the full card on its own page.
-  v.host.innerHTML = (v.mode === 'changes' ? '' : meHtml(v)) + bar + '<div class="gm-grid">' + (v.mode === 'changes' ? changesHtml(v) + flowLink(v) : lineHtml(v) + nextHtml(v) + doneHtml(v) + flowLink(v)) + '</div>' +
+  const k = v.period.kind, key = k + ':' + v.period.from;
+  // The report of the same period, already mounted (it reads the list itself): kept as it is, so a redraw of the blocks
+  // above it (the list loaded, a record added) never drops what is open or running in it.
+  const kept = v.reportKey === key ? v.host.querySelector('[data-gm-report]') : null;
+  // 나: 단계 한 줄, the period, then its report: 한 것 · 달라진 것 · (주: 다음 연습 · 주간 요약 | 월 · 전체: 월별 · 전체 리포트).
+  v.host.innerHTML = meHtml(v) + barHtml(v) + '<div class="gm-grid">' + doneHtml(v) + lineHtml(v) + (k === 'week' ? nextHtml(v) : '') + '</div>' +
+    (k === 'week' ? '<p class="growth-flow-note" data-gm-week-ai><i class="ph ph-info" aria-hidden="true"></i><span>주간 AI 종합은 아직 없어요. AI 종합은 월·전체에서 받을 수 있어요.</span></p>' : '') +
+    '<div class="gm-report ' + (k === 'week' ? 'ws-page' : 'growth-page') + '" data-gm-report="' + k + '"' + (k === 'week' ? ' data-weekly-summary' : ' data-growth') + '></div>' +
     '<p class="small muted growth-disclaimer">수치는 음성 측정에 기반한 참고 정보예요. 분석하지 않은 녹음에는 결과를 만들어 넣지 않고, 연습 시간은 직접 적은 시간만 더해요.</p>';
   v.host.querySelectorAll('[data-gm-period]').forEach(b => b.onclick = () => {
     if (b.dataset.gmPeriod === v.period.kind) return;
-    V.growthPeriod?.set(b.dataset.gmPeriod);
-    v.period = GM.period(b.dataset.gmPeriod, todayOf());
-    paint(v);
+    go(v, periodAt(b.dataset.gmPeriod));
     v.host.querySelector('[data-gm-period="' + v.period.kind + '"]')?.focus();
   });
-  const changes = v.host.querySelector('[data-gm-section="changes"]'), next = v.host.querySelector('[data-gm-section="next"]');
-  if (changes) mountChanges(v, changes);
+  v.host.querySelectorAll('[data-gm-move]').forEach(b => b.onclick = () => {
+    if (b.disabled) return;
+    const p = v.period, dir = Number(b.dataset.gmMove);
+    go(v, periodAt(p.kind, p.kind === 'week' ? shiftDay(p.from, 7 * dir) : dir < 0 ? shiftDay(p.from, -1) : shiftDay(p.to, 1)));
+    (v.host.querySelector('[data-gm-move="' + dir + '"]:not([disabled])') || v.host.querySelector('[data-gm-move]:not([disabled])'))?.focus();
+  });
+  const fold = v.host.querySelector('[data-gm-changes-fold]'), changes = v.host.querySelector('[data-gm-section="changes"]'), next = v.host.querySelector('[data-gm-section="next"]');
+  v.changesMounted = false;
+  if (fold) fold.addEventListener('toggle', () => { v.changesOpen = fold.open; if (fold.open && !v.changesMounted) mountChanges(v, v.host.querySelector('[data-gm-section="changes"]')); });
+  if (changes && v.changesOpen) mountChanges(v, changes);
   if (next) bindNext(v, next);
+  if (kept) v.host.querySelector('[data-gm-report]')?.replaceWith(kept);
+  else { v.reportKey = key; mountReport(v); }
 }
 /** The 발성 정밀 측정 results of this account (read-only, this device), for 다음 연습; null when there is no store. */
 async function readPrecision() {
@@ -251,43 +316,51 @@ async function readPrecision() {
   const owner = window.vzipCloudUserId?.() || window.VzipAccountScope?.owner || 'local';
   try { return (await window.VzipPrecisionStore.list(owner)).map(r => r.result).filter(Boolean); } catch { return null; }
 }
-async function mount(host, mode = view?.host === host ? view.mode : 'me') {
+/** ask: {kind, at, changes, focus} from the address; without it, this device's period, now. */
+async function mount(host, ask = null) {
   const my = ++request;
-  const period = GM.period(V.growthPeriod?.get() || 'month', todayOf());
+  const kept = view?.host === host ? view : null;
+  const period = ask ? periodAt(ask.kind, ask.at) : kept ? kept.period : periodAt(V.growthPeriod?.get() || 'month');
   let song = load(SONG_KEY);
   if (song && !V.song(song)) song = '';
   const cached = M.cached?.() || [];
-  view = {host, mode, items:cached, period, practice:load(PRACTICE_KEY) === '1', song, results:null, next:null};
+  view = {host, items:cached, period, practice:load(PRACTICE_KEY) === '1', song, results:null, next:null,
+    changesOpen:ask ? !!ask.changes : !!kept?.changesOpen, focus:ask?.focus || '', first:firstDay(cached)};
   if (cached.length) paint(view); else host.innerHTML = (window.VZ.loadingRows?.() ?? '<p class="muted" role="status">불러오는 중…</p>');
   let items;
   try { items = await M.list(); } catch (error) { items = cached; if (!cached.length && my === request && host.isConnected) host.insertAdjacentHTML('afterbegin', '<p class="growth-hub-note" role="status">녹음 목록을 불러오지 못해 녹음·변화 항목은 빠졌을 수 있어요.</p>'); }
   if (my !== request || !host.isConnected) return;
-  if (items !== cached || !cached.length) { view.items = items; paint(view); }
+  if (items !== cached || !cached.length) { view.items = items; view.first = firstDay(items); paint(view); }
   const results = await readPrecision();
   if (my !== request || !host.isConnected || !Array.isArray(results)) return;
   view.results = results; paintNext(view);
 }
+const isDay = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
 V.route('vocal-growth', {title:'성장', tab:'growth', noAutoRefresh:true,
   render:() => (V.growthTabs?.('me') || '') + '<div class="gm" data-growth-month></div>',
   mount(main, r) {
-    // Older addresses of 결과 리포트 lead to where their content is now (one history entry, replaced).
+    // Older addresses lead to where their content is now (one history entry, replaced).
     // #/vocal-growth/training (the former 보컬 트레이닝): practice is on 오늘 › 연습하기 now.
     if (r?.params?.[0] === 'training') { V.homeShow?.('practice'); location.replace('#/home'); return; }
-    const alias = {analysis:'#/vocal-analysis'}[r?.params?.[0]];
-    const q = r?.query, gc = q?.get('gc');
-    const to = alias || (gc ? '#/growth-flow?period=all&gc=' + encodeURIComponent(gc) : q?.get('mode') === 'monthly' ? '#/growth-flow?period=month' : '');
-    if (to) { location.replace(to); return; }
-    mount(main.querySelector('[data-growth-month]'), 'me');
+    if (r?.params?.[0] === 'analysis') { location.replace('#/vocal-analysis'); return; }
+    const q = r?.query, gc = q?.get('gc') || '';
+    // ?mode=monthly (결과 리포트 월별) and ?gc= (무엇이 달라졌나 of a song) are periods of 나 now.
+    if (q?.get('mode') === 'monthly') { location.replace('#/vocal-growth?period=month'); return; }
+    if (gc && q?.get('period') !== 'all') { location.replace('#/vocal-growth?period=all&gc=' + encodeURIComponent(gc)); return; }
+    const kind = q?.get('period'), month = q?.get('month') || '', week = q?.get('week') || '';
+    const ask = ['week', 'month', 'all'].includes(kind) || q?.get('changes') === '1' ? {kind:['week', 'month', 'all'].includes(kind) ? kind : V.growthPeriod?.get() || 'month',
+      at:kind === 'week' && isDay(week) ? week : kind === 'month' && /^\d{4}-\d{2}$/.test(month) ? month + '-01' : '', changes:q?.get('changes') === '1' || !!gc, focus:gc} : null;
+    if (ask) V.growthPeriod?.set(ask.kind);
+    mount(main.querySelector('[data-growth-month]'), ask);
   },
-  leave() { request++; }
+  leave() { request++; V.growthReport?.leave?.(); V.weeklySummary?.leave?.(); }
 });
-// 달라진 것 자세히: the full 무엇이 달라졌나 card for the period (전체 · 곡별, 연습 녹음 포함, 지표 자세히), from 나 and 기록.
-V.route('growth-changes', {title:'달라진 것', back:true, tab:'growth', noAutoRefresh:true,
-  render:() => '<div class="gm" data-growth-month></div>',
-  mount(main) { mount(main.querySelector('[data-growth-month]'), 'changes'); },
-  leave() { request++; }
+// 달라진 것 자세히 was its own page: it is 나's 곡마다 자세히 now, at the period kept on this device.
+V.route('growth-changes', {title:'성장', tab:'growth', noAutoRefresh:true,
+  render:() => '',
+  mount() { location.replace('#/vocal-growth?period=' + (V.growthPeriod?.get() || 'month') + '&changes=1'); }
 });
-const here = () => ['vocal-growth', 'growth-changes'].includes(document.body.dataset.vzRoute) && view?.host?.isConnected ? view : null;
+const here = () => document.body.dataset.vzRoute === 'vocal-growth' && view?.host?.isConnected ? view : null;
 // A recording added or analysed meanwhile: everything again. A record (a goal, a lesson): 한 것 and 다음 연습 only, so the
 // 달라진 것 card (and a player in it) stays as it is.
 for (const name of ['vzip:analysis-saved', 'vzip:v6-media']) window.addEventListener(name, () => { const v = here(); if (v) mount(v.host); });

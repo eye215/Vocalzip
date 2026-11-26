@@ -51,10 +51,13 @@ async function boot(page) {
     window.dispatchEvent(new Event('vzip:media-updated'));
   }, TAKES);
   await page.waitForTimeout(300);
-  await page.goto('/#/growth-flow?period=month');   // 지난 흐름 › 월별 분석 (성장 개편 phase 2)
-  await expect(page.locator('[data-growth-select]')).toBeVisible();
+  await page.goto('/#/vocal-growth?period=month');   // 성장 › 나 › 월: 월별 리포트 (큰 정리 3번)
+  await expect(page.locator('[data-gm-report="month"] [data-mbs-scope="song"]')).toBeVisible();
 }
-const month = (page, key) => page.locator('[data-growth-select]').selectOption(key);
+/** 나 at that month (what ‹ › leads to). */
+const month = async (page, key) => { await page.evaluate(h => { location.hash = h; }, '#/vocal-growth?period=month&month=' + key);
+  await expect(page.locator('[data-gm-label]')).toContainText(key.slice(0, 4) + '년 ' + Number(key.slice(5)) + '월');
+  await expect(page.locator('[data-gm-report="month"] [data-mbs-scope="song"]')).toBeVisible(); };
 const intonation = page => page.locator('[data-growth-metric="intonation"] .growth-stat-number');
 const pick = async (page, title) => {
   await page.locator('[data-mbs-scope="song"]').click();
@@ -99,7 +102,7 @@ test('곡별 lists this month’s songs with their status and opens that song at
   expect(await overflow(page)).toBe(false);
   // 뒤로: the whole month again.
   await page.locator('[data-back]').click();
-  await expect(page.locator('[data-growth-select]')).toBeVisible();
+  await expect(page.locator('[data-gm-report="month"] [data-mbs-scope="song"]')).toBeVisible();
   // 판정 보류 stays 판정 보류 for a song whose earlier month has no analysis.
   await month(page, P);
   await pick(page, 'Home');
@@ -107,7 +110,7 @@ test('곡별 lists this month’s songs with their status and opens that song at
   await expect(detail(page, P).locator('[data-growth-metric="intonation"] .growth-state')).not.toHaveText(/좋아짐|아쉬움|비슷/);
   // A song with this month only.
   await page.locator('[data-back]').click();
-  await expect(page.locator('[data-growth-select]')).toBeVisible();
+  await expect(page.locator('[data-gm-report="month"] [data-mbs-scope="song"]')).toBeVisible();
   await month(page, P);
   await pick(page, 'Memory');
   await songAt(page, 'sC', P);
@@ -132,7 +135,7 @@ test('label of a long song title stays inside 390 px', async ({page}) => {
   await boot(page);
   await page.evaluate(() => VZ.change(db => { db.songs.find(s => s.id === 'sA').title = '아주 아주 긴 곡 제목이 들어가도 화면 밖으로 밀려나지 않아야 해요 Defying Gravity'; }, {silent:true}));
   await page.reload();
-  await expect(page.locator('[data-growth-select]')).toBeVisible();
+  await expect(page.locator('[data-gm-report="month"] [data-mbs-scope="song"]')).toBeVisible();
   await month(page, P);
   await pick(page, '아주 아주 긴');
   await songAt(page, 'sA', P);

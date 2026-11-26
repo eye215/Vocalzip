@@ -65,8 +65,8 @@ test('mobile segment playback is cleaned on month changes and only audio is anal
 
 test('current month stays available without recordings, and AI completion respects month switches',()=>{
  const js=file('app/monthly-growth.js');
- assert.match(js,/ym\(V\.today\(\)\),\.\.\.months\.keys\(\)/);
- assert.match(js,/\.\.\.\(V\.db\.practicePlans\|\|\[\]\)/);
+ // 큰 정리 3번: the month is 나's (‹ › through any month); this month when none is asked for, with or without recordings.
+ assert.match(js,/let selected=\/\^\\d\{4\}-\\d\{2\}\$\/\.test\(month\)\?month:currentKey/);
  assert.match(js,/visibleSerial===renderSerial&&selected===month/);
  assert.match(js,/my!==request\|\|!window\.vzipCloudSignedIn/);
  assert.doesNotMatch(js,/btn\.onclick=\(\)=>\{selected=month;render\(\)/);
@@ -97,14 +97,16 @@ test('song-only AI evidence shares the same explicit exclusion for training sess
  assert.match(js,/const observations=\(V\.db\.practices\|\|\[\]\)\.filter\(p=>songListeningEntry\(p,month\)\)/);
 });
 
-test('overall and monthly growth share a single route and preserve month controls',()=>{
- const html=file('index.html'),js=file('app/monthly-growth.js');
+test('overall and monthly growth share one report renderer and keep the month controls (in 나: 주 · 월 · 전체 and ‹ ›)',()=>{
+ // 큰 정리 3번: the report is mounted under 성장 › 나's period switch; the month is chosen there with ‹ ›.
+ const html=file('index.html'),js=file('app/monthly-growth.js'),me=file('app/growth-month.js');
  assert.match(html,/app\/overall-growth-model\.js/);
  assert.match(html,/app\/overall-growth-ui\.js/);
  assert.match(html,/design-system\/shared-nav\.css/);
- assert.match(js,/data-growth-mode="overall"/);
- assert.match(js,/data-growth-mode="monthly"/);
- assert.match(js,/data-growth-select/);
+ assert.match(js,/V\.growthReport=\{mount/);
+ assert.match(me,/data-gm-period="/);
+ assert.match(me,/data-gm-move="/);
+ assert.match(me,/V\.growthReport\?\.mount\(/);
  assert.match(js,/window\.VzipOverallGrowth\?\.calculate/);
  assert.match(js,/V\.monthlyPracticePlans/);
 });

@@ -99,8 +99,8 @@ test('성장 tab · 월별 분석 compares last month with this month per song a
   await page.setViewportSize({width:320, height:740});
   await boot(page);
   await page.goto('/#/growth-flow?period=all');
-  await page.locator('[data-growth-mode="monthly"]').click();
-  await expect(page.locator('[data-growth-select]')).toHaveValue(thisMonth);
+  await page.locator('[data-gm-period="month"]').click();
+  await expect(page.locator('[data-gm-report="month"] [data-month-section="results"]')).toBeVisible();   // 나 › 월 (큰 정리 3번)
   const cards = page.locator('[data-month-section="results"] .growth-metric');
   await expect(cards).toHaveCount(6);
   await expect(page.locator('[data-month-section="results"] [data-growth-metric="intonation"] .growth-state').first()).toHaveText('좋아진 방향');

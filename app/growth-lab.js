@@ -1,8 +1,9 @@
-/* 성장 › 기록 (#/growth-lab; it was 연구소) — the third tab of 성장 (성장 v2): everything deep or archival in one list. Each
- * row says what it answers and what is there now ("결과 3개", "아직 없음"). Three groups:
- *   흐름·리포트    달라진 것 자세히 (#/growth-changes) · 월별 · 전체 리포트 · 주간 요약 (#/growth-flow?period=…)
- *   소리 깊이 보기  소리 길 흔적 · 발성 정밀 측정 · 발성 정밀 리포트 · MR로 다시 분석 · 녹음 하나 분석
- *   기록·기준      리포트 보관함 · 귀와 숫자 표 전체 (#/growth-ear) · 분석 기준·뺀 것 목록 (#/growth-basis)
+/* 성장 › 기록 (#/growth-lab; it was 연구소) — the third tab of 성장 (성장 v2): the past reports and the deep tools. Each
+ * row says what it answers and what is there now ("결과 3개", "아직 없음"). Three groups (큰 정리 3번):
+ *   지난 리포트    the months 월별 리포트 kept by itself (monthlyGrowthReports → 성장 › 나 at that month) · 리포트 보관함
+ *   소리 깊이 보기  녹음 하나 분석 · 발성 정밀 측정 · 발성 정밀 리포트 · 소리 길 흔적 · MR로 다시 분석
+ *   기준          분석 기준·뺀 것 목록 (#/growth-basis) · 귀와 숫자 표 전체 (#/growth-ear)
+ * 주간 요약 · 월별 · 전체 리포트 · 달라진 것 자세히 are 성장 › 나 itself now (its period switch); their old addresses lead there.
  * The things you DO (오늘 연습 세트, 매일 보이스 체크, 노래 연습실, 보컬 트레이닝) are on 오늘 › 연습하기
  * (design-system/student-home-app.js); the former 보컬 트레이닝 addresses lead there (app/growth-hub.js).
  * Read-only: every count is worked out on each draw from what is already kept (the library, the 정밀 측정 and 소리 길
@@ -23,26 +24,27 @@ let request = 0, view = null;   // view: {host, items, results (정밀 측정: u
 /* ---------- the rows ---------- */
 // [key, icon, name, what it answers, href ('' = a button), shown()]
 const GROUPS = [
-  // 성장 v2: what 나 says in one line, in full — and the reports that were 지난 흐름.
-  ['flow', '흐름·리포트', [
-    ['changes', 'arrows-left-right', '달라진 것 자세히', '기간마다 곡별로 무엇이 달라졌는지 · 연습 녹음 포함 · 지표 자세히', '#/growth-changes', () => true],
-    ['month-report', 'chart-line-up', '월별 리포트 · AI 월간 코치', '달마다의 흐름 · 꺾은선 · 음역 흐름 · 지난 기록', '#/growth-flow?period=month', () => true],
-    ['all-report', 'chart-line', '전체 리포트 · AI 전체 코치', '처음부터 지금까지 같은 곡의 처음과 최근', '#/growth-flow?period=all', () => true],
-    ['week-report', 'calendar-blank', '주간 요약', '주마다의 기록 · 요일별 연습 시간 · 저장·공유', '#/growth-flow?period=week', () => true]
+  // The months 월별 리포트 kept by itself (app/monthly-growth.js archiveMonths) are added in front of these rows.
+  ['archive', '지난 리포트', [
+    ['reports', 'folder-open', '리포트 보관함', '저장한 곡 분석 리포트 · 비교 메모를 다시 봐요', '#/lab-reports', () => true]
   ]],
   ['deep', '소리 깊이 보기', [
-    ['voice-path', 'path', '소리 길 흔적 · 시험판', '두 녹음에서 소리가 어디서 달라졌는지 나란히 봐요', '#/voice-path', () => !!window.VzipVoicePath],
+    ['take', 'chart-line', '녹음 하나 분석', '녹음을 직접 골라 그 녹음의 음높이와 측정값을 봐요', '', () => true],
     ['precision', 'microphone', '발성 정밀 측정', '편안한 음역에서 8가지 과제로 목소리를 재요', '#/precision-measurement', () => !!V.precisionMeasurement],
     ['precision-report', 'waveform', '발성 정밀 리포트', '정밀 측정 결과를 지난 측정과 과제별로 견줘요', '#/precision-report', () => !!window.VzipPrecisionReport],
-    ['mr', 'music-notes-minus', 'MR로 다시 분석', '반주를 빼고 목소리만 다시 재요', '', () => !!V.mrReanalyze],
-    ['take', 'chart-line', '녹음 하나 분석', '녹음을 직접 골라 그 녹음의 음높이와 측정값을 봐요', '', () => true]
+    ['voice-path', 'path', '소리 길 흔적 · 시험판', '두 녹음에서 소리가 어디서 달라졌는지 나란히 봐요', '#/voice-path', () => !!window.VzipVoicePath],
+    ['mr', 'music-notes-minus', 'MR로 다시 분석', '반주를 빼고 목소리만 다시 재요', '', () => !!V.mrReanalyze]
   ]],
-  ['records', '기록·기준', [
-    ['reports', 'folder-open', '리포트 보관함', '저장해 둔 곡 분석 리포트를 다시 봐요', '#/lab-reports', () => true],
-    ['ear', 'ear', '귀와 숫자 표 전체', '귀로 들은 평가와 숫자가 같은 쪽으로 움직였는지 봐요', '#/growth-ear', () => !!window.VzipGrowthChangesUI?.lab && !!window.VzipEarAgreement],
-    ['basis', 'list-magnifying-glass', '분석 기준·뺀 것 목록', '무엇을 세고, 무엇을 왜 비교에서 뺐는지 봐요', '#/growth-basis', () => !!window.VzipGrowthChangesUI?.lab]
+  ['records', '기준', [
+    ['basis', 'list-magnifying-glass', '분석 기준·뺀 것 목록', '무엇을 세고, 무엇을 왜 비교에서 뺐는지 봐요', '#/growth-basis', () => !!window.VzipGrowthChangesUI?.lab],
+    ['ear', 'ear', '귀와 숫자 표 전체', '귀로 들은 평가와 숫자가 같은 쪽으로 움직였는지 봐요', '#/growth-ear', () => !!window.VzipGrowthChangesUI?.lab && !!window.VzipEarAgreement]
   ]]
 ];
+/** 지난 리포트: one row per month 월별 리포트 kept by itself, newest first — it opens 성장 › 나 at that month. */
+const archiveRows = () => (V.db.monthlyGrowthReports || []).filter(r => /^\d{4}-\d{2}$/.test(r?.month || '') && !gone('monthlyGrowthReports', r.id))
+  .slice().sort((a, b) => b.month.localeCompare(a.month))
+  .map(r => ['month:' + r.month, 'calendar-check', r.month.slice(0, 4) + '년 ' + Number(r.month.slice(5, 7)) + '월 월간 리포트', '자동 보관 · 분석 ' + (r.analysisCount || 0) + '개 · 그달의 리포트를 나에서 봐요',
+    '#/vocal-growth?period=month&month=' + r.month, () => true]);
 const mrSongs = () => V.songsNewest().filter(s => V.mrReanalyze?.has(s));
 /** What each row has now: {key: [text, has something]}; '' while a store is still being read. */
 function states(v) {
@@ -76,7 +78,7 @@ function html(v) {
   const st = states(v);
   return '<p class="growth-lab-lead" data-lab-lead>궁금할 때 더 깊이 들여다보는 도구예요. 연습은 <a href="#/home" data-home-practice>오늘 탭</a>에서 해요.</p>' +
     GROUPS.map(([group, title, rows]) => {
-      const shown = rows.filter(r => r[5]());
+      const shown = (group === 'archive' ? archiveRows().concat(rows) : rows).filter(r => r[5]());
       return shown.length ? '<section class="growth-lab-group" data-lab-group="' + group + '" aria-labelledby="growth-lab-' + group + '"><h2 class="sec" id="growth-lab-' + group + '">' + title + '</h2>' +
         '<div class="list icons growth-hub-list" data-lab-tools>' + shown.map(r => rowHtml(r, st[r[0]] || (r[0] in st ? ['', false] : null))).join('') + '</div></section>' : '';
     }).join('') +

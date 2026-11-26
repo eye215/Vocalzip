@@ -232,6 +232,13 @@ function aiEvidence(report){
   analyzedSongs:report.analyzedSongs,periodStart:report.firstDate,periodEnd:report.lastDate,
   metrics:G.aiMetrics(report.metrics),observations:observationEvidence()};
 }
+/** What 보내기 sends, said before anything is sent: the card's own words with this report's counts. */
+function sendText(input){
+ const names=(input.metrics||[]).map(m=>G.METRICS.find(d=>d.id===m.key)?.title||m.key).join('·')||'음정 정확도·음정 안정성·호흡 유지';
+ return '버튼을 눌렀을 때만 아래 내용을 AI 서버로 보내요.\n· '+names+'의 비교 결과(판정 보류 포함) — 곡 녹음 '+input.recordingCount+'개, 신뢰 가능한 분석 '+input.analysisCount+'개, 비교한 곡 '+(input.analyzedSongs||0)+'곡'+(input.periodStart?', '+input.periodStart+'~'+(input.periodEnd||''):'')+'\n'+
+  '· 기존 AI 청취 코멘트 '+(input.observations||[]).length+'건 (곡 이름·날짜·요약, 최대 5건)\n'+
+  '음역·최고음·고음·파사지오 값은 보내지 않아요. 원본 음성은 전송하지 않아요. 새로운 녹음을 AI가 직접 듣는 분석이 아니에요.';
+}
 /** slots.range: the 전체 음역 흐름 section (app/growth-range-ui.js), placed under the monthly graph. */
 function render(report,metric,slots={}){
  return '<div data-growth-anchor="overview">'+summaryCard(report)+'</div>'+jumpNav(!!slots.range)+
@@ -289,6 +296,10 @@ function bind(host,report,{rerender,ownerIdentity}={}){
   if(!input.analysisCount&&!input.observations.length){
    V.toast('전체 분석에 사용할 녹음이나 청취 기록이 없어요.','error');return;
   }
+  // Asked first (큰 정리 3번): what is sent is said, and nothing goes out before 보내기 or after 취소.
+  run.disabled=true;
+  const ok=await V.confirm('AI 전체 종합 받기',sendText(input),{ok:'보내기'});
+  if(!ok||!host.isConnected){run.disabled=false;return;}
   const identity=ownerIdentity?.()||{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()};
   const status=host.querySelector('[data-overall-ai-state]');run.disabled=true;run.textContent='분석 중…';
   if(status)status.textContent='기존 측정값과 청취 기록을 정리하고 있어요.';
@@ -323,5 +334,5 @@ function bindChart(host,report){
    variant:'compact'});
  });
 }
-window.VzipOverallGrowthUI={render,bind,aiEvidence,observationEvidence,noteHtml,metricCard,evidenceHtml:evidence};
+window.VzipOverallGrowthUI={render,bind,aiEvidence,observationEvidence,noteHtml,metricCard,evidenceHtml:evidence,sendText};
 })();

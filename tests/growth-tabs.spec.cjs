@@ -82,15 +82,17 @@ test('성장 opens on 이번 달 with three tabs; the period control stays a sep
   await expect(current(page)).toHaveText('나');           // changing the period redraws the content, not the tabs
   expect(await page.evaluate(() => { const t = document.querySelector('.growth-top-tabs').getBoundingClientRect(), p = document.querySelector('.growth-view-tabs').getBoundingClientRect(); return t.bottom <= p.top; })).toBe(true);
   for (const a of await tabs(page).all()) expect((await a.boundingBox()).height).toBeGreaterThanOrEqual(44);
-  // The former 결과 리포트 (전체 · 월별 · 주간) is 지난 흐름, a sub-page of 이번 달.
-  await page.locator('[data-gm-flow]').click();
-  await expect(page).toHaveURL(/#\/growth-flow\?period=week$/);
+  // The former 결과 리포트 (전체 · 월별 · 주간) is the report of the period, right here (큰 정리 3번).
+  await expect(page.locator('[data-gm-report="week"]')).toBeVisible();
+  await expect(page.locator('[data-gm-flow]')).toHaveCount(0);
+  await page.locator('[data-gm-period="all"]').click();
+  await expect(page.locator('[data-gm-report="all"] [data-overall-body]')).toBeVisible();
   await expect(page.locator('.v-nav a[data-nav="growth"]')).toHaveAttribute('aria-current', 'page');
-  await page.locator('[data-ws-tab="#/growth-flow?period=all"]').click();
-  await expect(page.locator('[data-overall-body]')).toBeVisible();
-  await page.locator('[data-back]').click();
+  // The period is kept on the device: 곡 and back to 나 open 전체 again.
+  await tabs(page).nth(1).click();
+  await tabs(page).nth(0).click();
   await expect(page).toHaveURL(/#\/vocal-growth$/);
-  await expect(page.locator('[data-gm-period="week"]')).toHaveAttribute('aria-pressed', 'false');   // 지난 흐름's last period is kept
+  await expect(page.locator('[data-gm-period="week"]')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('[data-gm-period="all"]')).toHaveAttribute('aria-pressed', 'true');
   expect(page.__errors).toEqual([]);
 });
@@ -156,18 +158,22 @@ test('older links keep their screens; a bare #/vocal-lab lands on 곡 without tr
   expect(page.__errors).toEqual([]);
 });
 
-test('연구소: two small groups of tools, each with what it answers and its state; no practice screens; fits 320px', async ({page}) => {
+test('기록: only its three groups — 지난 리포트 · 소리 깊이 보기 · 기준 — each row with what it answers and its state; fits 320px', async ({page}) => {
   await page.setViewportSize({width:320, height:640});
   await boot(page, {practices:ROOM, comparisonReports:[{id:'r1', kind:'vocal-lab', songId:'s1', song:'Defying Gravity', created:Date.now(), mediaIds:['a5', 'a6'], snapshots:[]}]});
   await page.evaluate(() => { location.hash = '#/growth-lab'; });
   await expect(page).toHaveURL(/#\/growth-lab$/);
   await expect(current(page)).toHaveText('기록');
   await expect(page.locator('.v-nav a[data-nav="growth"]')).toHaveAttribute('aria-current', 'page');
-  // 소리 깊이 보기 · 기록·기준, in this order (성장 개편 안 B, phase 4).
-  await expect(page.locator('[data-lab-group] h2')).toHaveText(['흐름·리포트', '소리 깊이 보기', '기록·기준']);
-  expect(await page.locator('[data-lab-group="deep"] [data-lab-tool]').evaluateAll(els => els.map(e => e.dataset.labTool))).toEqual(['voice-path', 'precision', 'precision-report', 'mr', 'take']);
-  expect(await page.locator('[data-lab-group="records"] [data-lab-tool]').evaluateAll(els => els.map(e => e.dataset.labTool))).toEqual(['reports', 'ear', 'basis']);
-  await expect(page.locator('[data-lab-tool] .item-title')).toHaveText(['달라진 것 자세히', '월별 리포트 · AI 월간 코치', '전체 리포트 · AI 전체 코치', '주간 요약', '소리 길 흔적 · 시험판', '발성 정밀 측정', '발성 정밀 리포트', 'MR로 다시 분석', '녹음 하나 분석', '리포트 보관함', '귀와 숫자 표 전체', '분석 기준·뺀 것 목록']);
+  // 지난 리포트 · 소리 깊이 보기 · 기준, in this order (큰 정리 3번). 주간 요약 · 월별 · 전체 리포트 · 달라진 것 자세히 are
+  // 성장 › 나's period switch now: no row here.
+  await expect(page.locator('[data-lab-group] h2')).toHaveText(['지난 리포트', '소리 깊이 보기', '기준']);
+  expect(await page.locator('[data-lab-group="archive"] [data-lab-tool]').evaluateAll(els => els.map(e => e.dataset.labTool))).toEqual(['reports']);   // no month kept yet
+  expect(await page.locator('[data-lab-group="deep"] [data-lab-tool]').evaluateAll(els => els.map(e => e.dataset.labTool))).toEqual(['take', 'precision', 'precision-report', 'voice-path', 'mr']);
+  expect(await page.locator('[data-lab-group="records"] [data-lab-tool]').evaluateAll(els => els.map(e => e.dataset.labTool))).toEqual(['basis', 'ear']);
+  await expect(page.locator('[data-lab-tool] .item-title')).toHaveText(['리포트 보관함', '녹음 하나 분석', '발성 정밀 측정', '발성 정밀 리포트', '소리 길 흔적 · 시험판', 'MR로 다시 분석', '분석 기준·뺀 것 목록', '귀와 숫자 표 전체']);
+  for (const gone of ['changes', 'month-report', 'all-report', 'week-report']) await expect(page.locator('[data-lab-tool="' + gone + '"]')).toHaveCount(0);
+  await expect(page.locator('#view [href^="#/growth-flow"], #view [href="#/growth-changes"]')).toHaveCount(0);
   for (const row of await page.locator('[data-lab-tool]').all()) {
     expect((await row.locator('.item-sub').innerText()).trim().length).toBeGreaterThan(8);   // one line of what it answers
     expect((await row.boundingBox()).height).toBeGreaterThanOrEqual(44);
@@ -199,8 +205,16 @@ test('연구소: two small groups of tools, each with what it answers and its st
   await page.locator('[data-lab-tool="reports"]').click();
   await expect(page).toHaveURL(/#\/lab-reports$/);
   await expect(page.locator('.vl-reports .vl-report')).toHaveCount(2);
+  // 지난 리포트: a month 월별 리포트 kept by itself is a row of its own, opening 나 at that month.
+  await page.evaluate(() => VZ.change(d => { (d.monthlyGrowthReports ||= []).push({id:'monthly-growth:2026-10', month:'2026-10', created:1, recordingCount:4, analysisCount:3, metrics:[], growthModel:2, recommendations:[]}); }, {silent:true}));
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/growth-lab$/);
+  const kept = page.locator('[data-lab-group="archive"] [data-lab-tool="month:2026-10"]');
+  await expect(kept.locator('.item-title')).toHaveText('2026년 10월 월간 리포트');
+  await expect(kept).toHaveAttribute('href', '#/vocal-growth?period=month&month=2026-10');
+  await kept.click();
+  await expect(page.locator('[data-gm-label]')).toHaveText('2026년 10월');
+  await expect(page.locator('[data-gm-report="month"] [data-month-section="results"]')).toBeVisible();
   expect(page.__errors).toEqual([]);
 });
 

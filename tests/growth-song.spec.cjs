@@ -171,9 +171,9 @@ test('판정은 이번 달과 같다: 같은 곡의 처음·최근 줄과 지난
   await expect(page.locator('[data-song-month] strong')).toHaveText('지난달 대비');
   await expect(page.locator('[data-song-month] span')).toHaveText(month.word + ' · ' + month.text);
   await expect(page.locator('[data-song-month] small')).toHaveText(month.basis);
-  // 뒤로 returns to 달라진 것 자세히, where it was opened from.
+  // 뒤로 returns to 나 › 곡마다 자세히 (the old 달라진 것 자세히 leads there), where it was opened from.
   await page.locator('[data-back]').click();
-  await expect(page).toHaveURL(/#\/growth-changes$/);
+  await expect(page).toHaveURL(/#\/vocal-growth\?period=all&changes=1$/);
   // 월별 › 곡별 Home: the song screen at this month's chip, with that month's line (지난 기간 vs 이번 기간).
   await page.locator('[data-gm-period="month"]').click();
   await expect(page.locator('[data-gm-section="changes"] [data-gc-song="s5"] .gc-basis')).toContainText('지난 기간 마지막 녹음과 이번 기간');
@@ -350,7 +350,7 @@ test('깊이 보기: 소리 길 흔적, MR로 다시 분석, 정밀 리포트, �
   await expect(deep.locator('[data-song-deep="precision"]')).toHaveAttribute('href', '#/precision-report');
   await expect(deep.locator('[data-precision-lab-entry]')).toHaveCount(1);                                    // one link, not two
   await expect(deep.locator('[data-song-deep="reports"]')).toHaveAttribute('href', '#/lab-reports');
-  await expect(deep.locator('[data-song-deep="basis"]')).toHaveAttribute('href', '#/growth-flow?period=all');
+  await expect(deep.locator('[data-song-deep="basis"]')).toHaveAttribute('href', '#/growth-basis');
   await expect(deep.locator('[data-song-deep="library"]')).toHaveAttribute('href', '#/library');
   await expect(deep.locator('[data-song-deep="song"]')).toHaveAttribute('href', '#/song/s5');
   for (const a of await deep.locator('a.vl-report').all()) expect((await a.boundingBox()).height).toBeGreaterThanOrEqual(44);
