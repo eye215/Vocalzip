@@ -331,7 +331,10 @@ export async function createFloatingHome(opts={}){
  q("main").setAttribute("role","presentation");
  root.prepend(el("h1","홈","vz-visually-hidden"));
  q('[aria-label="알림"]').onclick=()=>opts.onNotifications?.();
- q('[aria-label="프로필"]').onclick=()=>opts.onProfile?.();
+ // 설정 (화면 지도 정리 후보 5, 2026-11-26): the person icon read as "프로필" and was hard to find as the way to 설정 —
+ // it is the same gear and the same name as on the other tabs now. Its action is unchanged (opts.onProfile → 설정).
+ const settingsButton=q('[aria-label="프로필"]');settingsButton.setAttribute("aria-label","설정");settingsButton.title="설정";
+ settingsButton.onclick=()=>opts.onProfile?.();
  /* v4 home (docs/design/VOCALZIP_DESIGN_SYSTEM_V4_2026-11-12.md, Home order): a small date/streak line, one
   * "지금 할 것" card, up to four goals, one Home summary rows card (next schedule, needs-attention when there is
   * something, this week) and recent songs as pills. The approved markup still supplies the card, goal list and dock;
@@ -635,7 +638,7 @@ export async function createFloatingHome(opts={}){
  }
   // Semantic icons share the same Phosphor Regular weight as the practice timer.
  // Chevrons, add controls, status marks, logo, play and record icons keep their own rules.
- swap(".vz-header-actions button:first-child svg","\ue0ce");swap(".vz-header-actions button:last-child svg","\ue4c2");
+ swap(".vz-header-actions button:first-child svg","\ue0ce");swap(".vz-header-actions button:last-child svg","\ue272");
  swap(".vz-event .vz-art-front svg","\ue34c");swap(".vz-week .vz-title > svg:not(.vz-chevron)","\ue150");swap(".vz-goals .vz-title > svg","\ue6a2");swap(".vz-goal-tools button svg","\ue270");
  q(".vz-floating-record").onclick=event=>opts.onRecord?.(event.currentTarget);
  const routes=["home","songs","calendar","vocal-growth"];
