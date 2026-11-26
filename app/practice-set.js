@@ -220,7 +220,7 @@ function planHtml(){
   const row=s=>{
     const mine=own.has(s.id),edit=mine||s.kind==='exercise'||s.kind==='take';
     const copy='<span class="pset-row-copy"><small>'+esc(kindLabel(s))+(s.optional?' · 선택':'')+(s.focus?'<span class="pset-focus-tag">추천</span>':'')+'</small><strong>'+esc(shortTitle(s))+'</strong>'+
-      (s.segmentStart!=null?'<em>구간 '+esc(P.segmentLabel(s.segmentStart,s.segmentEnd))+'</em>':'')+(s.focus?'<em class="pset-why" data-focus-why>'+esc(s.focus.why)+'</em>':'')+'</span>'+
+      (s.segmentStart!=null?'<em>구간 '+esc(P.segmentLabel(s.segmentStart,s.segmentEnd))+'</em>':'')+(D.applyInfo?.(s)?'<em data-room-task="'+esc(s.roomTask)+'">'+esc(D.applyInfo(s).name)+'</em>':'')+(s.focus?'<em class="pset-why" data-focus-why>'+esc(s.focus.why)+'</em>':'')+'</span>'+
       '<span class="pset-fixed">'+(s.mic?micBadge:'')+'<b>'+s.minutes+'분</b>'+(edit?'<i class="ph ph-caret-right" aria-hidden="true"></i>':'')+'</span>';
     return '<li class="pset-row'+(mine?'':' is-fixed')+'" data-step="'+esc(s.id)+'" data-kind="'+esc(s.kind)+'">'+
       (edit?'<button type="button" class="pset-row-btn" data-edit aria-label="'+esc(shortTitle(s))+', '+s.minutes+'분, 바꾸기">'+copy+'</button>':copy)+'</li>';
@@ -457,6 +457,7 @@ function bindHelper(host,st){
   if(mr&&song)try{V.renderSongMR(mr,song);}catch(e){console.error(e);}
 }
 function whyOf(st){
+  const task=D.applyInfo?.(st);if(task)return task.text;
   if(st.why)return st.why;
   if(st.kind==='goal'){
     const g=(V.db.dailyGoals||[]).find(x=>x.id===st.goalId);
@@ -499,8 +500,16 @@ function runContext(){
     setMic(value){session.mic=value;persist();try{if(value==='granted')store().setItem(MIC_KEY(),'ok');}catch{}},
     saveTake,helper:helperHtml,bindHelper,why:whyOf,note:noteOf,lastLine:()=>lastDone};
 }
+/** 곡에 적용하기 not started yet: its task is read again, so a 보이스 체크 done earlier in this set (목 상태 1–2)
+ * turns it into the task done without singing. */
+function refreshTask(st){
+  if(!st?.roomTask||st.elapsed>0||st.done||st.skipped)return;
+  const t=D.applyTask?.(V.db,session.date);if(!t||(t.key===st.roomTask&&t.why===st.roomWhy))return;
+  st.roomTask=t.key;st.roomWhy=t.why;persist();
+}
 function mountRun(host){
   runner?.destroy();
+  refreshTask(session.steps[session.index]);
   const st=session.steps[session.index],go=autostart;autostart=false;
   runner=V.dailySetRunner.mount(host.querySelector('[data-pset-run]'),runContext());
   // The step before was replaced under the finger: the one big button takes the focus it lost.

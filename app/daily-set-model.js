@@ -17,6 +17,10 @@
  *   4. 곡 (the group SONG, on unless turned off in 고르기), as 오늘 연습 세트 always ended: ONE automatic step
  *      "곡에 적용하기 · <곡>" — the running monthly plan's song, else the latest practised song; left out when a goal or
  *      a homework of today's set already covers a song — and then the optional 녹음 step.
+ *      The step carries ONE 가사·표현 task of the former 노래 연습실 (APPLY_TASKS, step.roomTask): the 5 tasks take turns by
+ *      the date like a group's exercises; a performance (나의 공연) within PERFORMANCE_DAYS gives 공연 연습 instead; a
+ *      rest day (today's 보이스 체크 목 상태 ≤ 2, or a 노래 연습실 submission of today that says rest) gives the task
+ *      done without singing. No step (곡 off, or covered), no task. Nothing of the room is written: no practiceRoom row.
  *   Optional: a 30-second take before the first and after the last step (prefs.recording).
  *
  * WHERE THINGS ARE KEPT — no new list, only rows of lists that already sync:
@@ -34,7 +38,8 @@
   const node=typeof module==='object'&&module.exports;
   const req=(path,name)=>node?require(path):root[name];
   const api=factory({set:()=>req('./practice-set-model.js','VzipPracticeSet'),next:()=>req('./growth-next-model.js','VzipGrowthNext'),
-    routines:()=>req('./goal-routines.js','VzipGoalRoutines'),levels:()=>req('./levels-model.js','VzipLevels')});
+    routines:()=>req('./goal-routines.js','VzipGoalRoutines'),levels:()=>req('./levels-model.js','VzipLevels'),
+    room:()=>req('./practice-room-model.js','VocalzipPracticeRoomModel')});
   if(node)module.exports=api;else root.VzipDailySet=api;
 })(typeof self!=='undefined'?self:globalThis,dep=>{
 'use strict';
@@ -107,6 +112,59 @@ const CATALOG=[
 ];
 /** 곡: not a rotation of exercises but the automatic end of a set (곡에 적용하기, then the optional 녹음). */
 const SONG={id:'song',title:'곡',line:'오늘 연습을 곡에 적용하고, 원하면 녹음해요'};
+/** The 가사·표현 tasks of the former 노래 연습실 (practice-room/app.js TASKS: the same keys, names and `goal` line — a
+ * test keeps the words the same). ROTATION takes turns; performance and the no-voice reflection come by rule. */
+const APPLY_TASKS={
+  connect:{name:'두 구절 연결하기',text:'나누어 연습한 구절을 이어 부르고 두 녹음을 비교해요.',vocal:true},
+  reflection:{name:'가사의 상대와 목적 정하기',text:'누구에게, 무엇을 전하고 싶은지 구체적으로 적어봐요.',vocal:false},
+  delivery:{name:'가사를 말로 전하기',text:'가사를 말하듯 읽고 누구에게 전하는지 들어봐요.',vocal:true},
+  expressive:{name:'표현을 담은 한 구절',text:'좋아하는 한 구절을 부르고 의도한 표현을 기록해요.',vocal:true},
+  scene:{name:'상황 속 한 구절',text:'장면의 상황과 상대를 떠올리며 한 구절을 불러봐요.',vocal:true},
+  performance:{name:'공연 연습 녹음과 회고',text:'현재 준비한 노래를 녹음하고 다음 개선점 하나를 정해요.',vocal:true}
+};
+const ROTATION=['connect','reflection','delivery','expressive','scene'],PERFORMANCE_DAYS=30;
+/** Why a task is today's: the small line under it on the doing screen. */
+const APPLY_WHY={rotation:'가사·표현 과제 5개가 돌아가며 나와요 · 원래 노래 연습실 과제',rest:'직접 남긴 불편함이나 목 상태를 우선했어요 · 소리 없이 해요',
+  performance:'공연이 30일 안에 있어서 공연 연습을 해요'};
+const daysBetween=(a,b)=>dayNumber(b)-dayNumber(a);
+/** Days to the next performance (나의 공연 still in preparation: its next session not cancelled or done, else its
+ * start) from today; null without one. The same reading as app/song-pick-model.js. */
+function nextPerformance(db,today){
+  let best=null;
+  for(const p of live(db,'performances')){
+    if((p.status||'preparing')!=='preparing')continue;
+    const dates=[...list(p.sessions).filter(x=>x&&isDate(x.date)&&x.date>=today&&!['cancelled','completed'].includes(x.status)).map(x=>x.date),...(isDate(p.start)&&p.start>=today?[p.start]:[])];
+    for(const d of dates){const n=daysBetween(today,d);if(best==null||n<best)best=n;}
+  }
+  return best;
+}
+/** Today's condition as the set can see it: 'rest' when the latest 보이스 체크 of today says 목 상태 1–2, or a 노래 연습실
+ * submission of today says rest (app/practice-room-model.js conditionFor); '' otherwise. Only today's: an old
+ * submission would keep every later day silent. */
+function restToday(db,today){
+  const checks=live(db,'practices').filter(p=>p.date===today&&p.voiceCheck&&typeof p.voiceCheck==='object')
+    .sort((a,b)=>(Number(a.voiceCheck.at)||Number(a.created)||0)-(Number(b.voiceCheck.at)||Number(b.created)||0));
+  const rating=checks.map(p=>p.voiceCheck.selfRating).filter(Number.isInteger).at(-1);
+  if(rating!=null&&rating<=2)return 'rest';
+  const R=dep.room();
+  if(R?.conditionFor)for(const p of live(db,'practices'))if(p.date===today&&p.practiceRoom&&!p.practiceRoom.demo){try{if(R.conditionFor(p.practiceRoom)==='rest')return 'rest';}catch{}}
+  return '';
+}
+/** The 가사·표현 task of 곡에 적용하기 on a date: {key, name, text, vocal, why ('rest' | 'performance' | 'rotation')}. */
+function applyTask(db,today){
+  if(!isDate(today))return null;
+  const info=key=>({key,...APPLY_TASKS[key]});
+  if(restToday(db,today)==='rest')return {...info('reflection'),why:'rest'};
+  const d=nextPerformance(db,today);
+  if(d!=null&&d>=0&&d<=PERFORMANCE_DAYS)return {...info('performance'),why:'performance'};
+  return {...info(ROTATION[((dayNumber(today)%ROTATION.length)+ROTATION.length)%ROTATION.length]),why:'rotation'};
+}
+/** The words of a step's task (name, text, the why line), null for a step without one. */
+function applyInfo(st){
+  const t=st&&APPLY_TASKS[st.roomTask];
+  return t?{key:st.roomTask,name:t.name,text:t.text,vocal:t.vocal,why:APPLY_WHY[st.roomWhy]||APPLY_WHY.rotation}:null;
+}
+const withTask=(s,t)=>t?{...s,roomTask:t.key,roomWhy:t.why}:s;
 const groupIds=()=>GROUPS.map(g=>g.id);
 const groupOf=id=>GROUPS.find(g=>g.id===id)||(id===SONG.id?SONG:null);
 const exercise=id=>CATALOG.find(e=>e.id===id)||null;
@@ -227,6 +285,8 @@ function build(db={},options={}){
     const songs=new Set([...lead,...own.filter(s=>s.kind!=='record')].map(s=>s.songId).filter(Boolean));
     own=own.filter(s=>s.kind!=='record'||songs.has(s.songId));
   }
+  // 곡에 적용하기 carries today's 가사·표현 task (an edited list too: the task is today's, not the list's).
+  if(own.some(s=>s.apply)){const t=applyTask(db,today);own=own.map(s=>s.apply?withTask(s,t):s);}
   // 내 로드맵's focus (options.focus, from the recordings — app/roadmap-model.js) else the 기본기 focus: one per group.
   const focusList=(Array.isArray(options.focus)&&options.focus.length?options.focus:[focusOf(db,today,pf)]).filter(x=>{const e=x&&exercise(x.exercise);return !!e&&!pf.off[e.id]&&!pf.groupsOff[e.group];});
   const groups=[];
@@ -400,7 +460,8 @@ function itemOf(st,minutes){
     title:st.title,state:st.skipped?'skipped':st.done?'done':'left',seconds:Math.round(Number(st.elapsed)||0),minutes,
     ...(r.mode?{mode:r.mode}:{}),...(r.timer?{timer:true}:{}),...(r.parts!=null?{parts:r.parts}:{}),...(r.holdSeconds!=null?{holdSeconds:r.holdSeconds}:{}),
     ...(r.accuracy!=null?{accuracy:r.accuracy}:{}),...(Array.isArray(r.notes)?{notes:r.notes}:{}),...(r.rounds!=null?{rounds:r.rounds}:{}),
-    ...(r.longestOut!=null?{longestOut:r.longestOut}:{}),...(measuresOf(r).length?{measures:measuresOf(r)}:{}),...(st.mic?{mic:true}:{}),...(st.apply?{apply:true}:{})};
+    ...(r.longestOut!=null?{longestOut:r.longestOut}:{}),...(measuresOf(r).length?{measures:measuresOf(r)}:{}),...(st.mic?{mic:true}:{}),...(st.apply?{apply:true}:{}),
+    ...(st.roomTask&&APPLY_TASKS[st.roomTask]?{roomTask:st.roomTask}:{})};
 }
 /** Summary lines of a session: every step with its state and seconds (minutes rounded, as typed fields start). */
 function summary(s){
@@ -448,7 +509,7 @@ function save(db,s,rows,{now=Date.now(),category=null}={}){
 /** The sets finished on a date (newest last): the run rows. */
 const runsOn=(db,date)=>live(db,'practices').filter(p=>p.dailySet&&p.date===date).sort((a,b)=>(Number(a.created)||0)-(Number(b.created)||0));
 
-return {GROUPS,SONG,CATALOG,NEXT_MAX,NEXT_MINUTES,TAKE_SECONDS,MAX_STEPS,PREFS_ID,PREFS_KIND,groupOf,exercise,exercisesOf,
+return {GROUPS,SONG,CATALOG,APPLY_TASKS,ROTATION,PERFORMANCE_DAYS,applyTask,applyInfo,restToday,nextPerformance,NEXT_MAX,NEXT_MINUTES,TAKE_SECONDS,MAX_STEPS,PREFS_ID,PREFS_KIND,groupOf,exercise,exercisesOf,
   prefs,cleanPrefs,setExercise,setGroup,savePrefs,resetPrefs,rotation,pick,dayNumber,
   ownKey,nextItems,focusOf,ownSteps,build,isOwn,totalMinutes,modeOf,labelOf,shortTitle,timeline,progress,finishItem,stop,
   word,holdStart,holdTick,holdResult,comfort,baseNote,notesFor,noteTags,syllableOf,adapt,noteName,

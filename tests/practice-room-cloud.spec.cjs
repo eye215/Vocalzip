@@ -37,7 +37,7 @@ test('practice-room bridge stores reflection in synced practice data and verifie
  });
  await page.addScriptTag({url:'/app/practice-room.js'});
  const result=await page.evaluate(async()=>{
-  const host=document.querySelector('#host');host.innerHTML=window.__route.render().replace('src="practice-room/','src="/practice-room/');window.__route.mount(host);
+  const host=document.querySelector('#host');host.innerHTML=window.__route.render().replace('src="practice-room/','src="/practice-room/').replace('&amp;past=1','').replace('&past=1','');window.__route.mount(host);
   const frame=host.querySelector('iframe');await new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));
   const input={id:'test-session-1234',task:'reflection',seconds:0,room:{date:'2026-11-10T00:00:00.000Z',draft:{memo:'후렴 집중',answers:['The River']},audioIds:[{id:'test-session-1234-0',name:'recording.wav',duration:2,cloud:false}]}};
   const before=window.VocalzipPracticeRoom.saveSubmission(input,frame.contentWindow);
@@ -89,6 +89,8 @@ test('practice-room result appears while R2 upload is still pending',async({page
   window.vzipCloudSignedIn=()=>true;
   window.VzipR2={configured:()=>true,ready:async()=>true};
   window.vzipCloudImport=()=>new Promise(()=>{});
+  // #/practice-room only shows past submissions now (past=1); the old submission flow is checked without it.
+  const f=document.querySelector('iframe.vzip-practice-room-frame');f.src=f.src.replace('&past=1','');
  });
  const room=page.frameLocator('iframe.vzip-practice-room-frame');
  // The tab buttons are static HTML: wait for the room script to render its first view before using them.
@@ -105,4 +107,34 @@ test('practice-room result appears while R2 upload is still pending',async({page
  await expect(room.locator('.result-heading')).toContainText('연습과 회고를 기록했어요',{timeout:5000});
  await expect(room.locator('.processing')).toHaveCount(0);
  await expect(room.locator('.feedback-block audio')).toBeVisible();
+});
+
+// 노래 연습실 → 오늘의 연습 (2026-11-26): #/practice-room keeps the past submissions and their AI comments; nothing there
+// starts a new task — one line says where they come from now, with the way home. 전체 리포트 no longer links to it.
+test('#/practice-room lists past submissions and their AI comments, starts nothing, and points to 오늘의 연습 › 곡에 적용하기',async({page})=>{
+ await fakeR2(page);await boot(page);
+ await page.evaluate(()=>VZ.change(d=>{d.practices.push({id:'practice-room:past-room-0001',date:'2026-11-01',minutes:8,manualMinutes:8,practiceRoomSeconds:480,practiceTimeSource:'manual',practiceMode:'training',songId:'',categoryLabel:'노래 연습실',detail:'가사를 말로 전하기',memo:'[노래 연습실] 가사를 말로 전하기',created:1,
+  practiceRoom:{id:'past-room-0001',task:'delivery',chapterId:'lyric-delivery',title:'가사를 말로 전하기',songId:'',date:'2026-11-01T10:00:00.000Z',analysis:{status:'reflection',summary:'읽은 녹음과 회고를 남겼어요.'},recommendation:'reflection',mood:'편안해',summary:'읽은 녹음과 회고를 남겼어요.',
+   aiCoach:'들리는 특징: 마지막 단어가 또렷해요.\n다음 시도: 첫 단어를 천천히 읽어요.',aiConditionCheck:false,aiNextTask:'',draft:{difficulty:'적당해',comfort:'편안해',symptoms:[],memo:'돌아와를 천천히',answers:[]},demo:false,audioIds:[{id:'past-room-0001-0',name:'가사를 말로 전한 녹음',duration:12,cloud:true}],seconds:480,variant:'normal'}});},{silent:true}));
+ const before=await page.evaluate(()=>JSON.stringify(VZ.db.practices));
+ await page.evaluate(()=>{location.hash='#/practice-room';});
+ const room=page.frameLocator('iframe.vzip-practice-room-frame');
+ await expect(room.locator('.record-history')).toHaveCount(1);
+ await expect(room.locator('.record-history h3')).toHaveText('가사를 말로 전하기');
+ await expect(room.locator('[data-room-moved]')).toContainText('새 과제는 이제 오늘의 연습 › 곡에 적용하기에서 나와요');
+ await expect(room.locator('[data-task]')).toHaveCount(0);
+ await expect(room.locator('[data-nav="home"]')).toBeHidden();await expect(room.locator('[data-nav="roadmap"]')).toBeHidden();
+ await room.locator('[data-result-id="past-room-0001"]').click();
+ await expect(room.locator('.coach-section')).toHaveCount(2);
+ await expect(room.locator('.coach-section').first()).toContainText('마지막 단어가 또렷해요');
+ await expect(room.locator('[data-action="save-next"],[data-action="start-next"],[data-action="retry"]')).toHaveCount(0);
+ await expect(room.locator('[data-room-moved]')).toBeVisible();
+ expect(await page.evaluate(()=>JSON.stringify(VZ.db.practices))).toBe(before); // viewing changes no record
+ await room.locator('[data-room-moved] [data-action="home"]').click();
+ await expect(page).toHaveURL(/#\/home$/);
+ // 전체 리포트: no '연습실에서 시작하기' any more.
+ await page.evaluate(()=>{location.hash='#/growth-flow?period=all';});
+ await expect(page.locator('[data-overall-body]')).toBeVisible();
+ await expect(page.getByText('연습실에서 시작하기')).toHaveCount(0);
+ await expect(page.locator('a[href="#/practice-room"]')).toHaveCount(0);
 });

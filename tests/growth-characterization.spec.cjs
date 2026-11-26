@@ -49,6 +49,7 @@
 // before: every recording, "녹음 6개 (연습 2개 포함) · 분석 6개"); songs with an analysed take come first, by their latest
 // analysed take. Defying Gravity: 비교 가능 → 판정 보류 (its latest take was measured another way than the earlier ones:
 // 무엇이 달라졌나 never pairs those).
+// 노래 연습실 → 오늘의 연습 (2026-11-26): only the 전체 분석 link "연습실에서 시작하기" left overallScreen (both zones).
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');

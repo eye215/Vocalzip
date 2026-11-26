@@ -258,7 +258,8 @@ const ENGINES={
       text(r.q('[data-clock-sub]'),over?'목표 '+st.minutes+'분 지남 · 연습 '+mmss(sec):'남음 · 목표 '+st.minutes+'분');
       r.q('.dset-clock')?.classList.toggle('is-over',over);setRing(r,Math.min(1,sec/Math.max(1,target)));
     };
-    return {wall:true,say:()=>D.shortTitle(st),
+    // 곡에 적용하기 says its 가사·표현 task (app/daily-set-model.js APPLY_TASKS); the song is in the name line above.
+    return {wall:true,say:()=>D.applyInfo?.(st)?.name||D.shortTitle(st),
       stage:()=>'<div class="dset-ring dset-clock" role="timer" aria-label="단계 타이머"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="dset-ring-bg" cx="60" cy="60" r="52"/><circle class="dset-ring-fg" data-run-ring cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg><strong data-clock>0:00</strong></div>'+
         '<p class="dset-clock-sub" data-clock-sub></p><div class="dset-helper" data-run-helper>'+(r.ctx.helper?.(st)||'')+'</div>',
       bind(){r.ctx.bindHelper?.(r.host,st);},
@@ -683,17 +684,18 @@ function mount(host,ctx){
     r.state='result';r.q('[data-run-stage]').innerHTML=html;r.paintState();
   };
 
-  const tl=D.timeline(s.steps,s),label=D.labelOf(st),last=ctx.lastLine?.()||'',lastSkipped=!!s.steps[s.index-1]?.skipped;
+  const tl=D.timeline(s.steps,s),label=D.labelOf(st),last=ctx.lastLine?.()||'',lastSkipped=!!s.steps[s.index-1]?.skipped,task=D.applyInfo?.(st)||null;
   // Before the comfortable range is known a note exercise only says what it is; the range is asked at 시작하기.
   const waiting=()=>({say:()=>e.text,stage:()=>'',ready(){r.word('준비되면 시작해요','wait');r.sub('처음 한 번만, 편한 음 높이를 물어봐요');},result:()=>({})});
   const build=()=>{r.engine=needsRange&&!r.comfort?waiting():ENGINES[mode](r);};
   const html=()=>'<header class="dset-top"><button type="button" class="dset-x" data-run-exit aria-label="나가기 · 오늘 안에 이어서 할 수 있어요"><i class="ph ph-x" aria-hidden="true"></i></button>'+
     '<ol class="dset-bar" aria-hidden="true">'+tl.map(x=>'<li class="is-'+x.state+'"></li>').join('')+'</ol><span class="dset-count"><span data-run-count-all>'+(s.index+1)+' / '+s.steps.length+'</span></span></header>'+
     (last?'<p class="dset-last" data-run-last'+(lastSkipped?' data-skipped':'')+'><i class="ph ph-'+(lastSkipped?'skip-forward':'check')+'" aria-hidden="true"></i>'+esc(last)+'</p>':'')+
-    '<p class="dset-name" data-run-name><b>'+esc(label)+'</b>'+(mode==='free'?'':'<span>'+esc(D.shortTitle(st))+'</span>')+(st.optional?'<span>선택</span>':'')+
+    '<p class="dset-name" data-run-name><b>'+esc(label)+'</b>'+(mode==='free'&&!task?'':'<span>'+esc(D.shortTitle(st))+'</span>')+(st.optional?'<span>선택</span>':'')+
       (st.mic?'<span class="dset-badge"><i class="ph ph-microphone" aria-hidden="true"></i>마이크</span>':'')+'<span class="dset-badge">약 '+st.minutes+'분</span></p>'+
     '<h2 class="dset-say" id="pset-step-title" data-run-say></h2>'+
     '<p class="dset-why" data-run-why>'+esc(ctx.why?.(st)||st.why||'')+'</p>'+
+    (task?'<p class="dset-task-why" data-run-task="'+esc(task.key)+'">'+esc(task.why)+'</p>':'')+
     '<div class="dset-stage" data-run-stage></div>'+
     '<p class="dset-word" data-run-word role="status" aria-live="polite"></p><p class="dset-sub" data-run-sub></p>'+
     (ctx.note?.(st)||'')+

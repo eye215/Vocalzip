@@ -383,3 +383,86 @@ test('기본기 추천: today\'s focus exercise takes its group\'s place (said w
   assert.equal(D.build(rest, {today:TODAY}).steps.some(s => s.group === 'ear'), false);
   assert.equal(L.exerciseFor('pitch', 3), 'ear-scale');
 });
+
+/* 노래 연습실 → 곡에 적용하기 (2026-11-26): the room's 가사·표현 tasks take turns on the set's song step. */
+const songStep=b=>b.steps.find(s=>s.apply);
+test('곡에 적용하기 carries ONE 가사·표현 task of the former 노래 연습실, by the date: the same day the same task, the 5 in turn',()=>{
+  const db=empty(),keys=[];
+  for(let n=0;n<10;n++){const st=songStep(D.build(db,{today:day(n),recentSongId:'s1'}));keys.push(st.roomTask);assert.equal(st.roomWhy,'rotation');}
+  assert.deepEqual(D.ROTATION,['connect','reflection','delivery','expressive','scene']);
+  assert.deepEqual(new Set(keys.slice(0,5)),new Set(D.ROTATION));          // none repeats until the list is through
+  assert.deepEqual(keys.slice(5),keys.slice(0,5));                          // then the same turn again
+  assert.equal(keys[0],D.ROTATION[D.dayNumber(TODAY)%5]);
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomTask,keys[0]); // same day → same task
+  // An edited list (the set screen's own steps) gets today's task too.
+  const own=D.build(db,{today:TODAY,recentSongId:'s1'}).own.map(s=>({...s,roomTask:'scene',roomWhy:'rotation'}));
+  assert.equal(songStep(D.build(db,{today:day(1),own})).roomTask,keys[1]);
+  // The words are the room's: name and its one-line instruction (practice-room/app.js TASKS).
+  const st=songStep(D.build(db,{today:TODAY,recentSongId:'s1'})),info=D.applyInfo(st);
+  assert.deepEqual([info.name,info.text],[D.APPLY_TASKS[st.roomTask].name,D.APPLY_TASKS[st.roomTask].text]);
+  assert.equal(info.why,'가사·표현 과제 5개가 돌아가며 나와요 · 원래 노래 연습실 과제');
+  const app=require('node:fs').readFileSync(require('node:path').join(__dirname,'../practice-room/app.js'),'utf8');
+  for(const [key,t] of Object.entries(D.APPLY_TASKS)){
+    assert.ok(app.includes(key+":{name:'"+t.name),key+' name');
+    assert.ok(app.includes("goal:'"+t.text+"'"),key+' text');
+  }
+  assert.equal(D.applyInfo({kind:'song'}),null);
+});
+
+test('곡에 적용하기: a performance (나의 공연) within 30 days gives 공연 연습 녹음과 회고 instead',()=>{
+  const db=empty(),show=(o)=>({id:'pf1',title:'정기 공연',status:'preparing',songLinks:[{songId:'s1'}],...o});
+  db.performances=[show({sessions:[{date:day(30),status:'scheduled'}]})];
+  let st=songStep(D.build(db,{today:TODAY,recentSongId:'s1'}));
+  assert.deepEqual([st.roomTask,st.roomWhy,D.applyInfo(st).name],['performance','performance','공연 연습 녹음과 회고']);
+  assert.equal(D.nextPerformance(db,TODAY),30);
+  db.performances=[show({sessions:[{date:day(31),status:'scheduled'}]})];
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomWhy,'rotation');
+  db.performances=[show({sessions:[{date:day(5),status:'cancelled'}]})];                 // cancelled: no performance
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomWhy,'rotation');
+  db.performances=[show({start:day(0),sessions:[]})];                                     // today, from its start date
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomTask,'performance');
+  db.performances=[show({start:day(3),status:'completed'})];                              // not in preparation
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomWhy,'rotation');
+  db.performances=[show({start:day(3)})];db.deleted={performances:['pf1']};                // deleted
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomWhy,'rotation');
+});
+
+test('곡에 적용하기 on a rest day: today\'s 보이스 체크 목 상태 ≤ 2 (or a room submission of today that says rest) gives the task without singing',()=>{
+  const check=(date,rating,at)=>({id:'voice-check:'+date+at,date,minutes:.5,practiceMode:'training',voiceCheck:{v:1,selfRating:rating,at}});
+  const db=empty();db.performances=[{id:'pf1',status:'preparing',start:day(3)}]; // rest wins over a performance
+  db.practices=[check(TODAY,2,1)];
+  let st=songStep(D.build(db,{today:TODAY,recentSongId:'s1'}));
+  assert.deepEqual([st.roomTask,st.roomWhy,D.APPLY_TASKS.reflection.vocal],['reflection','rest',false]);
+  assert.equal(D.applyInfo(st).why,'직접 남긴 불편함이나 목 상태를 우선했어요 · 소리 없이 해요');
+  db.practices=[check(TODAY,2,1),check(TODAY,4,2)];                    // the latest check of today counts
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomWhy,'performance');
+  db.practices=[check(day(-1),1,1)];db.performances=[];               // yesterday's says nothing about today
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomWhy,'rotation');
+  db.practices=[check(TODAY,1,1)];db.deleted={practices:[db.practices[0].id]}; // a deleted check counts for nothing
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomWhy,'rotation');
+  db.deleted={};db.practices=[check(TODAY,3,1)];
+  assert.equal(D.restToday(db,TODAY),'');
+  // practice-room-model's own rule (conditionFor) on a room submission of today; an older one does not hold every later day.
+  db.practices=[{id:'practice-room:x1',date:TODAY,practiceRoom:{task:'delivery',draft:{symptoms:['쉰 소리']}}}];
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomTask,'reflection');
+  db.practices[0].date=day(-1);
+  assert.equal(songStep(D.build(db,{today:TODAY,recentSongId:'s1'})).roomWhy,'rotation');
+});
+
+test('곡에 적용하기 off (고르기) or covered by a homework about a song: no step, so no task; the set row keeps the task key, no practiceRoom row',()=>{
+  const db=empty();D.savePrefs(db,D.setGroup(D.prefs(db),'song',false));
+  const off=D.build(db,{today:TODAY,recentSongId:'s1'});
+  assert.ok(!off.steps.some(s=>s.roomTask||s.apply));
+  const hw=empty();hw.assignments.push({id:'a9',title:'후렴 고음 연습',status:'active',startDate:'2026-11-01',dueDate:'2026-11-08',songId:'s1'});
+  assert.ok(!D.build(hw,{today:TODAY,recentSongId:'s1'}).steps.some(s=>s.roomTask));
+  // Saved: the step's item names its task; the song step keeps its own song row; nothing is written as 노래 연습실.
+  const on=four();let now=1_000_000;
+  const s=P.start(D.build(on,{today:TODAY,recentSongId:'s1'}).steps,{id:'run9',date:TODAY,now});
+  while(s.phase==='run'){P.play(s,now);now+=60_000;D.finishItem(s,{state:'done',result:{mode:'free'},now});}
+  D.save(on,s,[]);
+  const run=on.practices.find(p=>p.id==='practice-set:run9'),item=run.dailySet.items.find(x=>x.apply);
+  assert.equal(item.roomTask,songStep({steps:s.steps}).roomTask);
+  assert.equal(item.title,'곡에 적용하기 · This Is the Moment');
+  assert.ok(on.practices.every(p=>!p.practiceRoom&&p.categoryLabel!=='노래 연습실'));
+  assert.ok(!run.dailySet.items.filter(x=>!x.apply).some(x=>'roomTask' in x));
+});
