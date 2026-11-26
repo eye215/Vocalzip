@@ -87,10 +87,13 @@ test('vocal lab opens with the newest analysed takes selected; explicit selectio
   await openWith(page, 's1', ['a1', 'a6']);
   expect(await pressed(page).evaluateAll(list => list.map(b => b.dataset.date))).toEqual(['a1', 'a6']);
   await page.goto('/#/home'); await page.goto('/#/vocal-lab/s1?a=a3&b=a4&compare=1');
+  await expect(page).toHaveURL(/#\/growth-song\/s1\?a=a3&b=a4&compare=1$/);   // 곡 분석 is the song screen (큰 정리 2번)
+  await expect(pressed(page)).toHaveCount(2);
   expect(await pressed(page).evaluateAll(list => list.map(b => b.dataset.date))).toEqual(['a3', 'a4']);
   // The person can still clear the selection by hand.
   await page.goto('/#/home'); await page.goto('/#/vocal-lab/s2');
-  await pressed(page).first().click(); await pressed(page).first().click();
+  // (A date is opened by the first tap and left out by the next one: 큰 정리 2번's timeline.)
+  while (await pressed(page).count()) await pressed(page).first().click();
   await expect(page.locator('.vl-empty')).toContainText('날짜를 선택해 주세요');
 });
 
@@ -145,7 +148,7 @@ test('one take, one whole-recording number: other bases are labelled; 추천 연
   await expect(recommend.locator('[data-vl-next] .np-item').first()).toBeVisible();
   await expect(recommend.locator('[data-np-item="intonation:s1"]')).toHaveCount(0);
   expect(await recommend.locator('.np-title').allTextContents()).not.toContain(tips.tips.find(t => t.key === 'into').name);
-  await expect(recommend.locator('[data-tip-skipped]')).toHaveText('위 ‘이 곡의 변화’에서 좋아진 방향인 항목(음정 정확도)은 추천에서 뺐어요.');
+  await expect(recommend.locator('[data-tip-skipped]')).toHaveText('위 ‘처음 vs 최근’에서 좋아진 방향인 항목(음정 정확도)은 추천에서 뺐어요.');
   // One take open in the player: 이 곡의 변화 does not depend on which takes are open (it is the song's verdict), so
   // the report is still there and the same measure stays out of the recommendations.
   await openWith(page, 's1', ['a6']);

@@ -139,8 +139,11 @@ body[data-vz-route="song"] .score-row [data-omr="failed"]{color:var(--vz-color-d
 @media(max-width:359px){body[data-vz-route="song"] .score-row{flex-wrap:wrap}body[data-vz-route="song"] .score-row [data-score-open]{flex-basis:100%}body[data-vz-route="song"] .score-row .score-actions{margin-left:auto}}
 .vz-ar-item>a{padding-left:4px}
 
-/* UI 정리 3차: 성장 보기 in the title card's lower right corner (no extra height: the tabs stay in the upper half). */
-body[data-vz-route="song"] .vz-song-detail-hero{padding-right:20px}
+/* 큰 정리 2번: the song's growth in ONE line in the title card's lower right corner — "<한마디> · 성장 보기 ›" (the song screen);
+ * no extra height, so the tabs stay in the upper half. The totals line keeps clear of it (its padding follows the link's width). */
 body[data-vz-route="song"] .vz-song-detail-summary{padding-right:128px}
-body[data-vz-route="song"] .vz-song-hero-btn{position:absolute;right:12px;bottom:12px;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:99px;background:#fff;color:#5B21D6;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 4px 12px rgba(40,10,90,.18)}
-body[data-vz-route="song"] .vz-song-hero-btn i{font-size:18px}
+body[data-vz-route="song"] .vz-song-hero-btn{position:absolute;right:12px;bottom:12px;display:inline-flex;align-items:center;gap:4px;max-width:calc(100% - 24px);min-height:44px;padding:0 12px;border-radius:99px;background:#fff;color:#5B21D6;font-size:13px;font-weight:700;text-decoration:none;box-shadow:0 4px 12px rgba(40,10,90,.18)}
+body[data-vz-route="song"] .vz-song-hero-btn i{font-size:16px;flex:none}
+body[data-vz-route="song"] .vz-song-hero-btn i:last-child{font-size:13px}
+body[data-vz-route="song"] .vz-song-hero-btn span{min-width:0;white-space:nowrap}
+body[data-vz-route="song"] .vz-song-detail-hero{padding-right:20px}

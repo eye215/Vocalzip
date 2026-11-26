@@ -49,6 +49,8 @@ function doneHtml(v) {
 }
 
 /* ---------- ⓑ 달라진 것 ---------- */
+/** A song's own screen (곡 하나, #/growth-song/<id>) at the period's month when the period is a month. */
+const songHref = (id, p) => '#/growth-song/' + encodeURIComponent(id) + (p?.kind === 'month' && p.from ? '?month=' + p.from.slice(0, 7) : '');
 const changeOpts = v => ({period:v.period.from ? {from:v.period.from, to:v.period.to} : null, practice:v.practice});
 const STATE_LINE = {compare:k => ({week:'지난주 녹음과 견줄 수 있어요', month:'지난달 녹음과 견줄 수 있어요', all:'처음과 최근을 견줄 수 있어요'})[k],
   new:k => k === 'all' ? '견줄 다른 날 녹음이 없어요' : '이 기간 전 녹음이 없어요', hold:() => '판정 보류'};
@@ -73,12 +75,12 @@ function detailHtml(v, song) {
 function changesHtml(v) {
   const k = v.period.kind, C = window.VzipGrowthChangesUI;
   const list = C?.songChoices?.(v.items, changeOpts(v)) || [];
-  const songOn = !!v.song && list.some(s => s.songId === v.song);
-  const songName = songOn ? V.songTitle(v.song) || '곡' : '';
+  // 곡 하나 (큰 정리 2번): a song is its own screen (#/growth-song/<id>, the month's chip for 월별); this card is every song.
+  const songOn = false;
   const scope = '<div class="growth-song-scope" role="group" aria-label="달라진 것 범위">' +
-    '<button type="button" data-gm-scope="all" aria-pressed="' + !songOn + '">전체</button>' +
-    '<button type="button" data-gm-scope="song" aria-pressed="' + songOn + '" aria-haspopup="dialog"><span>' + (songOn ? e(songName) : '곡별') + '</span><i class="ph ph-caret-down" aria-hidden="true"></i></button></div>';
-  const fallback = v.song && !songOn && V.song(v.song) ? '<p class="small muted growth-song-note" data-gm-song-fallback>' + e(V.songTitle(v.song)) + ' 녹음이 이 기간에는 없어 전체를 보여 드려요.</p>' : '';
+    '<button type="button" data-gm-scope="all" aria-pressed="true">전체</button>' +
+    '<button type="button" data-gm-scope="song" aria-pressed="false" aria-haspopup="dialog"><span>곡별</span><i class="ph ph-caret-down" aria-hidden="true"></i></button></div>';
+  const fallback = '';
   const toggle = '<label class="gm-switch"><input type="checkbox" role="switch" data-gm-practice' + (v.practice ? ' checked' : '') + '><span>연습 녹음 포함</span></label>';
   const note = v.practice ? '노래 연습실·트레이닝 연습 녹음도 넣어 견줘요. 끄면 결과 리포트와 같은 기준이에요.' : '곡 녹음만 견줘요. 노래 연습실·트레이닝 연습 녹음은 빼요.';
   const detail = detailHtml(v, songOn ? v.song : '');
@@ -86,23 +88,21 @@ function changesHtml(v) {
     '<p class="gm-basis" data-gm-basis="changes">' + e(WORDS[k].changes + ' · 같은 곡을 같은 방법·같은 분석 버전으로 잰 녹음끼리') + '</p></header>' +
     '<div class="gm-tools">' + scope + toggle + '</div><p class="gm-note" data-gm-practice-note>' + e(note) + '</p>' + fallback +
     (C ? '<div class="gc-host" data-growth-changes></div>' : '') +
-    // 곡별: the song's own screen (성장 › 곡 › 곡 하나, app/vocal-lab.js) says the same verdict with the same switch.
-    (songOn ? '<a class="gc-chip gm-song-link" href="#/vocal-lab/' + encodeURIComponent(v.song) + '" data-gm-song-detail><i class="ph ph-waveform" aria-hidden="true"></i><span>이 곡 자세히</span></a>' : '') +
     (detail ? '<details class="growth-secondary gm-detail" data-gm-detail><summary><span><i class="ph ph-chart-bar" aria-hidden="true"></i> 지표 자세히</span><small>' +
       (k === 'month' ? '이달의 변화 · 6가지 지표' : k === 'all' ? '6가지 지표' : '이번 주 성장') + '</small></summary><div class="gm-detail-body">' + detail + '</div></details>' : '') + '</section>';
 }
 function mountChanges(v, section) {
   const host = section.querySelector('[data-growth-changes]'), C = window.VzipGrowthChangesUI;
   if (!host || !C) return;
-  const list = C.songChoices(v.items, changeOpts(v)), song = v.song && list.some(s => s.songId === v.song) ? v.song : '';
+  const list = C.songChoices(v.items, changeOpts(v)), song = '';
   const empty = v.period.from ? {verdicts:'이 기간에 남긴 들어 본 평가가 없어요. 곡 줄의 들어 보고 평가로 남길 수 있어요.',
     songs:'이 기간에 ' + WORDS[v.period.kind].last + ' 녹음과 견줄 같은 곡 녹음이 없어요. 같은 곡을 다시 녹음하고 분석하면 여기에 보여 드려요.'} : null;
   C.mount(host, v.items, {...changeOpts(v), songId:song, head:false, ...(empty ? {empty} : {})});
-  section.querySelector('[data-gm-scope="all"]').onclick = () => { if (!v.song) return; v.song = ''; save(SONG_KEY, ''); paintChanges(v); };
+  // 곡별: the chosen song opens on its own screen — at this month's chip for 월별 (the same 지난달 대비 and measures).
   section.querySelector('[data-gm-scope="song"]').onclick = () => {
     if (!list.length) { V.toast('이 기간에는 곡 녹음이 없어요.'); return; }
-    V.growthSongMenu(list.map(s => ({songId:s.songId, title:s.title, line:'<span data-gm-song-state="' + s.state + '">' + e(STATE_LINE[s.state](v.period.kind)) + '</span>'})), song,
-      id => { v.song = id; save(SONG_KEY, id); if (v.host.isConnected) paintChanges(v); });
+    V.growthSongMenu(list.map(s => ({songId:s.songId, title:s.title, line:'<span data-gm-song-state="' + s.state + '">' + e(STATE_LINE[s.state](v.period.kind)) + '</span>'})), v.song,
+      id => { v.song = id; save(SONG_KEY, id); V.nav(songHref(id, v.period)); });
   };
   section.querySelector('[data-gm-practice]').onchange = ev => { v.practice = ev.target.checked; save(PRACTICE_KEY, v.practice ? '1' : ''); paintChanges(v); };
 }
@@ -216,7 +216,7 @@ function lineHtml(v) {
   try { line = ME.changeLine(window.VzipGrowthChangesUI?.model?.(v.items, changeOpts(v)), v.period.kind); } catch (error) { console.error(error); }
   return '<section class="gm-section gme-line" data-gm-section="line" aria-labelledby="gme-line-title"><h2 id="gme-line-title" class="gme-h">달라진 것</h2>' +
     (line ? '<p class="gme-line-text" data-gme-line>' + e(line.text) + '</p><p class="gm-basis">' + e(line.basis) + '</p>' +
-      (line.songId ? '<a class="gc-chip gm-act" href="#/vocal-lab/' + encodeURIComponent(line.songId) + '" data-gme-listen><i class="ph ph-play" aria-hidden="true"></i>두 녹음 듣기</a>' : '')
+      (line.songId ? '<a class="gc-chip gm-act" href="' + e(songHref(line.songId, v.period)) + '" data-gme-listen><i class="ph ph-play" aria-hidden="true"></i>두 녹음 듣기</a>' : '')
       : '<p class="gm-empty" data-gme-line-empty>' + e(WORDS[v.period.kind].changes) + ' 견줄 같은 곡 녹음이 아직 없어요. 같은 곡을 다시 녹음하고 분석하면 여기에 한 줄로 알려 드려요.</p>') +
     '<a class="gm-more-link" href="#/growth-changes" data-gme-changes><span>곡마다 자세히</span><i class="ph ph-arrow-right" aria-hidden="true"></i></a></section>';
 }

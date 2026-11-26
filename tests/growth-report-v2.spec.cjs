@@ -127,7 +127,12 @@ test('vocal lab 성장 리포트: groups by direction, withholds v1/v2 and the A
   await expect(page.locator('[data-song-section="weak"] [data-growth-row="passaggio"]')).toContainText('음정 데이터만으로 판별 불가, 선생님 판단 참고');
   expect(await fits(page)).toMatchObject({width:320, scroll:320, over:[]});
   await shot(page, 'vocal-lab-growth-320');
+  // AI 해석 is under 깊이 보기 (큰 정리 2번) and asks before anything is sent.
+  await page.locator('[data-song-section="deep"] > summary').click();
   await page.locator('[data-growth-ai]').click();
+  await expect(page.locator('.sheet')).toContainText('음정 정확도·음정 안정성·호흡 유지');
+  expect(await page.evaluate(() => window.__coach)).toBeUndefined();
+  await page.locator('.sheet [data-ok]').click();
   await expect(page.locator('.vl-growth-ai-text')).toContainText('다음 연습');
   const sent = await page.evaluate(() => window.__coach);
   expect(sent.metrics.map(m => m.key)).toEqual(['intonation', 'stability', 'phrase']);
@@ -143,7 +148,7 @@ test('vocal lab 성장 리포트: groups by direction, withholds v1/v2 and the A
   await expect(page.locator('[data-song-verdict]')).toHaveText('판정 보류');
   await expect(page.locator('[data-song-basis]')).toContainText('분석 버전(v1·v2)이 달라요');
   await expect(other.locator('[data-growth-row]')).toHaveCount(0);
-  await expect(other).toContainText('AI 해석을 요청할 수 있어요');
+  await expect(page.locator('[data-growth-tools]')).toContainText('AI 해석을 요청할 수 있어요');
   await expect(page.locator('[data-growth-ai]')).toHaveCount(0);
   expect(await fits(page)).toMatchObject({width:320, scroll:320, over:[]});
 });

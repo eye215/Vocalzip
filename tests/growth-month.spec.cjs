@@ -84,7 +84,7 @@ test('나 for 월별 (the default): 큰 단계 · 기본기 8, one line of chang
   await expect(page).toHaveURL(/#\/vocal-growth$/);
   // ONE line of what changed (지난달과 비교, same song), with the two takes one tap away; the full card is its own page.
   await expect(page.locator('[data-gme-line]')).toHaveText(/^\S.* · \S/);
-  await expect(page.locator('[data-gme-listen]')).toHaveAttribute('href', /^#\/vocal-lab\//);
+  await expect(page.locator('[data-gme-listen]')).toHaveAttribute('href', /^#\/growth-song\//);
   await expect(section(page, 'changes')).toHaveCount(0);
   await page.locator('[data-gme-changes]').click();
   await expect(page).toHaveURL(/#\/growth-changes$/);
@@ -221,7 +221,7 @@ test('연습 녹음 포함: off by default (결과 리포트 numbers, as pinned)
   expect(await page.locator('[data-overall-body] .growth-stats-grid').evaluate(texts())).toEqual(mine);
 });
 
-test('전체 · 곡별 ▾ narrows 달라진 것 and 지표 자세히 to one song, is kept, and is shared with 지난 흐름 › 월별', async ({page}) => {
+test('전체 · 곡별 ▾ opens the chosen song on its own screen, at this month for 월별', async ({page}) => {
   await boot(page, {hash:'#/growth-changes'});   // 달라진 것 자세히 (성장 v2: 나 says it in one line)
   await expect(page.locator('[data-growth-changes] [data-gc-song]').first()).toBeVisible();
   await expect(page.locator('[data-gm-scope="all"]')).toHaveAttribute('aria-pressed', 'true');
@@ -230,30 +230,16 @@ test('전체 · 곡별 ▾ narrows 달라진 것 and 지표 자세히 to one son
   await expect(choices.first()).toBeVisible();
   await expect(page.locator('.sheet [data-mbs-song="s5"]')).toContainText('지난달 녹음과 견줄 수 있어요');
   await page.locator('.sheet [data-mbs-song="s5"]').click();
-  await expect(page.locator('[data-gm-scope="song"]')).toHaveText('Home');
-  await expect(page.locator('[data-gm-scope="song"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('[data-growth-changes] [data-gc-song]')).toHaveCount(1);
-  expect(await lines(page)).toEqual(['s5']);
-  await expect(page.locator('[data-growth-changes] [data-gc-group="tasks"]')).toHaveCount(0);   // not per song
-  await page.locator('[data-gm-detail] > summary').click();
-  await expect(page.locator('[data-gm-detail] .growth-section h2')).toHaveText('이달의 변화 · Home');
-  await reload(page);
-  await expect(page.locator('[data-gm-scope="song"]')).toHaveText('Home');
-  // The same choice in 지난 흐름 › 월별 분석 (claude/monthly-by-song).
-  await page.locator('[data-gm-flow]').click();
-  await expect(page.locator('[data-mbs-scope="song"]')).toHaveText('Home');
+  // 곡 하나 (큰 정리 2번): the song's own screen at this month's chip, with that month's line for the song.
+  await expect(page).toHaveURL(/#\/growth-song\/s5\?month=2026-11$/);
+  await expect(page.locator('[data-gsp-period="month"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-song-section="changes"] [data-growth-changes] [data-gc-song]')).toHaveCount(1);
+  await expect(page.locator('[data-song-month-detail] .growth-section h2')).toHaveText('이달의 변화 · Home');
+  // 뒤로: 달라진 것 자세히, every song again.
   await page.locator('[data-back]').click();
-  await page.locator('[data-gm-scope="all"]').click();
+  await expect(page).toHaveURL(/#\/growth-changes$/);
   await expect(page.locator('[data-gm-scope="all"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-growth-changes] [data-gc-song]')).toHaveCount(3);
-  // A song without a take in the period: 전체 with a note, the choice kept.
-  // The stored choice is read when the tab is drawn: draw it again (before, this only passed when a late list event
-  // happened to redraw the tab after the line below — it failed about one run in six).
-  await page.evaluate(() => localStorage.setItem('vzip:monthly-growth-song', 's3'));
-  await reload(page);
-  await expect(page.locator('[data-gm-section="changes"]')).toBeVisible();
-  await page.locator('[data-gm-period="week"]').click();
-  await expect(page.locator('[data-gm-song-fallback]')).toHaveText('Memory 녹음이 이 기간에는 없어 전체를 보여 드려요.');
 });
 
 /** To 오늘 without a document load: WebKit reloads on goto() to the URL it is already on, and the in-page fixtures would be gone. */

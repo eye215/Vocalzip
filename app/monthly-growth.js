@@ -301,8 +301,9 @@ async function mount(host){
    if(!keys.length){host.innerHTML=pageHead+tabs()+'<div class="empty"><p>아직 날짜가 있는 녹음이 없어요.</p></div>';bindTabs();return;}
    const prev=previousMonth(selected);
    const current=months.get(selected)||[],previous=months.get(prev)||[];
-   // 곡별: only when the chosen song has takes this month; otherwise 전체 with a short note (the choice is kept).
-   const songOn=!!songPick&&current.some(m=>m.songId===songPick);
+   // 곡별 (큰 정리 2번): one song's month is the song screen with that month's chip (#/growth-song/<id>?month=), the same
+   // numbers (V.monthlyGrowthDetail); this report is always the whole month.
+   const songOn=false;
    const own=songOn?current.filter(m=>m.songId===songPick):current;
    const rows=monthlyRows(selected,months,songOn?songPick:'');
    const validCount=own.filter(valid).length;
@@ -311,8 +312,7 @@ async function mount(host){
    const changeIds=songOn?(window.VzipGrowthChangesUI?.songs?.(items)||[]):[];
    const scope='<div class="growth-song-scope" role="group" aria-label="월별 분석 범위">'+
      '<button type="button" data-mbs-scope="all" aria-pressed="'+!songOn+'">전체</button>'+
-     '<button type="button" data-mbs-scope="song" aria-pressed="'+songOn+'" aria-haspopup="dialog"><span>'+(songOn?e(songName):'곡별')+'</span><i class="ph ph-caret-down" aria-hidden="true"></i></button></div>'+
-     (songPick&&!songOn?'<p class="small muted growth-song-note" data-mbs-fallback>'+e(songTitleOf(songPick))+' 녹음이 이 달에는 없어 전체를 보여 드려요.</p>':'');
+     '<button type="button" data-mbs-scope="song" aria-pressed="false" aria-haspopup="dialog"><span>곡별</span><i class="ph ph-caret-down" aria-hidden="true"></i></button></div>';
    const tiles=songOn?
      '<div class="growth-month-overview" data-mbs-tiles><div><span>이 곡 녹음</span><strong>'+own.length+'</strong><small>개</small></div>'+
      '<div><span>분석 가능</span><strong>'+validCount+'</strong><small>개</small></div>'+
@@ -320,7 +320,7 @@ async function mount(host){
      '<div class="growth-month-overview"><div><span>곡 녹음</span><strong>'+current.length+'</strong><small>개</small></div>'+
      '<div><span>분석 가능한 녹음</span><strong>'+validCount+'</strong><small>개</small></div>'+
      '<div><span>같은 곡 비교</span><strong>'+rows.filter(r=>r.c).length+'</strong><small>항목</small></div></div>';
-   const songLinks=songOn?'<div class="growth-song-links"><a class="btn sm ghost" href="#/vocal-lab/'+encodeURIComponent(songPick)+'" data-mbs-link="lab"><i class="ph ph-waveform" aria-hidden="true"></i>이 곡 자세히</a>'+
+   const songLinks=songOn?'<div class="growth-song-links"><a class="btn sm ghost" href="#/growth-song/'+encodeURIComponent(songPick)+'" data-mbs-link="lab"><i class="ph ph-waveform" aria-hidden="true"></i>이 곡 자세히</a>'+
      (changeIds.includes(songPick)?'<a class="btn sm ghost" href="#/growth-flow?period=all&amp;gc='+encodeURIComponent(songPick)+'" data-growth-replace data-mbs-link="changes"><i class="ph ph-arrows-left-right" aria-hidden="true"></i>무엇이 달라졌나</a>':'')+'</div>'+
      '<p class="small muted growth-song-note" data-mbs-only>곡별 보기는 변화만 보여요. AI 코치·다음 연습·계획·지난 기록은 전체에서 볼 수 있어요.</p>':'';
    host.innerHTML=pageHead+tabs()+
@@ -388,11 +388,11 @@ async function mount(host){
     const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     target?.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
    });
-   host.querySelector('[data-mbs-scope="all"]').onclick=()=>{if(!songPick)return;songPick='';saveSongPick('');render();};
    host.querySelector('[data-mbs-scope="song"]').onclick=()=>{
     const list=monthSongs(selected,months);
     if(!list.length){V.toast('이 달에는 곡 녹음이 없어요.');return;}
-    chooseSong(list,songOn?songPick:'',id=>{songPick=id;saveSongPick(id);if(host.isConnected)render();});
+    // The chosen song opens on its own screen at this month (kept on this device as the last choice).
+    chooseSong(list,songPick,id=>{songPick=id;saveSongPick(id);V.nav('#/growth-song/'+encodeURIComponent(id)+'?month='+selected);});
    };
    if(!songOn)V.monthlyPracticePlans?.(host.querySelector('[data-monthly-plans]'),selected,songItems,rows);
    if(!songOn)V.nextPractice?.bindTop?.(host.querySelector('[data-month-section="practice"]'));

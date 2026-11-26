@@ -1,6 +1,7 @@
-// 성장 › 결과 리포트 › 월별 분석 › 전체 · 곡별: one song's month with the same rules as the whole month (same song,
-// same analysis version, 판정 보류 shown as such), the song chooser with its statuses, the choice kept across months
-// and reloads, the fallback to 전체 for a month without the song, and no sideways scroll at 390 px. Fake data only.
+// 성장 › 월별 리포트 › 전체 · 곡별: the song chooser with its statuses; a song chosen opens its own screen (곡 하나,
+// #/growth-song/<id>?month=, 큰 정리 2번) at that month's chip, with one song's month by the same rules as the whole month
+// (same song, same analysis version, 판정 보류 shown as such), a month without the song said as such, and no sideways
+// scroll at 390 px. Fake data only.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
 const KEY = 'vocal-zip_mvp_v1';
@@ -61,10 +62,13 @@ const pick = async (page, title) => {
   await expect(page.locator('.sheet')).toHaveCount(0);
 };
 const overflow = page => page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1 ||
-  [...document.querySelectorAll('#view *')].some(e => { const r = e.getBoundingClientRect(); return r.width && r.right > innerWidth + 1 && !e.closest('.growth-chart,.growth-jumps'); }));
+  [...document.querySelectorAll('#view *')].some(e => { const r = e.getBoundingClientRect(); return r.width && r.right > innerWidth + 1 && !e.closest('.growth-chart,.growth-jumps,.vl-dates,.vl-metrics,.vl-plot-scroll,.vl-carousel'); }));
 test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
 
-test('곡별 lists this month’s songs with their status and shows one song’s numbers only', async ({page}) => {
+const detail = (page, key) => page.locator('[data-song-month-detail="' + key + '"]');
+const songAt = async (page, id, key) => { await expect(page).toHaveURL(new RegExp('#/growth-song/' + id + '\\?month=' + key + '$')); await expect(page.locator('[data-gsp-hero]')).toBeVisible(); };
+
+test('곡별 lists this month’s songs with their status and opens that song at this month, with one song’s numbers only', async ({page}) => {
   await boot(page);
   await month(page, P);
   await expect(page.locator('[data-mbs-scope="all"]')).toHaveAttribute('aria-pressed', 'true');
@@ -83,68 +87,44 @@ test('곡별 lists this month’s songs with their status and shows one song’s
   expect(await status('sD')).toBe('판정 보류');
   for (const b of await rows.all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
   await page.locator('.sheet [data-mbs-song="sA"]').click();
-  // Only A: its own tiles, summary and numbers (A's latest take, not the mean with B).
-  await expect(page.locator('[data-mbs-scope="song"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('[data-mbs-scope="song"]')).toContainText('Defying Gravity');
-  await expect(page.locator('[data-mbs-tiles] strong')).toHaveText(['2', '2', /\d/]);
-  await expect(page.locator('[data-month-section="results"] h2')).toHaveText('이달의 변화 · Defying Gravity');
-  await expect(page.locator('[data-mbs-basis]')).toHaveText(PP + ' 대비 · 이 곡의 녹음만 · 같은 분석 버전끼리 비교');
-  const own = (await intonation(page).textContent()).trim();
+  // A's own screen at that month (the 지난달 chip): its summary and numbers (A's latest take, not the mean with B).
+  await songAt(page, 'sA', P);
+  await expect(page.locator('[data-gsp-period="last"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(detail(page, P).locator('h2')).toHaveText('이달의 변화 · Defying Gravity');
+  await expect(detail(page, P).locator('[data-mbs-basis]')).toHaveText(PP + ' 대비 · 이 곡의 녹음만 · 같은 분석 버전끼리 비교');
+  const own = (await detail(page, P).locator('[data-growth-metric="intonation"] .growth-stat-number').textContent()).trim();
   expect(own).not.toBe(whole);
   expect(own).toBe('±13 cent');
-  await expect(page.locator('[data-growth-metric="intonation"]')).toContainText('같은 곡 1곡');
-  // Whole-month parts are not shown for one song, and the page says so.
-  await expect(page.locator('[data-mbs-only]')).toHaveText(/곡별 보기는 변화만 보여요/);
-  await expect(page.locator('[data-monthly-jump], [data-monthly-ai-run], [data-month-section="history"]')).toHaveCount(0);
-  await expect(page.locator('[data-mbs-link="lab"]')).toHaveAttribute('href', '#/vocal-lab/sA');
-  for (const b of await page.locator('.growth-song-scope button, .growth-song-links a').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await expect(detail(page, P).locator('[data-growth-metric="intonation"]')).toContainText('같은 곡 1곡');
   expect(await overflow(page)).toBe(false);
-  if (process.env.MBS_SHOT && test.info().project.name === 'chromium-mobile') await page.screenshot({path:process.env.MBS_SHOT, fullPage:true});
-
+  // 뒤로: the whole month again.
+  await page.locator('[data-back]').click();
+  await expect(page.locator('[data-growth-select]')).toBeVisible();
   // 판정 보류 stays 판정 보류 for a song whose earlier month has no analysis.
+  await month(page, P);
   await pick(page, 'Home');
-  await expect(page.locator('[data-growth-metric="intonation"] .growth-state')).not.toHaveText(/좋아짐|아쉬움|비슷/);
-  await expect(page.locator('[data-mbs-tiles] strong').nth(2)).toHaveText('0');
-
+  await songAt(page, 'sD', P);
+  await expect(detail(page, P).locator('[data-growth-metric="intonation"] .growth-state')).not.toHaveText(/좋아짐|아쉬움|비슷/);
   // A song with this month only.
-  await pick(page, 'Memory');
-  await expect(page.locator('[data-mbs-basis]')).toHaveText(/지난달과 비교할 녹음이 없어요/);
-
-  // 전체 brings the whole month back.
-  await page.locator('[data-mbs-scope="all"]').click();
-  await expect(page.locator('[data-mbs-tiles]')).toHaveCount(0);
-  await expect(intonation(page)).toHaveText(whole);
-  await expect(page.locator('[data-monthly-jump="ai"]')).toBeVisible();
-});
-
-test('the chosen song is kept across months and reloads; a month without it falls back to 전체 with a note', async ({page}) => {
-  await boot(page);
-  await month(page, P);
-  await pick(page, 'Defying Gravity');
-  await month(page, PP);
-  // The month before: A has a take, nothing earlier to compare with.
-  await expect(page.locator('[data-mbs-scope="song"]')).toContainText('Defying Gravity');
-  await expect(page.locator('[data-mbs-tiles] strong').first()).toHaveText('1');
-  await expect(page.locator('[data-mbs-basis]')).toHaveText(/지난달과 비교할 녹음이 없어요/);
-  // This month: no take of A → 전체 with a short note.
-  await month(page, monthKey(0));
-  await expect(page.locator('[data-mbs-fallback]')).toHaveText('Defying Gravity 녹음이 이 달에는 없어 전체를 보여 드려요.');
-  await expect(page.locator('[data-mbs-scope="all"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('[data-mbs-tiles]')).toHaveCount(0);
-  // Back to a month with A: the choice comes back, also after a reload (per device).
-  await month(page, P);
-  await expect(page.locator('[data-mbs-scope="song"]')).toHaveAttribute('aria-pressed', 'true');
-  await page.reload();
+  await page.locator('[data-back]').click();
   await expect(page.locator('[data-growth-select]')).toBeVisible();
   await month(page, P);
-  await expect(page.locator('[data-mbs-scope="song"]')).toContainText('Defying Gravity');
-  await expect(intonation(page)).toHaveText('±13 cent');
-  // 무엇이 달라졌나 for this song opens 전체 분석 at that song's line.
-  const changes = page.locator('[data-mbs-link="changes"]');
-  await expect(changes).toHaveAttribute('href', '#/growth-flow?period=all&gc=sA');
-  await changes.click();
-  await expect(page.locator('[data-gc-song="sA"]').first()).toBeInViewport();
-  await expect(page).toHaveURL(/#\/growth-flow\?period=all$/);
+  await pick(page, 'Memory');
+  await songAt(page, 'sC', P);
+  await expect(detail(page, P).locator('[data-mbs-basis]')).toHaveText(/지난달과 비교할 녹음이 없어요/);
+});
+
+test('a month without the song says so; an older month has its own chip', async ({page}) => {
+  await boot(page);
+  // This month: no take of A.
+  await page.evaluate(h => { location.hash = h; }, '#/growth-song/sA?month=' + monthKey(0));
+  await expect(page.locator('[data-gsp-period="month"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-song-month-none]')).toBeVisible();
+  await expect(page.locator('[data-song-month-detail]')).toHaveCount(0);
+  // The month before last: A has a take, nothing earlier to compare with.
+  await page.evaluate(h => { location.hash = h; }, '#/growth-song/sA?month=' + PP);
+  await expect(page.locator('[data-gsp-period="' + PP + '"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(detail(page, PP).locator('[data-mbs-basis]')).toHaveText(/지난달과 비교할 녹음이 없어요/);
 });
 
 test('label of a long song title stays inside 390 px', async ({page}) => {
@@ -155,6 +135,7 @@ test('label of a long song title stays inside 390 px', async ({page}) => {
   await expect(page.locator('[data-growth-select]')).toBeVisible();
   await month(page, P);
   await pick(page, '아주 아주 긴');
-  await expect(page.locator('[data-mbs-tiles]')).toBeVisible();
+  await songAt(page, 'sA', P);
+  await expect(detail(page, P)).toBeVisible();
   expect(await overflow(page)).toBe(false);
 });

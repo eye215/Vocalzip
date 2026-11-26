@@ -93,7 +93,7 @@ test('Each item does what it did: 정보 수정, 곡 지정 (title follows the s
   await expect(page.getByRole('dialog', {name:'공유 링크'})).toBeVisible();
   await close(page);
   await more.click(); await menu(page).locator('[data-act=analyze]').click();
-  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?selection=1/);
+  await expect(page).toHaveURL(/#\/growth-song\/s1\?selection=1/);
 
   // 파일 삭제: the same confirmation as before; 취소 keeps the file, 파일 영구 삭제 removes it.
   more = await SCREENS['전체 녹음'](page, 'row-import');

@@ -1,7 +1,9 @@
-// 성장 개편 안 B, phase 3 — the 곡 tab: 곡 목록 (#/vocal-analysis) and 곡 하나 (#/vocal-lab/<songId>, the former 보컬 연구소).
+// 성장 개편 안 B, phase 3 — the 곡 tab: 곡 목록 (#/vocal-analysis) and 곡 하나 (#/growth-song/<songId>; 큰 정리 2번 mounted the
+// former 보컬 연구소 #/vocal-lab/<songId> there — that address leads to it).
 //  - 곡 목록: the songs with an analysed take, most recently sung first, each with ONE word from the verdict every 성장
 //    screen shares (app/growth-song-model.js through VZ.growthSong): 좋아진 방향 · 아쉬운 방향 · 비슷함 · 판정 보류 · 녹음 하나.
-//  - 곡 하나: 이 곡의 변화 → 약한 곳 → 두 녹음 비교 → 깊이 보기, in that order. The verdict is 이번 달's for the same song,
+//  - 곡 하나: 처음 vs 최근 → 녹음 타임라인 → 약한 곳 → 이 곡 다음 연습 → 들어 본 평가 · 두 녹음 비교 → 깊이 보기, in that
+//    order, under 기간 and 한마디 (tests/growth-song-page.spec.cjs). The verdict is 이번 달's for the same song,
 //    with the same 연습 녹음 포함 switch (one device setting): flipped there, it is flipped here.
 //  - 구간 A/B is reachable straight from the song (no 집중 연습 계획 needed); every deeper tool is a row of 깊이 보기.
 //  - Older addresses (#/vocal-lab…, #/compare, #/vocal-growth/analysis) and entry points land on the same screen.
@@ -34,7 +36,7 @@ async function boot(page, {media = MEDIA, db = DB} = {}) {
 /** The media list comes straight from the fixture (no files): what the device store would hand to VZ.media.list(). */
 const setMedia = (page, media) => page.evaluate(rows => { window.vzipCloudSignedIn = () => false; window.vzipReadMedia = async () => rows.map(r => ({...r})); VZ.media.invalidate(); }, media);
 const go = async (page, hash, mark) => { await page.evaluate(h => { location.hash = h; }, hash); await expect(page.locator(mark).first()).toBeVisible(); };
-const song = async (page, id, query = '') => { await go(page, '#/vocal-lab/' + id + query, '[data-song-section="changes"] [data-song-verdict]'); await expect(page.locator('[data-song-section="changes"] [data-growth-changes-card]')).toBeVisible(); };
+const song = async (page, id, query = '') => { await go(page, '#/vocal-lab/' + id + query, '[data-gsp-hero] [data-song-verdict]'); await expect(page).toHaveURL(new RegExp('#/growth-song/' + id)); await expect(page.locator('[data-song-section="changes"] [data-growth-changes-card]')).toBeVisible(); };
 const overflow = page => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 const rows = page => page.locator('[data-hub-songs] [data-hub-song]').evaluateAll(els => els.map(e => [e.dataset.hubSong, e.dataset.hubState, e.querySelector('.growth-hub-chip').textContent]));
 const shot = async (page, name) => { if (!SHOTS) return; fs.mkdirSync(SHOTS, {recursive:true}); await page.screenshot({path:SHOTS + '/' + name + '.png', fullPage:true}); };
@@ -68,7 +70,7 @@ test('곡 목록: 분석한 곡만, 최근에 부른 순으로, 곡마다 한마
   const waiting = page.locator('[data-hub-waiting] [data-hub-song="s4"]');
   await expect(waiting).toHaveAttribute('data-hub-state', 'none');
   await expect(waiting.locator('.growth-hub-chip')).toHaveText('분석 전');
-  await expect(waiting).toHaveAttribute('href', '#/vocal-lab/s4');
+  await expect(waiting).toHaveAttribute('href', '#/growth-song/s4');
   // The song without an analysis still opens: its recordings to pick and analyse, and the word says 분석 전.
   await page.locator('[data-hub-waiting] summary').click();
   await waiting.click();
@@ -103,17 +105,17 @@ test('곡 목록이 길면 제목으로 찾는다', async ({page}) => {
   await expect(page.locator('[data-hub-q]')).toHaveCount(0);
 });
 
-test('곡 하나: 이 곡의 변화 → 약한 곳 → 두 녹음 비교 → 깊이 보기 순서, 변화 안의 순서도 정해져 있다', async ({page}) => {
+test('곡 하나: 처음 vs 최근 → 녹음 타임라인 → 약한 곳 → 다음 연습 → 두 녹음 비교 → 깊이 보기, 안의 순서도 정해져 있다', async ({page}) => {
   await boot(page);
   await song(page, 's5');
-  await expect(page.locator('#top h1')).toHaveText('곡 분석');
-  await expect(page.locator('.vl-song strong')).toHaveText('Home');
+  await expect(page.locator('#top h1')).toHaveText('곡');
+  await expect(page.locator('[data-gsp-hero] h2')).toHaveText('Home');
   expect(await page.locator('[data-song-section]').evaluateAll(els => els.map(e => [e.dataset.songSection, e.querySelector('h2').textContent]))).toEqual(
-    [['changes', '이 곡의 변화'], ['weak', '약한 곳'], ['compare', '두 녹음 비교'], ['deep', '깊이 보기']]);
-  // Inside 이 곡의 변화: the word, the switch, 처음·최근 (무엇이 달라졌나 for this song), 지난달 대비, the measures, then the recordings.
-  const order = await page.evaluate(() => { const marks = ['[data-song-verdict]', '[data-song-practice]', '[data-growth-changes-card] [data-gc-song="s5"]', '[data-song-month]', '[data-growth-report]', '.vl-dates', '[data-carousel]', '[data-song-fold="take"]', '[data-song-fold="trend"]'];
-    const els = marks.map(m => document.querySelector('[data-song-section="changes"] ' + m)); return els.map((el, i) => !el ? 'missing ' + marks[i] : i && !(els[i - 1].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) ? 'out of order ' + marks[i] : 'ok'); });
-  expect(order).toEqual(Array(9).fill('ok'));
+    [['changes', '처음 vs 최근'], ['takes', '녹음 타임라인'], ['weak', '약한 곳'], ['next', '이 곡 다음 연습'], ['compare', '들어 본 평가 · 두 녹음 비교'], ['deep', '깊이 보기']]);
+  // Inside 처음 vs 최근: the switch, the measures, 처음·최근 (무엇이 달라졌나 for this song), 지난달 대비; then the recordings.
+  const order = await page.evaluate(() => { const marks = ['[data-song-section="changes"] [data-song-practice]', '[data-song-section="changes"] [data-growth-report]', '[data-song-section="changes"] [data-growth-changes-card] [data-gc-song="s5"]', '[data-song-section="changes"] [data-song-month]', '[data-song-section="takes"] .vl-dates', '[data-song-section="takes"] [data-carousel]', '[data-song-section="takes"] [data-song-fold="take"]', '[data-song-section="deep"] [data-song-fold="trend"]'];
+    const els = marks.map(m => document.querySelector(m)); return els.map((el, i) => !el ? 'missing ' + marks[i] : i && !(els[i - 1].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) ? 'out of order ' + marks[i] : 'ok'); });
+  expect(order).toEqual(Array(8).fill('ok'));
   await expect(page.locator('[data-song-verdict]')).toHaveText('좋아진 방향');
   await expect(page.locator('[data-song-verdict]')).toHaveAttribute('data-song-verdict', 'better');
   await expect(page.locator('[data-song-basis]')).toHaveText('좋아진 지표: 음정 정확도');
@@ -124,55 +126,65 @@ test('곡 하나: 이 곡의 변화 → 약한 곳 → 두 녹음 비교 → 깊
   expect(await page.locator('[data-growth-report] [data-growth-row]').evaluateAll(els => els.map(e => e.dataset.growthRow).sort())).toEqual(['high', 'intonation', 'phrase', 'range', 'stability']);
   await expect(page.locator('[data-growth-report] [data-growth-row="intonation"]')).toHaveClass(/good/);
   await expect(page.locator('[data-growth-report] [data-growth-row="intonation"] p')).toHaveText('±20 cent → ±15 cent');
-  // The recordings: every take of the song with its mark, the newest analysed ones open, a player for the active one.
+  // The timeline: every take of the song with its mark (처음 · 최근 of the verdict), the newest analysed ones open, a
+  // player for the active one.
   expect(await page.locator('.vl-dates [data-date]').evaluateAll(els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()))).toEqual(['10.05', '11.05', '11.06', '11.07 연습', '11.08 연습', '11.09']);
+  expect(await page.locator('.vl-dates [data-pair]').evaluateAll(els => els.map(e => e.dataset.date + ':' + e.dataset.pair))).toEqual(['e1:처음', 'e2:최근']);
   await expect(page.locator('[data-carousel] .vl-play')).toBeVisible();
-  // The per-take detail and this screen's own per-take chart are folded, and say what they are.
+  // The per-take detail is folded; this screen's own per-take chart is in 깊이 보기, and says what it is.
   await expect(page.locator('[data-song-fold="take"]')).not.toHaveAttribute('open', '');
+  await expect(page.locator('[data-song-section="deep"]')).not.toHaveAttribute('open', '');
+  await page.locator('[data-song-section="deep"] > summary').click();
   await expect(page.locator('[data-song-fold="trend"] summary')).toContainText('고른 녹음을 바로 앞 녹음과 견준 참고 그래프');
   await page.locator('[data-song-fold="trend"] summary').click();
-  await expect(page.locator('[data-song-trend-basis]')).toContainText('위 ‘이 곡의 변화’와는 기준이 달라요');
+  await expect(page.locator('[data-song-trend-basis]')).toContainText('위 ‘처음 vs 최근’과는 기준이 달라요');
   await expect(page.locator('.vl-trend .vl-plot-dates button').first()).toBeVisible();
   await page.locator('[data-song-fold="take"] summary').click();
   await expect(page.locator('.vl-segment')).toBeVisible();
-  // A redraw (another take picked) keeps the folds as they are.
+  // A date tapped: that take plays, 이 녹음 자세히 stays open, and a redraw keeps the folds as they are.
   await page.locator('.vl-dates [data-date="e1"]').click();
+  await expect(page.locator('.vl-dates [data-date="e1"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.vl-player-title strong')).toHaveText('녹음 e1');
   await expect(page.locator('[data-song-fold="take"]')).toHaveAttribute('open', '');
   await expect(page.locator('[data-song-fold="trend"]')).toHaveAttribute('open', '');
-  // The jump row moves to a section (깊이 보기 opens).
-  await page.locator('[data-song-jump="deep"]').click();
   await expect(page.locator('[data-song-section="deep"]')).toHaveAttribute('open', '');
   await expect(page.locator('[data-song-deep="reports"]')).toBeVisible();
+  // Tapped again while it plays: it leaves the chosen takes.
+  await page.locator('.vl-dates [data-date="e1"]').click();
+  await expect(page.locator('.vl-dates [data-date="e1"]')).toHaveAttribute('aria-pressed', 'false');
   expect(await overflow(page)).toBeLessThanOrEqual(0);
 });
 
 test('판정은 이번 달과 같다: 같은 곡의 처음·최근 줄과 지난달 대비, 목록의 한마디까지', async ({page}) => {
   await boot(page);
-  // 이번 달 › 전체 › 곡별 Home: the 처음·최근 line.
-  await page.evaluate(() => { localStorage.setItem('vzip:growth-period', 'all'); localStorage.setItem('vzip:monthly-growth-song', 's5'); });
-  await go(page, '#/growth-changes', '[data-gm-section="changes"] [data-gc-song="s5"]');
-  const overall = await line(page, '[data-gm-section="changes"]', 's5');
-  expect(overall.basis).toBe('같은 곡 Home · 녹음 그대로 잰 녹음 4개 중 처음·최근 · 10월 → 11월');
-  // 월별: 지난달과 비교.
-  await page.locator('[data-gm-period="month"]').click();
-  await expect(page.locator('[data-gm-section="changes"] [data-gc-song="s5"] .gc-basis')).toContainText('지난 기간 마지막 녹음과 이번 기간');
-  const month = await line(page, '[data-gm-section="changes"]', 's5');
-  const moved = await page.locator('[data-gm-section="changes"] [data-gc-song="s5"] .gc-obs li:not([data-similar]) > span').allTextContents();
-  // 이 곡 자세히 → 곡 하나.
-  const link = page.locator('[data-gm-song-detail]');
-  await expect(link).toHaveText('이 곡 자세히');
-  await expect(link).toHaveAttribute('href', '#/vocal-lab/s5');
-  expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(44);
-  await link.click();
-  await expect(page).toHaveURL(/#\/vocal-lab\/s5$/);
+  // 달라진 것 자세히 › 전체 › 곡별 Home: the song screen, its 처음·최근 line.
+  await page.evaluate(() => { localStorage.setItem('vzip:growth-period', 'all'); });
+  await go(page, '#/growth-changes', '[data-gm-section="changes"] [data-gm-scope="song"]');
+  await page.locator('[data-gm-scope="song"]').click();
+  await page.locator('[data-mbs-song="s5"]').click();
+  await expect(page).toHaveURL(/#\/growth-song\/s5$/);
   await expect(page.locator('[data-song-section="changes"] [data-gc-song="s5"]')).toBeVisible();
-  expect(await line(page, '[data-song-section="changes"]', 's5')).toEqual(overall);
+  const overall = await line(page, '[data-song-section="changes"]', 's5');
+  expect(overall.basis).toBe('같은 곡 Home · 녹음 그대로 잰 녹음 4개 중 처음·최근 · 10월 → 11월');
+  // 지난달 대비: this month against the latest take before it — the line 이번 달 shows for the song.
+  const month = await page.evaluate(async () => VZ.growthSong.month(await VZ.media.list(), 's5', false));
   await expect(page.locator('[data-song-month] strong')).toHaveText('지난달 대비');
-  await expect(page.locator('[data-song-month] span')).toHaveText('좋아진 방향 · ' + moved.join(' · '));
+  await expect(page.locator('[data-song-month] span')).toHaveText(month.word + ' · ' + month.text);
   await expect(page.locator('[data-song-month] small')).toHaveText(month.basis);
   // 뒤로 returns to 달라진 것 자세히, where it was opened from.
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/growth-changes$/);
+  // 월별 › 곡별 Home: the song screen at this month's chip, with that month's line (지난 기간 vs 이번 기간).
+  await page.locator('[data-gm-period="month"]').click();
+  await expect(page.locator('[data-gm-section="changes"] [data-gc-song="s5"] .gc-basis')).toContainText('지난 기간 마지막 녹음과 이번 기간');
+  const monthLine = await line(page, '[data-gm-section="changes"]', 's5');
+  await page.locator('[data-gm-scope="song"]').click();
+  await page.locator('[data-mbs-song="s5"]').click();
+  await expect(page).toHaveURL(/#\/growth-song\/s5\?month=2026-11$/);
+  await expect(page.locator('[data-gsp-period="month"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-gsp-hero] .gsp-chip')).toHaveText(month.word);
+  await expect(page.locator('[data-song-section="changes"] [data-gc-song="s5"]')).toBeVisible();
+  expect(await line(page, '[data-song-section="changes"]', 's5')).toEqual(monthLine);
   // Every analysed song: the word of the list is the word of its screen; a song 이번 달 leaves out is 판정 보류 here too.
   await go(page, '#/vocal-analysis', '[data-hub-song]');
   const list = await rows(page);
@@ -344,7 +356,7 @@ test('깊이 보기: 소리 길 흔적, MR로 다시 분석, 정밀 리포트, �
   for (const a of await deep.locator('a.vl-report').all()) expect((await a.boundingBox()).height).toBeGreaterThanOrEqual(44);
   // 같은 날 녹음 세기: chosen here, said to change the per-take chart only — the verdict stays.
   await expect(deep.locator('[data-same-day]')).toHaveValue('all');
-  await expect(deep.locator('[data-same-day-scope]')).toContainText('‘이 곡의 변화’ 판정은 바뀌지 않아요');
+  await expect(deep.locator('[data-same-day-scope]')).toContainText('‘처음 vs 최근’ 판정은 바뀌지 않아요');
   await deep.locator('[data-same-day]').selectOption('average');
   await expect(deep.locator('[data-same-day]')).toHaveValue('average');
   await expect(page.locator('[data-song-verdict]')).toHaveText('좋아진 방향');
@@ -356,8 +368,8 @@ test('깊이 보기: 소리 길 흔적, MR로 다시 분석, 정밀 리포트, �
   await deep.locator('[data-song-deep="reports"]').click();
   await expect(page).toHaveURL(/#\/lab-reports$/);
   await page.locator('.vl-reports .vl-report').first().click();
-  await expect(page).toHaveURL(/#\/vocal-lab\/s5\?report=/);
-  await expect(page.locator('[data-song-section="changes"] [data-song-verdict]')).toHaveText('좋아진 방향');
+  await expect(page).toHaveURL(/#\/growth-song\/s5\?report=/);
+  await expect(page.locator('[data-song-verdict]')).toHaveText('좋아진 방향');
   // 깊이 보기 stays open on this device once opened; the ⋯ menu still has 보관함 and 곡 상세.
   await expect(page.locator('[data-song-section="deep"]')).toHaveAttribute('open', '');
   await page.locator('[data-lab-more]').click();
@@ -381,13 +393,13 @@ test('옛 주소와 들어오는 곳: 모두 같은 화면에 닿는다', async 
   // #/compare?a=&b= (older comparison links) → the same.
   await go(page, '#/vocal-analysis', '[data-hub-song]');
   await page.evaluate(() => { location.hash = '#/compare?a=a2&b=a5'; });
-  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?a=a2&b=a5&compare=1$/);
+  await expect(page).toHaveURL(/#\/growth-song\/s1\?a=a2&b=a5&compare=1$/);
   await expect(page.locator('[data-song-section="compare"] [data-compare-a]')).toHaveValue('a2');
   // 전체 녹음 › 선택 › 분석 (VZ.openAnalysisSelection): the chosen takes are open and their chart is unfolded.
   await go(page, '#/vocal-analysis', '[data-hub-song]');
   await page.evaluate(async () => { VZ.openAnalysisSelection((await VZ.media.list()).filter(m => ['e1', 'ey', 'e2'].includes(m.id))); });
-  await expect(page).toHaveURL(/#\/vocal-lab\/s5\?selection=1$/);
-  await expect(page.locator('[data-song-section="changes"] [data-song-verdict]')).toHaveText('좋아진 방향');
+  await expect(page).toHaveURL(/#\/growth-song\/s5\?selection=1$/);
+  await expect(page.locator('[data-song-verdict]')).toHaveText('좋아진 방향');
   expect(await page.locator('.vl-dates [aria-pressed="true"]').evaluateAll(els => els.map(e => e.dataset.date))).toEqual(['e1', 'ey', 'e2']);
   await expect(page.locator('[data-song-fold="trend"]')).toHaveAttribute('open', '');
   await expect(page.locator('.vl-trend .vl-plot-dates button')).toHaveCount(3);
@@ -409,13 +421,13 @@ for (const [w, h] of [[390, 844], [820, 1180], [1180, 820]]) test('화면 폭 ' 
   await song(page, 's5');
   await shot(page, 'song-' + w + 'x' + h);
   // Everything unfolded: still inside the screen.
-  for (const sel of ['[data-song-fold="take"] > summary', '[data-song-fold="trend"] > summary', '[data-song-fold="ab"] > summary', '[data-song-section="deep"] > summary', '[data-compare-panel] > summary']) await page.locator(sel).click();
+  for (const sel of ['[data-song-fold="take"] > summary', '[data-song-section="deep"] > summary', '[data-song-fold="trend"] > summary', '[data-song-fold="ab"] > summary', '[data-compare-panel] > summary']) await page.locator(sel).click();
   await expect(page.locator('.growth-ab-panel')).toBeVisible();
   await expect(page.locator('[data-song-deep="basis"]')).toBeVisible();
   expect(await overflow(page)).toBeLessThanOrEqual(0);
   const outside = await page.evaluate(() => [...document.querySelectorAll('[data-lab] *')].filter(e => { const r = e.getBoundingClientRect(); return r.width && r.right > innerWidth + 1 && !e.closest('.vl-dates,.vl-metrics,.vl-plot-scroll'); }).map(e => e.tagName + '.' + e.className).slice(0, 5));
   expect(outside).toEqual([]);
-  for (const sel of ['[data-song-jump]', '.vl-switch', '.vl-fold > summary', '[data-song-section="deep"] > summary', '.vl-dates [data-date]', '[data-weak-find]', '[data-weak-take]', '[data-compare-a]', '[data-compare-first]', '[data-listen-open]', '[data-compare-panel] > summary', '[data-same-day]', '[data-save-report]', '[data-gc-play]'])
+  for (const sel of ['[data-gsp-period]', '[data-gsp-play]', '.vl-switch', '.vl-fold > summary', '[data-song-section="deep"] > summary', '.vl-dates [data-date]', '[data-weak-find]', '[data-weak-take]', '[data-compare-a]', '[data-compare-first]', '[data-listen-open]', '[data-compare-panel] > summary', '[data-same-day]', '[data-save-report]', '[data-gc-play]'])
     for (const el of await page.locator('[data-lab] ' + sel).all()) { const box = await el.boundingBox(); expect(box && box.height, sel).toBeGreaterThanOrEqual(44); }
   // The light cards inside the dark screen keep dark text on white.
   expect(await page.locator('.vl-light .gc-basis').first().evaluate(el => [getComputedStyle(el).color, getComputedStyle(el.closest('.growth-panel')).backgroundColor])).toEqual(['rgb(102, 112, 133)', 'rgb(255, 255, 255)']);

@@ -63,7 +63,7 @@ html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav>ul>li>a i{font-size:
  * practice rooms, the standalone vocal lab and the 오늘의 연습 doing screen (body.vz-set-run). Home draws the same menu in its own dock.
  * Bars that used to replace the menu on ordinary screens (selection / analysis) now float just above it. */
 :root{--vz-nav-stack:calc(max(12px,env(safe-area-inset-bottom)) + 78px)}
-html body:not(.vz-home-mode):not(.vz-record-mode):not(.vz-set-run):not([data-vz-route="practice-room"]):not([data-vz-route="guided-practice"]):not([data-vz-route="song-suggest"]):not([data-vz-route="song-transcript"]):not([data-vz-route="recording"]):not([data-vz-route="vocal-lab"]):not([data-vz-route="lab-reports"])>.v-nav{display:block!important}
+html body:not(.vz-home-mode):not(.vz-record-mode):not(.vz-set-run):not([data-vz-route="practice-room"]):not([data-vz-route="guided-practice"]):not([data-vz-route="song-suggest"]):not([data-vz-route="song-transcript"]):not([data-vz-route="recording"]):not([data-vz-route="vocal-lab"]):not([data-vz-route="growth-song"]):not([data-vz-route="lab-reports"])>.v-nav{display:block!important}
 html body[data-vz-route="settings"] .v-app{padding-bottom:calc(var(--vz-nav-stack) + 28px)!important}
 html body:not([data-vz-route="song-suggest"]):not([data-vz-route="recording"]) .vz-media-selection,html body.vz-media-selecting:not([data-vz-route="song-suggest"]) .sel-bar{bottom:calc(var(--vz-nav-stack) + 4px)!important;width:min(calc(100% - 24px),560px)!important;border-radius:20px!important;padding-bottom:12px!important}
 html body.vz-media-selecting:not([data-vz-route="song-suggest"]) .v-app,html body.vz-media-has-selection .v-app{padding-bottom:calc(var(--vz-nav-stack) + 120px)!important}

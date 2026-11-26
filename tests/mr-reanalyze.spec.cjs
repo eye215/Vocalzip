@@ -263,8 +263,9 @@ test('보컬 연구소: the row, 고른 녹음만 for the ticked dates, and the 
   await expect(row).toContainText('판정 보류·분석 전 4개');
   expect((await row.boundingBox()).height).toBeGreaterThanOrEqual(44);
   await shot(page, 'lab-row');
-  // The lab opens with the newest analysed takes ticked; show the one already measured with the MR.
-  await page.locator('.vl-dates [data-date="done"]').click(); await page.locator('.vl-dates [data-date="done"]').click();
+  // The lab opens with the newest analysed takes ticked; show the one already measured with the MR (a date tapped is the
+  // one played, 큰 정리 2번's timeline).
+  await page.locator('.vl-dates [data-date="done"]').click();
   await expect(page.locator('[data-lab-method]')).toHaveText('측정 방식 · MR 빼고 (연습 MR)');
   const ticked = await page.locator('.vl-dates [aria-pressed="true"]').evaluateAll(list => list.map(b => b.dataset.date));
   expect(ticked).toEqual(['good', 'good2', 'ai', 'done', 'nofile']);
@@ -279,9 +280,9 @@ test('보컬 연구소: the row, 고른 녹음만 for the ticked dates, and the 
   expect(await page.evaluate(() => window.__calls.map(c => c.id))).toEqual(['good', 'good2', 'ai']);
   await s.locator('[data-remr-close]').click();
   // The lab is drawn again from the new results: the AI-separated take now says MR 빼고.
-  await page.locator('.vl-dates [data-date="ai"]').click(); await page.locator('.vl-dates [data-date="ai"]').click();
+  await page.locator('.vl-dates [data-date="ai"]').click();
   await expect(page.locator('[data-lab-method]')).toHaveText('측정 방식 · MR 빼고 (연습 MR)');
-  await page.locator('.vl-dates [data-date="good"]').click(); await page.locator('.vl-dates [data-date="good"]').click();
+  await page.locator('.vl-dates [data-date="good"]').click();
   await expect(page.locator('[data-lab-method]')).toHaveText('측정 방식 · 녹음 그대로');
   // The same action from the lab's menu.
   await page.locator('[data-lab-more]').click();

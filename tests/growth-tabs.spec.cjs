@@ -119,16 +119,13 @@ test('곡: songs with an analysed take and their real counts (the rest folded as
   await expect(page.locator('[data-hub-reports]')).toContainText('저장한 리포트 1개');
   await expect(page.locator('[data-hub-reports]')).toHaveAttribute('href', '#/lab-reports');
   expect(await overflow(page)).toEqual({wide:false, over:0});
-  // 곡 하나 (성장 v2 R4, app/growth-song-page.js), and from it every tool of the full 곡 분석 screen.
+  // 곡 하나: the ONE song screen (큰 정리 2번) with every tool of 곡 분석 on it.
   await rows.nth(0).click();
   await expect(page).toHaveURL(/#\/growth-song\/s1$/);
   await expect(page.locator('[data-gsp-hero]')).toContainText('Defying Gravity');
-  await page.locator('[data-gsp-all]').click();
-  await expect(page).toHaveURL(/#\/vocal-lab\/s1$/);
-  await expect(page.locator('#top h1')).toHaveText('곡 분석');
+  await expect(page.locator('#top h1')).toHaveText('곡');
   await expect(page.locator('[data-song-section="changes"]')).toBeVisible();
-  await page.locator('[data-back]').click();
-  await expect(page).toHaveURL(/#\/growth-song\/s1$/);
+  await expect(page.locator('[data-gsp-all]')).toHaveCount(0);
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/vocal-analysis$/);
   await expect(rows).toHaveCount(5);
@@ -153,7 +150,7 @@ test('older links keep their screens; a bare #/vocal-lab lands on 곡 without tr
   await expect(page).toHaveURL(/#\/vocal-lab\?selection=1$/);
   await expect(page.locator('[data-lab]')).toContainText('선택한 녹음 2개');
   await page.goto('/#/home'); await page.goto('/#/compare?a=a5&b=a6');
-  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?a=a5&b=a6&compare=1$/);
+  await expect(page).toHaveURL(/#\/growth-song\/s1\?a=a5&b=a6&compare=1$/);
   await page.goto('/#/home'); await page.goto('/#/practice-room');
   await expect(page.locator('iframe.vzip-practice-room-frame')).toBeVisible();
   expect(page.__errors).toEqual([]);
