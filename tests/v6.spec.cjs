@@ -377,6 +377,16 @@ test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never
   await page.locator('a.item[href="#/lesson/l-over"]').click();
   await page.getByRole('button', {name:'레슨 취소'}).click();
   expect((await data(page)).lessons.find(l => l.id === 'l-over').status).toBe('cancelled');
+  // Every status move lives on this page (the edit sheet has none): 취소 → 예정, and saving the edit sheet keeps it.
+  await page.getByRole('button', {name:'취소 철회 (예정으로)'}).click();
+  expect((await data(page)).lessons.find(l => l.id === 'l-over').status).toBe('scheduled');
+  await page.locator('[data-edit-lesson]').click();
+  await expect(sheet(page).locator('[data-st]')).toHaveCount(0);
+  await sheet(page).locator('[name=place]').fill('합정');
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  expect((await data(page)).lessons.find(l => l.id === 'l-over')).toMatchObject({status:'scheduled', place:'합정'});
+  await page.getByRole('button', {name:'레슨 취소'}).click();
+  expect((await data(page)).lessons.find(l => l.id === 'l-over').status).toBe('cancelled');
   // Legacy lesson without status shows as completed and keeps legacy fields after edit.
   await page.goto('/#/lesson/l1');
   await expect(page.locator('.badge').first()).toHaveText('완료');
@@ -1088,6 +1098,7 @@ test('Homework: add with song, complete from home, practice log records it separ
   await page.goto('/#/home');
   await page.locator('[data-log]').click();
   const s = sheet(page);
+  expect(await s.locator('[data-min]').evaluateAll(list => list.map(b => b.textContent))).toEqual(['5분', '10분', '20분', '30분', '60분']);
   await s.locator('[name=song]').selectOption('s2');
   await s.locator('[name=minutes]').fill('15');
   await s.getByRole('button', {name:'만족도 4'}).click();

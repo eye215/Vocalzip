@@ -383,7 +383,7 @@ V.routineChoice=form=>{
   if(!Number.isInteger(n)||n<2||n>R.MAX_DAYS)throw Error('반복 일수는 2~'+R.MAX_DAYS+'일로 정해 주세요.');
   return n;
 };
-const CHIPS=[5,10,15,20,30];
+const CHIPS=V.PRACTICE_MINUTE_CHIPS||[5,10,20,30,60];
 const minutesLabel=n=>{const v=Math.round(Number(n)||0);return v>=60?Math.floor(v/60)+'시간'+(v%60?' '+v%60+'분':''):v+'분';};
 /** A goal's counted time for the home row: {minutes (null when none), label}. */
 V.goalTime=goal=>{const minutes=goal?R.savedMinutes(V.db,goal):null;return {minutes,label:minutes?minutesLabel(minutes):''};};

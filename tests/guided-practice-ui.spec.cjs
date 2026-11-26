@@ -49,6 +49,11 @@ test('guided YouTube playback survives background refresh and only practice butt
  await expect(page.getByRole('button',{name:'연습 끝내기'})).toBeVisible({timeout:10000});
  await page.getByRole('button',{name:'연습 끝내기'}).click();
  await expect(page.getByText('모든 단계를 마쳤어요')).toBeVisible();
+ // A finished run counts one practice of the homework; it does not mark the homework done.
+ const saved=await page.evaluate(()=>({task:window.VZ.db.assignments.find(t=>t.id==='guided-test'),run:window.VZ.db.practices.find(p=>p.guidedExerciseKey==='homework:guided-test')}));
+ expect(saved.task.status).toBe('active');
+ expect(saved.task.doneAt).toBeUndefined();
+ expect(saved.run).toMatchObject({completed:['guided-test'],assignmentReps:{'guided-test':1}});
  expect(page.__errors).toEqual([]);
 });
 

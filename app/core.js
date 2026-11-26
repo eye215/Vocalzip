@@ -147,6 +147,9 @@ VZ.daysBetween = (a, b) => Math.round((VZ.parseYmd(b) - VZ.parseYmd(a)) / 864000
 VZ.relDay = s => { const n = VZ.daysBetween(VZ.today(), s); if (!Number.isFinite(n)) return ''; return n === 0 ? '오늘' : n === 1 ? '내일' : n === -1 ? '어제' : n > 0 ? n + '일 후' : -n + '일 전'; };
 VZ.dday = s => { const n = VZ.daysBetween(VZ.today(), s); return n === 0 ? 'D-DAY' : n > 0 ? 'D-' + n : 'D+' + -n; };
 VZ.clock = sec => { sec = Math.max(0, Math.round(sec || 0)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60; return (h ? h + ':' + pad(m) : m) + ':' + pad(s); };
+// One set of one-tap practice-time chips (minutes) for every "얼마나 연습했나요?" place: the goal time sheet,
+// the saved-take card and the practice-log sheet. A preselected time that is not a chip shows in the number field.
+VZ.PRACTICE_MINUTE_CHIPS = Object.freeze([5, 10, 20, 30, 60]);
 VZ.minutes = min => { min = Math.round(min || 0); return min >= 60 ? Math.floor(min / 60) + '시간' + (min % 60 ? ' ' + min % 60 + '분' : '') : min + '분'; };
 VZ.size = b => b > 1048576 ? (b / 1048576).toFixed(b > 104857600 ? 0 : 1) + 'MB' : Math.max(1, Math.round(b / 1024)) + 'KB';
 // A lesson brought in from 레슨비 정산 has no real time: its 00:00 start is a placeholder (shown as 시간 미정).

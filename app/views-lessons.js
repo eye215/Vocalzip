@@ -102,20 +102,20 @@ VZ.route('homework', {title:'숙제', back:true, tab:'calendar', actions:() => '
 VZ.lessonSheet = ({lesson, date, songId} = {}) => {
   const l = lesson, db = VZ.db, selected = new Set(l ? VZ.lessonSongIds(l) : songId && VZ.song(songId) ? [songId] : []);
   const last = [...db.lessons].filter(x => x.place || x.teacher).sort((a, b) => VZ.lessonSort(b, a))[0];
-  const st = l ? VZ.lessonStatus(l) : 'scheduled';
-  let status = st;
-  // Picked songs and the status buttons are not form fields: count them as edits when closing.
+  // Status (예정/완료/취소) is not edited here: the lesson page's 레슨 완료·레슨 취소·예정으로 되돌리기 buttons, 피드백과 함께
+  // 완료 and 지난 레슨 결과 change it (owner, 2026-11-26). Saving this sheet never touches status; a new lesson starts 예정.
+  // Picked songs are not form fields: count them as edits when closing.
   let draft = null;
   // A NEW lesson's 준비 메모 stays when the sheet is closed without saving (owner, 2026-11-23): it is offered again the next
   // time 레슨 일정 추가 opens (with 저장된 내용으로 되돌리기 to drop it). An existing lesson's draft goes on close, as before.
   VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', onClose:() => { if (l) draft?.discard(); },
-    closeNote:() => !l && document.querySelector('#lesson-form [name=prep]')?.value.trim() ? '날짜·시간 같은 입력은 저장되지 않아요. 준비 메모는 이 기기에 남아서 다음에 레슨을 추가할 때 다시 보여 드려요. 닫을까요?' : '', dirtyState:() => [...selected].join(',') + '|' + status, body:'<form id="lesson-form">' +
+    closeNote:() => !l && document.querySelector('#lesson-form [name=prep]')?.value.trim() ? '날짜·시간 같은 입력은 저장되지 않아요. 준비 메모는 이 기기에 남아서 다음에 레슨을 추가할 때 다시 보여 드려요. 닫을까요?' : '', dirtyState:() => [...selected].join(','), body:'<form id="lesson-form">' +
     '<label class="field"><span>레슨 날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(l?.date || date || VZ.today()) + '"></label>' +
     '<div class="two"><label class="field"><span>시작 시간' + (l ? '' : ' <span class="req">*</span>') + '</span><input type="time" name="start" ' + (l ? '' : 'required') + ' value="' + esc(l?.startTime || '') + '"></label><label class="field"><span>종료 시간</span><input type="time" name="end" value="' + esc(l?.endTime || '') + '"></label></div>' +
     '<div class="two"><label class="field"><span>장소</span><input type="text" name="place" maxlength="100" value="' + esc(l ? l.place || '' : last?.place || '') + '"></label><label class="field"><span>선생님</span><input type="text" name="teacher" maxlength="60" value="' + esc(l ? l.teacher || '' : last?.teacher || '') + '"></label></div>' +
     '<fieldset class="field" style="border:0;padding:0"><legend>연습 곡</legend><div class="lesson-song-picker" data-songs></div></fieldset>' +
     '<label class="field"><span>준비 메모</span><textarea name="prep" rows="2" maxlength="2000" placeholder="레슨 전에 준비할 것, 질문할 것" style="min-height:64px">' + esc(l?.prepMemo || '') + '</textarea></label>' +
-    (l ? '<fieldset class="field" style="border:0;padding:0"><legend>상태</legend><div class="seg" data-status>' + ['scheduled', 'done', 'cancelled'].map(s => '<button type="button" data-st="' + s + '" aria-pressed="' + (st === s) + '">' + VZ.statusLabel[s] + '</button>').join('') + '</div></fieldset>' : '') + '</form>',
+    '</form>',
     foot:'<button type="submit" form="lesson-form" class="btn block">' + (l ? '저장' : '일정 추가') + '</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form'), songsHost = el.querySelector('[data-songs]');
@@ -136,20 +136,17 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
         selected.delete(button.dataset.removeSong); drawSongs(); songsHost.querySelector('select').focus();
       };
       drawSongs();
-      el.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { status = b.dataset.st; el.querySelectorAll('[data-st]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
       form.onsubmit = e => {
         e.preventDefault();
         if (!form.date.value) return;
         if (form.end.value && form.start.value && form.end.value <= form.start.value) { VZ.toast('종료 시간은 시작 시간보다 늦어야 해요.', 'error'); return; }
         const songIds = [...selected];
-        const fields = {date:form.date.value, startTime:form.start.value, endTime:form.end.value, place:form.place.value.trim(), teacher:form.teacher.value.trim(), songIds, songId:songIds[0] || '', prepMemo:form.prep.value, status};
-        // Never stamp a status onto a legacy lesson unless the user changed it:
-        // billing asks the user before deducting lessons that have no status.
-        if (l && !l.status && status === st) delete fields.status;
+        const fields = {date:form.date.value, startTime:form.start.value, endTime:form.end.value, place:form.place.value.trim(), teacher:form.teacher.value.trim(), songIds, songId:songIds[0] || '', prepMemo:form.prep.value};
+        // A legacy lesson keeps having no status (billing asks the user before deducting lessons that have none).
         let id = l?.id;
         const ok = VZ.change(d => {
           if (l) { const x = d.lessons.find(y => y.id === l.id); if (x) { Object.assign(x, fields); if (!songIds.length && l.songId && !(l.songIds || []).length) x.songId = ''; } }
-          else { id = VZ.uid(); d.lessons.push({id, ...fields, feedback:'', memo:'', recordings:[], created:Date.now()}); }
+          else { id = VZ.uid(); d.lessons.push({id, ...fields, status:'scheduled', feedback:'', memo:'', recordings:[], created:Date.now()}); }
         });
         if (ok) { draft?.clear(); close(); VZ.toast(l ? '레슨 일정을 저장했어요.' : '레슨 일정을 추가했어요.'); if (!l) VZ.nav('#/lesson/' + id); }
       };

@@ -250,7 +250,7 @@ function saveSession(s){
       const category=V.guidedCategory(d,c);
       d.practices.push({id,date,minutes,manualMinutes:minutes,guidedSeconds:Math.round(s.completedSeconds),practiceTimeSource:'guided',practiceMode:c.songId?'song':'training',songId:c.songId,...category,technique:[{name:c.title,minutes}],memo:'[따라 하기] '+c.title,completed:c.assignmentId?[c.assignmentId]:[],assignmentReps:c.assignmentId?{[c.assignmentId]:1}:{},assignmentNotes:{},guidedExerciseKey:c.key,created:Date.now()});
     }
-    if(c.assignmentId){const task=d.assignments.find(t=>t.id===c.assignmentId);if(task&&task.status!=='done'){task.status='done';task.doneAt=Date.now()}}
+    // A homework run counts as one practice of it (completed/assignmentReps above), like '숙제 했나요?'. Only the homework row's own check marks it done.
     for(const goal of d.dailyGoals||[])if(goal.date===date&&goal.sourceId===(c.assignmentId||c.key)&&!goal.completed)goal.completed=true;
   },{silent:true});
   s.saved=ok;return ok;

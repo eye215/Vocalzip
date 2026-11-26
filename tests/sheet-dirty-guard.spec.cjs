@@ -76,13 +76,15 @@ test('browsers without the Navigation API: back still stays and asks',async({pag
  await expect(page.locator('#top h1')).toHaveText('레슨 목록');
 });
 
-test('lesson schedule: a status or song change counts as an edit; a stacked sheet closes on its own',async({page})=>{
+test('lesson schedule: a song change counts as an edit; the sheet has no status buttons; a stacked sheet closes on its own',async({page})=>{
  await boot(page);await page.locator('[data-edit-lesson]').click();
  const sheet=page.getByRole('dialog',{name:'레슨 일정 수정',exact:true});
- await sheet.locator('[data-st=cancelled]').click();
+ // Status is changed on the lesson page only (레슨 완료·레슨 취소·예정으로 되돌리기), not in this sheet.
+ await expect(sheet.locator('[data-st]')).toHaveCount(0);await expect(sheet.getByText('상태',{exact:true})).toHaveCount(0);
+ await sheet.locator('[data-lesson-song]').selectOption('s2');
  await sheet.getByRole('button',{name:'돌아가기'}).click();await expect(ask(page)).toBeVisible();
  await ask(page).getByRole('button',{name:'닫기',exact:true}).click();await expect(sheet).toHaveCount(0);
- expect((await db(page)).lessons[0].status).toBe('done');
+ expect((await db(page)).lessons[0]).toMatchObject({status:'done',songIds:['s1']});
  // New-song sheet opened from the lesson sheet: closing the untouched top sheet does not ask and keeps the lesson sheet.
  await page.locator('[data-edit-lesson]').click();await sheet.locator('textarea[name=prep]').fill('준비 메모');
  await sheet.locator('[data-lesson-song]').selectOption('__new');
@@ -90,7 +92,7 @@ test('lesson schedule: a status or song change counts as an edit; a stacked shee
  await song.getByRole('button',{name:'돌아가기'}).click();await expect(song).toHaveCount(0);await expect(ask(page)).toHaveCount(0);
  await expect(sheet.locator('textarea[name=prep]')).toHaveValue('준비 메모');
  await page.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
- expect((await db(page)).lessons[0].prepMemo).toBe('준비 메모');
+ expect((await db(page)).lessons[0]).toMatchObject({prepMemo:'준비 메모',status:'done'}); // saving the sheet keeps the status
 });
 
 test('lyrics and song info are protected; a menu closes as before',async({page})=>{
