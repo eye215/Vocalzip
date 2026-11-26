@@ -372,13 +372,16 @@ test('A song with 1,223 recordings draws 50 rows once, adds 50 at a time and kee
   await expect(count).toHaveText('선택 0개');
 });
 
-test('곡별 목록: 최근 연습곡 opens the song, an unset status shows nothing, no emoji, and the sort is kept on return', async ({page}) => {
+test('곡별 목록: no 최근 연습곡 card (home has 오늘 부를 곡), an unset status shows nothing, no emoji, and the sort is kept on return', async ({page}) => {
   await open(page);
   await page.setViewportSize({width:375, height:812});
   await page.goto('/#/songs');
   const list = page.locator('.vz-song-list a'), titles = () => list.locator('.item-title').allInnerTexts();
-  await expect(page.locator('.vz-recent-song')).toHaveAttribute('href', '#/song/s1');
-  await expect(page.locator('.vz-recent-song')).toContainText('연습 중 · 숙련도 3.5/5');
+  // 최근 연습곡 left 내 곡 (화면 지도 정리, 2026-11-26); 나의 공연 and the 곡별 | 전체 녹음 switch stay.
+  await expect(list.first()).toBeVisible();
+  await expect(page.locator('.vz-recent-song')).toHaveCount(0);
+  await expect(page.locator('.vz-performances')).toHaveAttribute('href', '#/performances');
+  await expect(page.getByRole('navigation', {name:'내 곡 보기'}).getByRole('link', {name:'전체 녹음'})).toBeVisible();
   const status = id => page.locator('.vz-song-list a[href="#/song/' + id + '"] .vz-song-status');
   await expect(status('s1')).toHaveText('연습 중'); // words only
   await expect(status('s2')).toHaveCount(0); // no status: no line at all (UI 정리 2026-11-23, was a grey "상태 미지정")

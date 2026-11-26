@@ -57,7 +57,7 @@ const openLibraryImport=async page=>{
 };
 const pickLibraryImportFiles=(page,files)=>sheet(page).locator('[data-file]').last().setInputFiles(files);
 
-test('전체 녹음에서 고른 파일은 새 확인 화면을 거쳐 업로드 중에만 상단 대시보드를 보인다', async ({page}) => {
+test('전체 녹음 +는 가져오기 화면을 열고, 고른 파일은 확인 화면을 거쳐 업로드 중에만 상단 대시보드를 보인다', async ({page}) => {
   await boot(page, {media:false});
   // A 26-second take: imports shorter than 25 seconds are left out on purpose.
   const sr = 8000, n = sr * 26, b = Buffer.alloc(44 + n * 2);
@@ -65,11 +65,14 @@ test('전체 녹음에서 고른 파일은 새 확인 화면을 거쳐 업로드
   b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
   b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
-  const chooser = page.waitForEvent('filechooser');
+  // + opens 가져오기 (no device picker of its own): the source and its conditions come first, then the files.
   await page.locator('[data-imp]').click();
-  await (await chooser).setFiles({name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b});
   await expect(page).toHaveURL(/#\/import-hub$/);
   await expect(sheet(page)).toHaveCount(0);
+  await expect(page.locator('[data-imp-native]')).toHaveCount(0);
+  await page.getByRole('button', {name:/iCloud Drive/}).click();
+  await expect(page.locator('[data-c="min"]')).toHaveValue('0:25');
+  await page.locator('[data-files]').setInputFiles({name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b});
   await expect(page.locator('[data-hub] [data-import]')).toBeVisible({timeout:30000});
   await expect(page.locator('[data-dash]')).toHaveCount(0);
   await page.evaluate(() => {
@@ -92,10 +95,10 @@ test('Import hub takes the many-file tools behind one fold that says what they w
   b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
   b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
-  const chooser = page.waitForEvent('filechooser');
   await page.locator('[data-imp]').click();
+  await page.getByRole('button', {name:/iCloud Drive/}).click();
   const b2 = Buffer.from(b); b2[200] = 7; // a different take, so it is not flagged as a duplicate
-  await (await chooser).setFiles([{name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b}, {name:'2026-11-02_10-00-00.wav', mimeType:'audio/wav', buffer:b2}]);
+  await page.locator('[data-files]').setInputFiles([{name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b}, {name:'2026-11-02_10-00-00.wav', mimeType:'audio/wav', buffer:b2}]);
   await expect(page.locator('[data-hub] [data-import]')).toBeVisible({timeout:30000});
   const fold = page.locator('[data-hub-bulk]');
   // Closed at first: the everyday choices stay in sight, the bulk tools wait behind the fold.
@@ -123,9 +126,9 @@ test('Import hub takes you to the next steps after an upload: choose songs, then
   b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
   b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
-  const chooser = page.waitForEvent('filechooser');
   await page.locator('[data-imp]').click();
-  await (await chooser).setFiles({name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b});
+  await page.getByRole('button', {name:/iCloud Drive/}).click();
+  await page.locator('[data-files]').setInputFiles({name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b});
   await expect(page.locator('[data-hub] [data-import]')).toBeVisible({timeout:30000});
   await page.evaluate(() => { VZ.media.importFile = async (file, choice) => ({id:choice.id, cloud:true, name:file.name, songId:'', recordedDate:choice.date || '2026-11-01'}); });
   await page.locator('[data-hub] [data-import]').click();
