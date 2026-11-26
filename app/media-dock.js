@@ -70,7 +70,7 @@
     host.classList.add('vz-media-select-enabled');
     const findItem = id => items.find(item => String(item.id) === id);
     const decorate = () => {
-      if (['library', 'library-tidy'].includes(document.body.dataset.vzRoute)) return; // these have their own ticks
+      if (['library', 'library-tidy'].includes(document.body.dataset.vzRoute) || host.closest('[data-no-media-select]')) return; // lists with their own choice
       host.querySelectorAll('[data-media]').forEach(row => {
         if (row.querySelector('.vz-media-select')) return;
         const item = findItem(row.dataset.media);

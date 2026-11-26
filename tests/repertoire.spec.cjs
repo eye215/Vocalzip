@@ -252,3 +252,23 @@ test('A production connects to the rest of the app: its day on the calendar, 공
  await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'전체 녹음 검색'})).toBeVisible();
  });
 
+test('대표 테이크 선택 shows the three best-measured takes first; 대표로 정하기 saves that one',async({page})=>{
+ await boot(page);await page.evaluate(async()=>{
+  const a=(into,wob,phrase)=>({v:2,metrics:{voicedSeconds:30,intonation:{meanAbsCents:into,notes:20},stability:{wobbleCents:wob,notes:10},breath:{medianPhrase:phrase}},confidence:{pitchConfidence:.95}});
+  const put=(id,name,an,at)=>window.vzipStorePracticeMedia({id,name,songId:'song1',type:'audio/wav',durationSeconds:40,created:Date.now()-at*864e5,blob:new Blob(['x'],{type:'audio/wav'}),analysis:an});
+  await put('t-ok','보통 테이크',a(20,10,3),4);await put('t-best','좋은 테이크',a(15,6,5),3);await put('t-pitch','음정 좋은 테이크',a(12,8,4),2);await put('t-weak','아쉬운 테이크',a(30,20,2),1);await put('t-none','분석 전',null,0);
+  VZ.media.invalidate();
+ });
+ await page.goto('/#/song/song1');await page.locator('[data-rep-toggle]').click();await page.locator('[data-take]').click();
+ const best=dialog(page).locator('[data-best-takes]');
+ await expect(best).toContainText('측정으로 고른 후보');
+ await expect(best.locator('[data-best-row]')).toHaveCount(3);
+ expect(await best.locator('[data-best-row]').evaluateAll(rows=>rows.map(r=>r.dataset.bestRow))).toEqual(['t-best','t-pitch','t-ok']);
+ await expect(best.locator('[data-best-row]').first()).toContainText('1순위');
+ await expect(best.locator('[data-best-row]').first()).toContainText('소리가 가장 덜 흔들려요');
+ await expect(best.locator('.vz-media-select')).toHaveCount(0);           // no second tick next to the rows
+ await best.locator('[data-best-take="t-pitch"]').click();
+ await expect(dialog(page)).toHaveCount(0);
+ expect((await db(page)).songs[0].repertoire.takeId).toBe('t-pitch');
+ await expect(page.locator('[data-take-player]')).toContainText('음정 좋은 테이크');
+});

@@ -103,9 +103,22 @@ function saveKeys(id,values){
  const k=Keys.of({...s,repertoire:info(s)});
  updateSong(id,{originalKey:k.originalKey,practiceKey:k.practiceKey,...values,keysAt:Date.now()});
 }
+/* 베스트 테이크 후보 (app/best-take-model.js, 2026-11-26): the three takes of this song that measured best, playable, each
+ * with "대표로 정하기" — the same save as choosing it in the list below. Shown only when two or more takes are measured. */
+function bestHtml(media){
+ const B=window.VzipBestTake,ok=V.growthDataset?.ok||(()=>true);
+ const picks=B?B.pick(media,{reliable:ok}):[];
+ if(!picks.length)return '';
+ return '<section class="archive-best" data-best-takes data-no-media-select><h3>측정으로 고른 후보</h3><p class="small muted">음정·흔들림·프레이즈를 이 곡 녹음끼리 견줘 봤어요. 들어 보고 골라요.</p>'+
+  picks.map((x,i)=>'<div class="archive-best-row" data-best-row="'+E(x.take.id)+'">'+V.mediaMini(x.take)+'<p class="small archive-best-why">'+(i===0?'<b>1순위</b> · ':'')+E([...x.reasons,x.values].filter(Boolean).join(' · '))+'</p><button type="button" class="chip" data-best-take="'+E(x.take.id)+'">대표로 정하기</button></div>').join('')+'</section>';
+}
 async function chooseTake(id){
  try{const media=(await M.list()).filter(m=>m.songId===id&&!V.db.deleted?.media?.includes(m.id));const s=V.song(id);if(!s)return;
- panel('대표 테이크 선택',select('기존 녹음','takeId',Object.fromEntries(media.map(m=>[m.id,M.label(m)+' · '+(M.dateOf(m)||'날짜 미상')])),info(s).takeId)+'<p class="small muted">곡 미연결 파일은 전체 녹음에서 먼저 곡을 지정해 주세요. 선택 안 함으로 해제할 수 있어요.</p>',v=>{if(v.takeId&&!media.some(m=>m.id===v.takeId))throw Error('녹음을 다시 선택해 주세요.');updateSong(id,v)});
+ const best=bestHtml(media);
+ panel('대표 테이크 선택',best+select('기존 녹음','takeId',Object.fromEntries(media.map(m=>[m.id,M.label(m)+' · '+(M.dateOf(m)||'날짜 미상')])),info(s).takeId)+'<p class="small muted">곡 미연결 파일은 전체 녹음에서 먼저 곡을 지정해 주세요. 선택 안 함으로 해제할 수 있어요.</p>',v=>{if(v.takeId&&!media.some(m=>m.id===v.takeId))throw Error('녹음을 다시 선택해 주세요.');updateSong(id,v)});
+ // The sheet is on the page now: the candidates play like any recording, and 대표로 정하기 saves through the form.
+ const sheet=[...document.querySelectorAll('.archive-sheet')].at(-1),host=sheet?.querySelector('[data-best-takes]');
+ if(host){V.wireMedia?.(host,media);host.querySelectorAll('[data-best-take]').forEach(b=>b.onclick=()=>{const form=sheet.querySelector('form'),sel=form?.elements.takeId;if(!sel)return;sel.value=b.dataset.bestTake;form.requestSubmit();});}
  }catch(e){message(e)}
 }
 /* A production's days: its sessions, or start~end when no session is entered yet (at most 120 days). */
