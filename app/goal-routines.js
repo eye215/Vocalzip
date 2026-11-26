@@ -11,7 +11,8 @@
  * Completion may optionally carry the minutes really practised and today's recordings. Only minutes the user chose
  * or typed count as practice time (one practice record per goal, so re-saving updates instead of adding); recording
  * length is never added. Homework goals (also homework routines) link the session to the assignment without marking
- * it done. Checking a goal on home asks for that time at once (2026-11-13); skipping keeps a plain check.
+ * it done. On home (오늘 연습, 2026-11-26) the check circle only checks; the time is a choice in the row (시간 적고 체크),
+ * or an existing record of today is linked to the goal (app/today-card.js link).
  * A recording made for a goal (mic on the goal row, or picked after a plain take) is linked to the goal's record with
  * linkRecording() and the same sheet then completes the goal; the recording's length is only preselected, never saved
  * by itself. */
@@ -499,7 +500,8 @@ V.goalRecordingSaved=({mediaId,goalId,songId,durationSeconds,date}={})=>new Prom
     try{R.linkRecording(structuredClone(V.db),id,mediaId);}catch(e){V.toast(e.message,'error');return resolve(null);}
     if(!V.change(db=>{R.linkRecording(db,id,mediaId);},{silent:true}))return resolve(null);
     const sheet=V.goalPerformanceSheet(id,{complete:true,recording:{id:mediaId,minutes:R.recordingMinutes(durationSeconds)},onDone:result=>{
-      if(result.saved)V.todayPracticePopup?.({addedMinutes:result.addedMinutes});else V.toast('녹음만 목표에 연결했어요.');
+      // No result popup (오늘 연습 on home always shows today against the target): a short line says what was kept.
+      V.toast(result.saved?(result.minutes?'연습 '+minutesLabel(result.minutes)+'을 기록했어요.':'목표를 체크했어요.'):'녹음만 목표에 연결했어요.');
       resolve({goalId:id,linked:true,completed:!!result.saved});
     }});
     if(!sheet)resolve({goalId:id,linked:true,completed:false});

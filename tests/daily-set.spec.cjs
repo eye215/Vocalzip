@@ -114,7 +114,7 @@ async function skipTo(page, mode) {
   await expect(run(page)).toHaveAttribute('data-mode', mode);
 }
 
-test('오늘 › 연습하기: the 오늘의 연습 card shows today\'s steps as a timeline, the progress and ONE button; the other rows stay below', async ({page}) => {
+test('오늘 › 오늘 연습: the 오늘의 연습 part shows its progress, "시작하면: …" with the steps unfolding as a timeline, and ONE button; the other rows stay below', async ({page}) => {
   await page.setViewportSize({width:390, height:844});
   const value = seed({assignments:[{id:'hw1', title:'립트릴로 고음 연결하기', status:'active', startDate:'2026-11-01', dueDate:'2026-11-08'}]});
   await boot(page, value);
@@ -131,13 +131,17 @@ test('오늘 › 연습하기: the 오늘의 연습 card shows today\'s steps as
   await expect(line(page).locator('.vz-set-meta em')).toHaveText(['다음', '남음', '남음', '남음', '남음']);
   await expect(line(page).locator('.vz-set-meta > span:not(.vz-visually-hidden)')).toHaveText(['3분', '3분', '3분', '3분', '3분']);
   expect(await line(page).evaluateAll(els => els.map(e => !!e.querySelector('[data-mic]')))).toEqual([false, false, false, true, true]); // mic badge
-  await expect(goText(page)).toHaveText('시작하기 · 립트릴로 고음 연결하기');
+  await expect(goText(page)).toHaveText('시작하기 · 약 ' + built.minutes + '분'); // 오늘 연습: the estimated time on the button
   await expect(goButton(page)).toHaveAccessibleName('오늘의 연습 시작하기, 5개 약 ' + built.minutes + '분, 처음 립트릴로 고음 연결하기');
   await expect(card(page).locator('[data-set-pick]')).toHaveAccessibleName('오늘의 연습 편집');
   await expect(card(page).locator('[data-set-pick]')).toContainText('편집');
-  // One card, then the three rows; the old 연습 세트 row is not there a second time.
-  expect(await section(page).locator('[data-row]').evaluateAll(els => els.map(e => [e.dataset.row, e.tagName]))).toEqual([['practice-set', 'DIV'], ['voice-check', 'BUTTON'], ['roadmap', 'BUTTON']]);
-  await expect(section(page).locator('.vz-practice-row strong')).toHaveText(['매일 보이스 체크', '내 로드맵']);
+  // "시작하면: …" says the steps shortly; the timeline unfolds under it (collapsed at first).
+  await expect(card(page).locator('[data-set-summary]')).toHaveText('시작하면: 숙제 → 기본기 4개');
+  await expect(card(page).locator('[data-set-line]')).toBeHidden();
+  await card(page).locator('[data-set-summary]').click();await expect(card(page).locator('[data-set-line]')).toBeVisible();
+  // One card, then the small rows; the old 연습 세트 row is not there a second time.
+  expect(await section(page).locator('[data-row]').evaluateAll(els => els.map(e => [e.dataset.row, e.tagName]))).toEqual([['practice-set', 'DIV'], ['voice-check', 'BUTTON'], ['roadmap', 'BUTTON'], ['weekly-review', 'BUTTON']]);
+  await expect(section(page).locator('.vz-practice-row strong')).toHaveText(['매일 보이스 체크', '내 로드맵', '주간 돌아보기']);
   expect(await page.evaluate(() => document.querySelector('.vz-student-home').shadowRoot.querySelector('main').innerText.split('연습 세트').length - 1)).toBe(0);
   expect((await goButton(page).boundingBox()).height).toBeGreaterThanOrEqual(56);
   await targets(card(page).locator('button'));
@@ -255,7 +259,6 @@ test('a whole set on the doing screen: timer, paced breathing, held notes with w
   await noOverflow(page);
   expect((await db(page)).practices).toEqual([]); // nothing is written before 기록 저장
   await page.getByRole('button', {name:'기록 저장'}).click();
-  await page.locator('.vz-today-popup [data-ok]').click();
   await expect(page.getByRole('heading', {name:'오늘 연습을 기록했어요'})).toBeVisible();
   const rows = (await db(page)).practices;
   expect(rows).toHaveLength(1); // ONE practice record
@@ -370,7 +373,6 @@ test('mic refused: the steps that listen fall back to a timer and say so, once',
   expect(await page.evaluate(() => window.__mic.opened)).toBe(0);
   // "마이크 없이" chosen by hand works the same way.
   await page.evaluate(() => { window.__mic.deny = false; });
-  await page.locator('.vz-today-popup [data-ok]').click();
   await to(page, '#/home'); await ready(page);
   await goButton(page).click(); // 한 번 더 하기
   await skipTo(page, 'hold');
@@ -511,7 +513,6 @@ test('연습 전후 30초 녹음: turned on in 고르기, saved as practice reco
   expect(await page.evaluate(() => window.__captures)).toBe(2);
   await expect(page.locator('.pset-summary .pset-row').first()).toContainText('녹음 1개 연결');
   await page.getByRole('button', {name:'기록 저장'}).click();
-  await page.locator('.vz-today-popup [data-ok]').click();
   // The takes are ordinary practice recordings of that song (트레이닝), linked to the set; their length adds no minutes.
   const data = await db(page), row = data.practices[0];
   expect(data.practices).toHaveLength(1);
@@ -576,7 +577,6 @@ test('곡: the set ends with 곡에 적용하기 and an optional 녹음, the doi
   // The song keeps its own practice row (a minute of song practice), next to the set's row.
   expect(await page.locator('.pset-summary [data-min]').evaluateAll(list => list.map(i => i.value))).toEqual(['1', '0']);
   await page.getByRole('button', {name:'기록 저장'}).click();
-  await page.locator('.vz-today-popup [data-ok]').click();
   const rows = (await db(page)).practices.filter(p => p.practiceSetId);
   expect(rows.map(p => [p.id.replace(/practice-set:[^:]+/, 'set'), p.minutes, p.practiceMode, p.songId]).sort()).toEqual([['set', 0, 'training', ''], ['set:song-s1', 1, 'song', 's1']]);
   expect(rows.find(p => p.dailySet).dailySet.items.at(-2)).toEqual(expect.objectContaining({kind:'song', apply:true, state:'done', row:rows.find(p => p.songId).id}));

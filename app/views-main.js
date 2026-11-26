@@ -361,28 +361,49 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
         const detail = current === 'training' ? (newDetail ?? form.detail.value) : '', detail2 = current === 'training' && detail ? (newDetail2 ?? form.detail2.value) : '';
         if (current === 'training' && (!catId || !detail)) { VZ.toast('분류와 훈련 내용을 입력해 주세요.', 'error'); (catId ? form.detail : form.category).focus(); return; }
         const catName = newCat ?? cats.find(c => c.id === catId)?.name ?? '';
-        const learn = d => {
-          if (current !== 'training' || !catId) return;
-          let c = d.categories.find(x => x.id === catId);
-          if (!c) { c = {id:catId, name:catName, items:[]}; d.categories.push(c); }
-          c.items ||= []; if (detail && !c.items.includes(detail)) c.items.push(detail);
-          if (detail && detail2) { c.sub ||= {}; c.sub[detail] ||= []; if (!c.sub[detail].includes(detail2)) c.sub[detail].push(detail2); }
-        };
-        const cat = {name:catName};
         // Only homework answered "했어요" is recorded, with its 횟수 and 메모.
         const shown = new Set([...hwHost.querySelectorAll('[data-hw-id]')].map(x => x.dataset.hwId));
         const completed = [...hw].filter(([id, st]) => st.did && shown.has(id)).map(([id]) => id);
         const assignmentReps = Object.fromEntries(completed.map(id => [id, hw.get(id).reps || 1]));
         const assignmentNotes = Object.fromEntries(completed.filter(id => hw.get(id).note.trim()).map(id => [id, hw.get(id).note.trim()]));
-        const entry = {date:form.date.value, minutes, manualMinutes:minutes, practiceTimeSource:'manual', mediaSeconds:p?.mediaSeconds || 0, mediaIds:[...selected], practiceMode:current,
-          technique:detail ? [{name:[detail, detail2].filter(Boolean).join(' · '), minutes}] : [], songId:sid,
-          categoryId:current === 'training' ? catId : '', categoryLabel:current === 'training' ? cat.name : '', detail, detail2,
-          recommendationSource:current === 'training' ? chosenRecommendation?.source || '' : '', recommendationSourceId:current === 'training' ? chosenRecommendation?.sourceId || chosenRecommendation?.key || '' : '',
-          rating:rating || 0, memo:form.memo.value, completed, assignmentReps, assignmentNotes};
-        const ok = VZ.change(d => { learn(d); if (p) Object.assign(d.practices.find(x => x.id === p.id) || {}, entry); else d.practices.push({id:VZ.uid(), ...entry}); });
+        const training = current === 'training';
+        const fields = {date:form.date.value, minutes, mode:current, songId:sid, catId:training ? catId : '', catName:training ? catName : '', detail, detail2,
+          recommendation:training ? chosenRecommendation : null, rating, memo:form.memo.value, completed, assignmentReps, assignmentNotes,
+          mediaIds:[...selected], mediaSeconds:p?.mediaSeconds || 0};
+        const ok = VZ.change(d => { VZ.writePractice(d, fields, p); });
         if (ok) { draft?.clear(); close(); VZ.toast(p ? '연습 기록을 수정했어요.' : '연습 기록을 저장했어요.'); window.dispatchEvent(new Event('vzip:practice-saved')); }
       };
     }});
+};
+/** One practice record exactly as 연습 기록 시트 writes it — also 오늘 연습's 직접 적기, the 추가 row's 곡·분류·메모 and
+ * 타이머만 켜기 (design-system/today-card-html.js, app/free-timer.js), so there is one shape and one save code.
+ * Call inside VZ.change. fields: {date, minutes, mode ('song'|'training'), songId, catId, catName, detail, detail2,
+ * recommendation ({source, sourceId|key}), rating, memo, completed, assignmentReps, assignmentNotes, mediaIds, mediaSeconds}.
+ * A new 분류 / 세부 항목 is added to the lists (as the sheet always did). existing: the record to update, or null for a
+ * new one; extra: {id, created} for a new record only. Returns the record's id. */
+VZ.practiceEntry = f => {
+  const minutes = f.minutes, detail = f.detail || '', detail2 = f.detail2 || '', rec = f.recommendation || null;
+  return {date:f.date, minutes, manualMinutes:minutes, practiceTimeSource:'manual', mediaSeconds:f.mediaSeconds || 0, mediaIds:[...(f.mediaIds || [])], practiceMode:f.mode,
+    technique:detail ? [{name:[detail, detail2].filter(Boolean).join(' · '), minutes}] : [], songId:f.songId || '',
+    categoryId:f.catId || '', categoryLabel:f.catName || '', detail, detail2,
+    recommendationSource:rec?.source || '', recommendationSourceId:rec?.sourceId || rec?.key || '',
+    rating:f.rating || 0, memo:f.memo || '', completed:f.completed || [], assignmentReps:f.assignmentReps || {}, assignmentNotes:f.assignmentNotes || {}};
+};
+VZ.writePractice = (d, f, existing = null, extra = {}) => {
+  const catId = f.catId || '', detail = f.detail || '', detail2 = f.detail2 || '';
+  if (catId) {
+    d.categories ||= [];
+    let c = d.categories.find(x => x.id === catId);
+    if (!c) { c = {id:catId, name:f.catName || '', items:[]}; d.categories.push(c); }
+    c.items ||= []; if (detail && !c.items.includes(detail)) c.items.push(detail);
+    if (detail && detail2) { c.sub ||= {}; c.sub[detail] ||= []; if (!c.sub[detail].includes(detail2)) c.sub[detail].push(detail2); }
+  }
+  const entry = VZ.practiceEntry(f);
+  d.practices ||= [];
+  if (existing) { Object.assign(d.practices.find(x => x.id === existing.id) || {}, entry); return existing.id; }
+  const id = extra.id || VZ.uid();
+  d.practices.push({id, ...entry, ...(extra.created ? {created:extra.created} : {})});
+  return id;
 };
 /* Practice rows made by a practice screen start their memo with a tag ("[오늘의 연습] 롱톤"). The tag is a source, not the
  * person's words: show it as "where it was recorded" and keep only the memo the person wrote. Display only; the stored

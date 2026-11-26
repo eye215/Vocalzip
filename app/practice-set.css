@@ -155,6 +155,10 @@
 .pset-mini-toggle:active{background:#EDE1FF;}
 .pset-mini-body:focus-visible,.pset-mini-toggle:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:2px;}
 .pset-mini-icon{display:none;flex:none;font-size:18px;}
+/* 타이머만 켜기 (app/free-timer.js): "연습 중 · mm:ss" and a 멈추기 button instead of pause. */
+.pset-mini-toggle.pset-mini-stop{width:auto;padding:0 16px;border-radius:999px;background:var(--vz-color-accent,#7A32F5);color:#fff;font:inherit;font-size:14px;line-height:20px;font-weight:700;}
+.pset-mini[data-state=free] .pset-mini-name{flex:none;}
+.pset-mini[data-state=free] .pset-mini-time{flex:1;text-align:left;}
 /* Recorder (dark studio, no nav): a chip in the header row that scrolls with it — step and time only. */
 body.vz-record-mode .pset-mini{position:absolute;top:max(8px,env(safe-area-inset-top));bottom:auto;left:auto;right:max(12px,calc((100vw - var(--vz-content-max,560px))/2 + 12px));
   height:44px;max-width:calc(100vw - 150px);padding:0;border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:#F7F5FC;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;}

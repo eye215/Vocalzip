@@ -235,7 +235,6 @@ test('the set list keeps the person\'s own steps under today\'s built-in ones; e
   expect(template.removed.sort()).toEqual(['record','warmup']); // the recording taken out; the warm-up is the built-in groups' now
   // Home: actual time includes the set once; the card says today's set is done.
   await page.clock.resume();
-  await page.locator('.vz-today-popup [data-ok]').click(); // today against the target (app/today-practice.js)
   await page.getByRole('link',{name:'홈으로'}).click();await ready(page);
   await expect(entry(page)).toContainText('오늘 연습 끝 · 9분');
   await page.locator('.vz-summary-row[data-row=week]').waitFor();
@@ -541,22 +540,21 @@ for (const [width,height] of [[375,812],[320,640]]) test('small timer on other s
   await expect(pill(page)).toBeHidden();
 });
 
-for (const [name, target, popup] of [['under the target', 100, true], ['over the target', 30, false], ['no target', null, false], ['helper not loaded', undefined, false]])
+// No result popup any more (오늘 연습 on home always shows today against the target): the done screen says it.
+for (const [name, target] of [['under the target', 100], ['over the target', 30], ['no target', null], ['helper not loaded', undefined]])
   test('today against the target on the summary and after saving: ' + name, async({page}) => {
     await page.setViewportSize({width:375,height:812});
     await boot(page, ownSeed());
-    // Stubs with the shapes of app/today-practice.js (VZ.todayPractice, VZ.todayPracticeText, VZ.todayPracticePopup).
+    // Stubs with the shapes of app/today-practice.js (VZ.todayPractice, VZ.todayPracticeText).
     // The real file is loaded by the app, so each case replaces or removes its functions.
-    await page.evaluate(({target, popup}) => {
-      window.__popups = [];
-      if (target === undefined) { VZ.todayPractice = VZ.todayPracticeText = VZ.todayPracticePopup = undefined; return; }
+    await page.evaluate(({target}) => {
+      if (target === undefined) { VZ.todayPractice = VZ.todayPracticeText = undefined; return; }
       VZ.todayPractice = (date = VZ.today()) => {
         const minutes = (VZ.db.practices || []).filter(p => p.date === date).reduce((n,p) => n + (Number(p.minutes) || 0),0);
         return {minutes,targetMinutes:target,percent:target ? Math.round(minutes / target * 100) : null};
       };
       VZ.todayPracticeText = x => x.targetMinutes ? '오늘 ' + x.minutes + '분 / 목표 ' + x.targetMinutes + '분 · ' + x.percent + '%' : '오늘 ' + x.minutes + '분 · 목표 없음';
-      VZ.todayPracticePopup = popup ? options => {window.__popups.push(options);} : undefined;
-    }, {target, popup});
+    }, {target});
     await openList(page);
     await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
     await page.getByRole('button',{name:'시작하기'}).click();
@@ -572,30 +570,28 @@ for (const [name, target, popup] of [['under the target', 100, true], ['over the
     await noOverflow(page);
     await page.getByRole('button',{name:'기록 저장'}).click();
     await expect(page.getByRole('heading',{name:'오늘 연습을 기록했어요'})).toBeVisible();
-    const popups = await page.evaluate(() => window.__popups);
-    if (popup) { // the shared popup is called once with the saved minutes; no second copy on the screen
-      expect(popups).toEqual([{addedMinutes:10,title:'오늘의 연습'}]);
-      await expect(done).toHaveCount(0);
+    await expect(page.locator('.sheet-back')).toHaveCount(0);
+    if (target === undefined) await expect(done).toHaveCount(0);
+    else if (target === 100) {
+      await expect(done.locator('p')).toHaveText('오늘 40분 / 목표 100분 · 40%');
+      await expect(done.getByRole('progressbar')).toHaveAttribute('aria-valuenow','40');
+      await expect(done).not.toContainText('목표를 채웠어요');
+    } else if (target) {
+      await expect(done.locator('p')).toHaveText('오늘 33분 / 목표 30분 · 110%');
+      await expect(done.getByRole('progressbar')).toHaveAttribute('aria-valuenow','100');
+      await expect(done).toContainText('오늘 목표를 채웠어요');
     } else {
-      expect(popups).toEqual([]);
-      if (target === undefined) await expect(done).toHaveCount(0);
-      else if (target) {
-        await expect(done.locator('p')).toHaveText('오늘 33분 / 목표 30분 · 110%');
-        await expect(done.getByRole('progressbar')).toHaveAttribute('aria-valuenow','100');
-        await expect(done).toContainText('오늘 목표를 채웠어요');
-      } else {
-        await expect(done.locator('p')).toHaveText('오늘 33분 · 목표 없음');
-        await expect(done.getByRole('progressbar')).toHaveCount(0);
-        await expect(done).not.toContainText('목표를 채웠어요');
-      }
+      await expect(done.locator('p')).toHaveText('오늘 33분 · 목표 없음');
+      await expect(done.getByRole('progressbar')).toHaveCount(0);
+      await expect(done).not.toContainText('목표를 채웠어요');
     }
     await noOverflow(page);
   });
 
-test('with the real today helper: the summary shows today against the target and saving opens the completion popup once', async({page}) => {
+test('with the real today helper: the summary shows today against the target and the done screen says it after saving, with no popup', async({page}) => {
   await page.setViewportSize({width:375,height:812});
   await boot(page, ownSeed());
-  expect(await page.evaluate(() => [typeof VZ.todayPractice, typeof VZ.todayPracticeText, typeof VZ.todayPracticePopup])).toEqual(['function','function','function']);
+  expect(await page.evaluate(() => [typeof VZ.todayPractice, typeof VZ.todayPracticeText, typeof VZ.todayPracticePopup])).toEqual(['function','function','undefined']);
   const before = await page.evaluate(() => VZ.todayPractice());
   await openList(page);
   await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
@@ -604,26 +600,12 @@ test('with the real today helper: the summary shows today against the target and
   await page.getByRole('button',{name:'여기까지 하고 마치기'}).click();
   await expect(page.locator('[data-sum-today]')).toContainText('이 연습 3분을 저장하면 오늘 ');
   await page.getByRole('button',{name:'기록 저장'}).click();
-  // The shared popup (not a second copy on the screen): today's total now includes the set's minutes.
-  const popup = page.locator('.vz-today-result');
-  await expect(popup).toHaveCount(1);
-  await expect(popup.locator('[data-today-added]')).toHaveText('이번 기록 +3분');
+  await expect(page.getByRole('heading',{name:'오늘 연습을 기록했어요'})).toBeVisible();
+  await expect(page.locator('.sheet-back')).toHaveCount(0);
   const after = await page.evaluate(() => VZ.todayPractice());
   expect(after.minutes).toBe(before.minutes + 3);
-  await expect(popup.locator('[data-today-text]')).toHaveText(await page.evaluate(() => VZ.todayPracticeText(VZ.todayPractice())));
-  await expect(page.locator('[data-done-today]')).toHaveCount(0);
-  // The ring starts where today stood before the set (the clock is paused: first frame) and ends on today's numbers.
-  await expect(popup).toHaveAttribute('data-phase','run');
-  await expect(popup.locator('[data-today-percent]')).toHaveText(before.percent + '%');
-  await page.clock.runFor(1500);
-  await expect(popup).toHaveAttribute('data-phase','done');
-  await expect(popup.locator('[data-today-percent]')).toHaveText(after.percent + '%');
-  await expect(popup.locator('[data-today-summary]')).toHaveText('오늘 ' + after.minutes + '분, 목표 ' + after.targetMinutes + '분의 ' + after.percent + '%');
-  await expect(popup.locator('.vz-tp-day[data-today]')).toHaveAttribute('data-minutes', String(after.minutes));
-  await expect(page.locator('.sheet.vz-today-popup .sheet-head h2')).toHaveText('오늘의 연습');
-  await page.locator('[data-ok]').click();
-  await expect(popup).toHaveCount(0);
-  await expect(page.getByRole('heading',{name:'오늘 연습을 기록했어요'})).toBeVisible();
+  await expect(page.locator('[data-done-today] p')).toHaveText(await page.evaluate(() => VZ.todayPracticeText(VZ.todayPractice())));
+  await expect(page.locator('.pset-done .pset-help')).toContainText('연습 3분');
 });
 
 test('a song section added on the list is kept at once for the sets to come and comes back next time', async({page}) => {

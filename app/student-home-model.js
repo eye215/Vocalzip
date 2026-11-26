@@ -168,12 +168,13 @@ function planSnapshot(db,date){
       p.period==='day'&&p.date>=start&&p.date<=end||p.period==='week'&&p.date===start)))
   });
 }
-/** 'done' for a completed goal, 'recorded' for a goal with a 수행 기록 (its record or its practice row 'goal:<id>'),
- * '' otherwise. The plan editor never drops these, so a check and its minutes are not left without their goal. */
+/** 'done' for a completed goal, 'recorded' for a goal with a 수행 기록 (its record, its practice row 'goal:<id>', or a
+ * practice record linked to it by goalId — 오늘 연습's 오늘 기록 연결), '' otherwise. The plan editor never drops these,
+ * so a check and its minutes are not left without their goal. */
 function keptGoal(db,goal){
   if(!goal)return '';
   if(goal.completed===true)return 'done';
-  return goal.performance||list(db?.practices).some(p=>p&&p.id==='goal:'+goal.id)?'recorded':'';
+  return goal.performance||list(db?.practices).some(p=>p&&(p.id==='goal:'+goal.id||p.goalId===goal.id))?'recorded':'';
 }
 function savePlan(db,input){
   const date=input?.date;
