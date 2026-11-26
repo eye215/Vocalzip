@@ -107,7 +107,7 @@ function fresh(own){
   return {today,steps:built.steps,own:built.own,base:built.base,slot,prefs:built.prefs};
 }
 /* Today against the daily target comes from the shared helper (app/today-practice.js: VZ.todayPractice,
- * VZ.todayPracticeText, VZ.todayPracticePopup). Without it nothing extra is shown. Only saved minutes count there. */
+ * VZ.todayPracticeText). Without it nothing extra is shown. Only saved minutes count there. */
 function todayOf(date){
   if(date!==V.today())return null;
   try{const t=V.todayPractice?.(date);return t&&Number.isFinite(Number(t.minutes))?{minutes:Number(t.minutes),targetMinutes:Number(t.targetMinutes)>0?Number(t.targetMinutes):null,percent:t.percent??null}:null;}catch(e){console.error(e);return null;}
@@ -117,7 +117,7 @@ function todayText(t){
   try{const text=V.todayPracticeText?.(t);if(text)return String(text);}catch(e){console.error(e);}
   return t.targetMinutes?'오늘 '+t.minutes+'분 / 목표 '+t.targetMinutes+'분 · '+t.percent+'%':'오늘 '+t.minutes+'분 · 목표 없음';
 }
-/** 오늘 › 연습하기 card: {state 'new'|'live'|'summary'|'done', title, line, label, items (timeline), done, total,
+/** 오늘 › 오늘 연습's 오늘의 연습 part: {state 'new'|'live'|'summary'|'done', title, line, label, items (timeline), done, total,
  * minutes, button}. Null when nothing can be built. Reading it writes nothing. */
 V.practiceSetEntry=()=>{
   try{
@@ -147,6 +147,8 @@ V.practiceSetEntry=()=>{
 };
 /** Start today's set right away (the card's one button) or carry on with the one in hand. */
 function startNow(steps,date){
+  // One clock at a time: 타이머만 켜기 (app/free-timer.js) would count the same minutes again.
+  if(V.freeTimer?.running?.())throw Error('타이머가 돌아가는 중이에요. 오늘 연습에서 타이머를 멈춘 뒤에 시작해 주세요.');
   session=P.start(steps,{id:V.uid(),date,now:Date.now()});loadedFor=owner();draft=null;alerted='';saved=null;lastDone='';autostart=true;
   persist();changed();
 }
@@ -154,7 +156,11 @@ V.dailySet={
   /** The card's button: 시작하기 / 이어서 하기 / 기록 저장하기 / 한 번 더 하기. */
   go(){
     load();
-    if(!session){try{const f=fresh();if(!f.steps.length)return;startNow(f.steps,f.today);}catch(error){console.error(error);V.toast('오늘의 연습을 시작하지 못했어요.','error');return;}}
+    if(!session){
+      // The free timer runs: said where the button was (the card shows the Error's message).
+      if(V.freeTimer?.running?.())throw Error('타이머가 돌아가는 중이에요. 타이머를 멈춘 뒤에 시작해 주세요.');
+      try{const f=fresh();if(!f.steps.length)return;startNow(f.steps,f.today);}catch(error){console.error(error);V.toast('오늘의 연습을 시작하지 못했어요.','error');return;}
+    }
     if(routeName()==='practice-set')paint();else V.nav('#/practice-set');
   },
   /** 편집: the list of today's set is where it is changed. */
@@ -579,14 +585,13 @@ function bindSummary(host){
         try{news=V.levels?.afterSave?.(db,levelBefore)||null;}catch(e){console.error(e);news=null;}
       },{silent:true}))throw Error('기록을 저장하지 못했어요. 입력은 그대로 있어요. 다시 시도해 주세요.');
     }catch(e){error.textContent=e.message;button.disabled=false;return;}
-    // Today against the target: the shared popup when it is loaded, else one line with a thin bar on the done screen.
-    const date=session.date,items=D.summary(session),minutes=Math.round(result.minutes);let popup=false;
+    // Today against the target: one line with a thin bar on the done screen (no popup: 오늘 연습 on home always shows it).
+    const date=session.date,items=D.summary(session),minutes=Math.round(result.minutes);
     const run=result.runId?(V.db.practices||[]).find(p=>p.id===result.runId):null,rec=run?.dailySet?.recording;
-    if(date===V.today()&&typeof V.todayPracticePopup==='function'){try{V.todayPracticePopup({addedMinutes:minutes,title:'오늘의 연습'});popup=true;}catch(e){console.error(e);}}
-    saved={...result,minutes,date,news,today:popup?null:todayOf(date),did:items.filter(x=>x.state==='done').length,count:items.length,
+    saved={...result,minutes,date,news,today:todayOf(date),did:items.filter(x=>x.state==='done').length,count:items.length,
       pair:rec&&rec.songId&&rec.beforeId&&rec.afterId&&V.song(rec.songId)?{songId:rec.songId,a:rec.beforeId,b:rec.afterId}:null};
+    // The done screen says it ("오늘 연습을 기록했어요 · 연습 n분"): no toast over the next screen's buttons.
     session=null;persist();syncAwake();paint();changed();
-    if(!popup)V.toast(minutes?'연습 '+minutes+'분을 기록했어요.':'오늘의 연습을 저장했어요.');
   };
 }
 function doneHtml(){

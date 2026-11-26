@@ -117,15 +117,12 @@ async function startWithMic(page, mode) {
   await primary(page).click();
   await expect(run(page)).toHaveAttribute('data-state', 'doing');
 }
-/** 기록 저장 on the summary, and the popup after it. */
+/** 기록 저장 on the summary (no popup after it: 오늘 연습 on home shows today against the target). */
 async function saveSet(page) {
   // With 목 풀기 · 호흡 · 발성 all resting, the set's own warm-up step follows: stop there.
   if (await run(page).count()) await run(page).locator('[data-run-stop]').click();
   await expect(page.locator('.pset-summary')).toBeVisible();
   await page.getByRole('button', {name:'기록 저장'}).click();
-  const ok = page.locator('.vz-today-popup [data-ok]');
-  await expect(page.getByRole('heading', {name:'오늘 연습을 기록했어요'}).or(ok).first()).toBeVisible();
-  if (await ok.count()) await ok.click();
   await expect(page.getByRole('heading', {name:'오늘 연습을 기록했어요'})).toBeVisible();
 }
 const todayItem = async (page, exercise) => (await db(page)).practices.find(p => p.dailySet && p.date === TODAY).dailySet.items.find(x => x.exercise === exercise);

@@ -19,7 +19,7 @@ test('#/practices 로 바로 열거나 새로고침해도 연습 기록 화면�
  await page.reload();await expect(page.locator('#top h1')).toHaveText('연습 기록');await expect(page.locator('#view [data-practice="p1"]')).toBeVisible();
 });
 test('오늘의 목표 시트는 스스로 한 번만 물어봐요 (앱 공통 질문과 겹치지 않음)',async({page})=>{
- await boot(page,'#/home');await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+ await boot(page,'#/home');await page.getByRole('button',{name:'+ 계획 넣기',exact:true}).click();
  const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await sheet.locator('textarea[name=personal]').fill('후렴 고음에서 힘 빼기');
  let asked=0;page.on('dialog',dlg=>{asked++;dlg.accept()});
  await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();

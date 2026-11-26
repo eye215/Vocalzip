@@ -100,7 +100,7 @@ test('home shows 다음 연습 item #1 once — 지금 할 것 with "n개 더"; 
   // start with 다음 연습's homework by design) and 오늘 부를 곡 (a song's reason may name its homework).
   const count = await page.evaluate(title => {
     const main = document.querySelector('.vz-student-home').shadowRoot.querySelector('main').cloneNode(true);
-    main.querySelectorAll('.vz-goal-list,.vz-set-card,.vz-recent').forEach(n => n.remove());
+    main.querySelectorAll('.vz-today-list,.vz-set-card,.vz-recent').forEach(n => n.remove());
     return main.textContent.split(title).length - 1;
   }, first.title);
   expect(count).toBe(1);
@@ -110,10 +110,10 @@ test('home shows 다음 연습 item #1 once — 지금 할 것 with "n개 더"; 
   await expect(road).toBeVisible();
   await expect(road).not.toContainText('손볼 곳');
   await expect(road).toHaveAccessibleName('내 로드맵 보기');
-  // The goals card keeps 주간 돌아보기 and 목표 설정; AI 오늘 추천 moved to the list.
+  // 오늘 연습 keeps 주간 돌아보기 and 계획 넣기; AI 오늘 추천 moved to the list.
   await expect(page.getByRole('button', {name:'AI로 오늘 할 일 추천받기'})).toHaveCount(0);
   await expect(page.getByRole('button', {name:'주간 돌아보기 · 다음 목표 추천', exact:true})).toBeVisible();
-  await expect(page.getByRole('button', {name:'오늘의 목표 설정', exact:true})).toBeVisible();
+  await expect(page.getByRole('button', {name:'+ 계획 넣기', exact:true})).toBeVisible();
   expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(44);
   await more.click();
   await expect(page).toHaveURL(/#\/next-practice$/);
@@ -126,7 +126,7 @@ test('오늘의 목표 sheet offers the top three of 다음 연습 not yet 담�
   await boot(page);
   await expect(page.locator('.vz-student-home .vz-event')).toBeVisible();
   const top = await page.evaluate(() => VZ.nextPractice().items.filter(x => !x.doneToday && !x.inGoals && x.canAdd).slice(0, 3).map(x => x.title));
-  await page.getByRole('button', {name:'오늘의 목표 설정', exact:true}).click();
+  await page.getByRole('button', {name:'+ 계획 넣기', exact:true}).click();
   const sheet = page.getByRole('dialog', {name:'오늘의 목표', exact:true});
   await expect(sheet).toBeVisible();
   const offered = sheet.locator('.vz-plan-option:not(:has(input:checked)) .vz-plan-title');

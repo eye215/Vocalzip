@@ -62,12 +62,12 @@ const overflow = page => page.evaluate(() => {
 test.use({viewport:{width:390, height:844}});
 test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
 
-test('오늘 › 연습하기: one section with the three things you do — the 오늘의 연습 card, then a row each with its state — and nothing twice', async ({page}) => {
+test('오늘 › 오늘 연습: one card with the things you do — 오늘의 연습, then a small row each with its state — and nothing twice', async ({page}) => {
   await boot(page);
-  await expect(section(page).locator('h2')).toHaveText('연습하기');
-  expect(await section(page).locator('[data-row]').evaluateAll(els => els.map(e => e.dataset.row))).toEqual(['practice-set', 'voice-check', 'roadmap']);
-  // 내 로드맵 took the place of 노래 연습실 (its fixed 9 steps) and 보컬 트레이닝.
-  await expect(section(page).locator('[data-row] strong')).toHaveText(['오늘의 연습', '매일 보이스 체크', '내 로드맵']);
+  await expect(section(page).locator('h2')).toHaveText('오늘 연습');
+  expect(await section(page).locator('[data-row]').evaluateAll(els => els.map(e => e.dataset.row))).toEqual(['practice-set', 'voice-check', 'roadmap', 'weekly-review']);
+  // 내 로드맵 took the place of 노래 연습실 (its fixed 9 steps) and 보컬 트레이닝; 주간 돌아보기 came from 오늘의 목표.
+  await expect(section(page).locator('[data-row] strong')).toHaveText(['오늘의 연습', '매일 보이스 체크', '내 로드맵', '주간 돌아보기']);
   // 오늘의 연습 is a card now (timeline · progress · one button: tests/daily-set.spec.cjs); the others are rows.
   // States are what is kept: three checks on the last three days (none today). 내 로드맵 is a plain link: what it works on
   // is in 다음 연습 and 오늘의 연습 (다음 연습 하나로, 2026-11-26).
@@ -84,22 +84,19 @@ test('오늘 › 연습하기: one section with the three things you do — the 
       expect(b.h).toBeGreaterThanOrEqual(44); expect(b.l).toBeGreaterThanOrEqual(0); expect(b.r).toBeLessThanOrEqual(390); expect(b.icon).toBe(1);
     }
   }).toPass({timeout:5000});
-  // Two rows of 48px under the card; the card itself is a line per step and its button.
-  // Measured in one read and retried: home may be drawn again in between, and a box read from a replaced node is null.
-  await expect.poll(() => section(page).evaluate(s => { const c = s.querySelector('[data-row="practice-set"]'); return c ? s.getBoundingClientRect().height - c.getBoundingClientRect().height : null; })).toBeLessThanOrEqual(210);
+  // The small rows are compact under the set: three rows of 44px.
+  await expect.poll(() => section(page).evaluate(s => { const l = s.querySelector('[data-today-links]'); return l ? Math.round(l.getBoundingClientRect().height) : null; })).toBeLessThanOrEqual(150);
   expect(await overflow(page)).toEqual({wide:false, over:0});
-  // Under 지금 할 것, above 오늘의 목표.
-  const y = await page.evaluate(() => { const r = document.querySelector('.vz-student-home').shadowRoot, t = s => r.querySelector(s).getBoundingClientRect(); return {now:t('.vz-event').bottom, top:t('[data-home-practice]').top, bottom:t('[data-home-practice]').bottom, goals:t('.vz-goals').top}; });
-  expect(y.top).toBeGreaterThanOrEqual(y.now); expect(y.goals).toBeGreaterThanOrEqual(y.bottom);
+  // Under 지금 할 것; the separate 오늘의 목표 card is gone (its goals are this card's 계획 rows).
+  const y = await page.evaluate(() => { const r = document.querySelector('.vz-student-home').shadowRoot, t = s => r.querySelector(s).getBoundingClientRect(); return {now:t('.vz-event').bottom, top:t('[data-home-practice]').top, goals:r.querySelectorAll('.vz-goals').length}; });
+  expect(y.top).toBeGreaterThanOrEqual(y.now); expect(y.goals).toBe(0);
   // Nothing is shown twice: the single 연습 세트 row and the separate 보이스 체크 card are gone; each name appears once on home.
   await expect(page.locator('.vz-student-home .vz-pset-entry')).toHaveCount(0);
   await expect(page.locator('.vz-student-home [data-voice-check-card]')).toHaveCount(0);
   const names = await page.evaluate(() => { const text = document.querySelector('.vz-student-home').shadowRoot.querySelector('main').innerText; return ['오늘의 연습', '연습 세트', '보이스 체크', '노래 연습실', '보컬 트레이닝', '내 로드맵'].map(n => text.split(n).length - 1); });
   expect(names).toEqual([1, 0, 1, 0, 0, 1]);
-  // The 따라 하기 row left 오늘의 목표 (다음 연습 하나로: its item is 지금 할 것 or on #/next-practice) and so did AI 오늘
-  // 추천 (now at the end of #/next-practice); 주간 돌아보기 stays in 오늘의 목표 — none copied into the section.
-  await expect(page.locator('.vz-student-home .vz-goals .vz-guided-item')).toHaveCount(0);
-  await expect(page.locator('.vz-student-home .vz-goals .vz-ai-plan-actions>button')).toHaveText(['주간 돌아보기']);
+  // The 따라 하기 row (다음 연습 하나로: its item is 지금 할 것 or on #/next-practice) and AI 오늘 추천 (the end of
+  // #/next-practice) are not here.
   await expect(section(page).locator('.vz-guided-item, .vz-ai-plan-actions')).toHaveCount(0);
   // A submission or a check saved while home is open: the state follows and the row is the same element (never replaced under a finger).
   await row(page, 'voice-check').evaluate(e => { e.__same = true; });
@@ -282,9 +279,9 @@ for (const [width, height] of [[820, 1180], [1180, 820]]) test('iPad ' + width +
   await page.setViewportSize({width, height});
   await boot(page);
   const home = await page.evaluate(() => { const r = document.querySelector('.vz-student-home').shadowRoot, t = s => { const b = r.querySelector(s).getBoundingClientRect(); return {l:b.left, r:b.right, t:b.top, b:b.bottom}; };
-    return {now:t('.vz-event'), practice:t('[data-home-practice]'), goals:t('.vz-goals'), side:t('.vz-col-side'), inMain:!!r.querySelector('.vz-col-main > [data-home-practice]')}; });
+    return {now:t('.vz-event'), practice:t('[data-home-practice]'), side:t('.vz-col-side'), inMain:!!r.querySelector('.vz-col-main > [data-home-practice]')}; });
   expect(home.inMain).toBe(true);
-  expect(home.practice.t).toBeGreaterThanOrEqual(home.now.b); expect(home.goals.t).toBeGreaterThanOrEqual(home.practice.b);
+  expect(home.practice.t).toBeGreaterThanOrEqual(home.now.b);
   expect(home.side.l).toBeGreaterThanOrEqual(home.practice.r);       // the summary column is beside it
   await expect.poll(() => section(page).locator('[data-row]').evaluateAll(els => els.length ? Math.min(...els.map(e => e.getBoundingClientRect().height)) : 0)).toBeGreaterThanOrEqual(44);
   expect(await overflow(page)).toEqual({wide:false, over:0});

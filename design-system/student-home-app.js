@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=nextone-20261126';
+import {createFloatingHome} from './student-home-html.js?v=today1-20261126';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -100,20 +100,105 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   if(s.recent?.song?.id)ids.unshift(s.recent.song.id);
   return [...new Set(ids)].filter(id=>V.song(id)).slice(0,3).map(id=>({id,title:V.song(id).title}));
  }
- /* 연습하기 (성장 개편 안 B, phase 4): the things you do. First the 오늘의 연습 card (it was the 오늘 연습 세트 row), then
-  * one row each with its state: 매일 보이스 체크 · 내 로드맵. Read-only. */
- function practiceRows(){
-  const rows=[],set=V.practiceSetEntry?.(),check=V.voiceCheck?.status?.();
-  // 오늘의 연습: a card (timeline · progress · one button), not a row. Its button starts or carries on today's set.
-  if(set)rows.push({key:'practice-set',card:true,title:set.title,state:set.state,line:set.line,label:set.label,items:set.items,button:set.button,
-   action:()=>{if(V.dailySet?.go)V.dailySet.go();else nav('#/practice-set');},onPick:()=>V.dailySet?.pick?.()});
+ /* 오늘 연습 (owner's design, 2026-11-26): ONE card for today's goals (계획) and today's practice records (추가), with
+  * 오늘의 연습 and 타이머만 켜기 and small rows for 매일 보이스 체크 · 내 로드맵 · 주간 돌아보기. What is listed is
+  * app/today-card.js; the card is design-system/today-card-html.js. Everything opens inside the card: no sheet, no
+  * result popup (today against the target is always on the card). Writes go through VZ.change, the record shape is
+  * 연습 기록 시트's (VZ.writePractice), goals keep their own rules (setGoal, perform, routines). */
+ const T=window.VzipTodayCard,TP=window.VzipTodayPractice,R=window.VzipGoalRoutines;
+ const songTitle=id=>V.songTitle?.(id)||'';
+ const liveSongs=()=>(V.db.songs||[]).filter(x=>x&&!(V.db.deleted?.songs||[]).includes(x.id)&&!x.archived).map(x=>({id:x.id,title:x.title||'곡'}));
+ const categoryNames=()=>[...new Set([...(T?.CATEGORIES||[]),...(V.db.categories||[]).map(c=>String(c?.name||'').trim()).filter(Boolean)])];
+ /** The 분류 by name: the record's own one when it is unchanged, an existing one, or a new one (added on save, as the
+  * practice sheet adds a new 분류). */
+ const categoryFor=(name,p=null)=>{
+  name=String(name||'').trim();if(!name)return {id:'',name:''};
+  if(p&&p.categoryId&&String(p.categoryLabel||'').trim()===name)return {id:p.categoryId,name};
+  const c=(V.db.categories||[]).find(x=>x&&String(x.name||'').trim()===name);
+  return c?{id:c.id,name:c.name}:{id:V.uid(),name};
+ };
+ /** Check on a copy first (an Error says why), then write for real. */
+ const write=(mutate,fail='저장하지 못했어요. 다시 시도해 주세요.')=>{mutate(structuredClone(V.db));if(!V.change(mutate,{silent:true}))throw Error(fail);return true;};
+ function linkRows(){
+  const rows=[],check=V.voiceCheck?.status?.();
   // Not done yet: straight into the 30-second check, as the home card did. Done: the page with today's result and the last 30 days.
-  if(check)rows.push({key:'voice-check',icon:'\ue802',title:'매일 보이스 체크',state:check.line,tone:check.done?'done':'',
+  if(check)rows.push({key:'voice-check',icon:'',title:'매일 보이스 체크',state:check.line,tone:check.done?'done':'',
    label:'매일 보이스 체크, '+check.line+(check.done?', 결과 보기':', 30초 체크 시작하기'),action:()=>V.voiceCheck.status().done?nav('#/voice-check'):V.voiceCheck.open()});
-  // 내 로드맵 (it replaces 노래 연습실's fixed 9 steps and 보컬 트레이닝): a plain link. What it says to fix is in 다음 연습
-  // (기본기 · 로드맵 손볼 곳) and in 오늘의 연습, so home does not say it a third time (다음 연습 하나로, 2026-11-26).
-  if(V.roadmap)rows.push({key:'roadmap',icon:'\ue31a',title:'내 로드맵',state:'',label:'내 로드맵 보기',action:()=>nav('#/roadmap')});
+  // 내 로드맵: a plain link. What it says to fix is in 다음 연습 and in 오늘의 연습 (다음 연습 하나로, 2026-11-26).
+  if(V.roadmap)rows.push({key:'roadmap',icon:'',title:'내 로드맵',state:'',label:'내 로드맵 보기',action:()=>nav('#/roadmap')});
+  rows.push({key:'weekly-review',icon:'',title:'주간 돌아보기',state:'다음 목표 추천',label:'주간 돌아보기 · 다음 목표 추천',action:()=>nav('#/practice-review')});
   return rows;
+ }
+ /** Everything the 오늘 연습 card shows. Reading it writes nothing. */
+ function todayModel(files=V.media.cached()){
+  if(!T)return null;
+  const date=today();let data;
+  try{data=T.build(V.db,{today:date,songTitle});}catch(error){console.error(error);return null;}
+  const x=V.todayPractice?.()||{minutes:0,targetMinutes:null};
+  let days=[],hint=null,set=null;
+  try{days=TP?TP.recent(V.db,{date,today:date,defaultDailyTargetMinutes:dailyTarget(),timeEntries:V.timeEntries(files)}).map(d=>({date:d.date,label:d.label,minutes:d.minutes,met:d.met,today:d.today})):[];}catch(error){console.error(error);}
+  try{hint=T.repeatHint(V.db,{today:date,songTitle});}catch(error){console.error(error);}
+  const entry=V.practiceSetEntry?.();
+  // 오늘의 연습: its button says the estimated time before starting ("시작하기 · 약 18분"); otherwise as the set says.
+  if(entry)set={...entry,button:entry.state==='new'?'시작하기 · 약 '+entry.minutes+'분':entry.button};
+  const goal=id=>(V.db.dailyGoals||[]).find(g=>g?.id===id);
+  return {today:date,counts:data.counts,minutes:x.minutes,target:x.targetMinutes,days,
+   plan:data.plan.map(g=>({...g,suggest:R?.suggestMinutes?.(V.db,goal(g.id))?.minutes??null})),extra:data.extra,open:data.open,hint,set,
+   groups:(window.VzipDailySet?.GROUPS||[]).map(g=>g.title),timer:V.freeTimer?.state()||null,timerBlocked:!V.freeTimer||!!V.freeTimer.blocked(),note:V.freeTimer?.note?.()||null,
+   links:linkRows(),chips:V.PRACTICE_MINUTE_CHIPS||[5,10,20,30,60],songs:liveSongs(),categories:categoryNames()};
+ }
+ function todayActions(refresh){
+  return {
+   homeworkFor:date=>(V.db.assignments||[]).filter(t=>t&&!(V.db.deleted?.assignments||[]).includes(t.id)&&(V.taskInPeriod?V.taskInPeriod(t,date):t.status!=='done')).map(t=>({id:t.id,title:t.title||'숙제'})),
+   // The circle only checks (or unchecks). No time sheet, no popup: the time is a choice in the row (시간 적고 체크).
+   onToggle:async(id,completed)=>{
+    const ok=V.change(db=>{if(!M.setGoal(db,id,completed))throw Error('이 목표가 변경됐어요. 화면을 새로 열어주세요.');},{silent:true});
+    if(!ok)throw Error('체크를 저장하지 못했어요. 다시 시도해 주세요.');
+    refresh();
+   },
+   // 오늘 기록 연결: the record names the goal and the goal is checked; no row is added, so no minute counts twice.
+   onLink:(goalId,practiceId)=>write(db=>{T.link(db,{goalId,practiceId});},'기록을 연결하지 못했어요. 다시 시도해 주세요.'),
+   // 시간 적고 체크: the goal's own practice row, as the time sheet always wrote it (one row per goal, saved again = replaced).
+   onTimeCheck:(goalId,minutes)=>write(db=>{if(!M.setGoal(db,goalId,true))throw Error('이 목표가 변경됐어요. 화면을 새로 열어주세요.');R.perform(db,goalId,{minutes});}),
+   onSetGo:()=>{if(V.dailySet?.go)V.dailySet.go();else nav('#/practice-set');},
+   onSetPick:()=>V.dailySet?.pick?.(),
+   onAddPlan:()=>planSheet(),
+   // + 직접 적기: one practice record exactly as 연습 기록 시트 writes it; a chosen 계획 is linked to it, a homework gets
+   // "했어요" (one 회) as the sheet records it — the homework itself is not marked done.
+   onDirect:({minutes,date,goalId,homeworkId,songId,category,memo})=>{
+    if(!(Number(minutes)>=1&&Number(minutes)<=1440))throw Error('연습 시간을 1분 이상 입력해 주세요.');
+    if(!V.parseYmd(date))throw Error('날짜를 골라 주세요.');
+    const id=V.uid(),created=Date.now(),cat=categoryFor(category),song=songId&&V.song(songId)?songId:'';
+    write(db=>{
+     V.writePractice(db,{date,minutes:Number(minutes),mode:song?'song':'training',songId:song,catId:cat.id,catName:cat.name,memo,
+      completed:homeworkId?[homeworkId]:[],assignmentReps:homeworkId?{[homeworkId]:1}:{},assignmentNotes:{}},null,{id,created});
+     if(goalId&&date===today())T.link(db,{goalId,practiceId:id});
+    });
+    window.dispatchEvent(new Event('vzip:practice-saved'));
+    V.toast(date===today()?'연습 기록을 저장했어요.':V.dateLabel(date)+' 연습 기록을 저장했어요.');
+    return true;
+   },
+   // A 추가 row's 곡 · 분류 · 메모, written back through the same save code (the record keeps its minutes and the rest).
+   onEditExtra:(id,{songId,category,memo})=>{
+    const p=(V.db.practices||[]).find(x=>x?.id===id);
+    if(!p||!T.own(p))throw Error('이 기록은 여기서 고칠 수 없어요. 연습 기록에서 고쳐 주세요.');
+    const song=songId&&V.song(songId)?songId:'',cat=categoryFor(category,p),same=cat.id&&cat.id===p.categoryId;
+    if(song===(p.songId||'')&&cat.id===(p.categoryId||'')&&String(memo??'')===String(p.memo||''))return true;
+    return write(db=>{V.writePractice(db,{date:p.date,minutes:V.practiceMinutes(p),mode:song?'song':'training',songId:song,catId:cat.id,catName:cat.name,
+     detail:same?p.detail||'':'',detail2:same?p.detail2||'':'',recommendation:same&&p.recommendationSource?{source:p.recommendationSource,sourceId:p.recommendationSourceId}:null,
+     rating:p.rating||0,memo:String(memo??''),completed:p.completed||[],assignmentReps:p.assignmentReps||{},assignmentNotes:p.assignmentNotes||{},
+     mediaIds:p.mediaIds||[],mediaSeconds:p.mediaSeconds||0},p);});
+   },
+   onTimerStart:()=>V.freeTimer?.start(),
+   onTimerStop:()=>V.freeTimer?.stop(),
+   onTimerAway:choice=>V.freeTimer?.resolveAway(choice),
+   // 반복 계획으로 넣기: a routine goal through the routine code (7 days from today, as the goal picker offers).
+   onHint:()=>{
+    const h=T.repeatHint(V.db,{today:today(),songTitle});if(!h)return true;
+    write(db=>{R.create(db,{titles:[h.title],days:7,today:today(),uid:V.uid});});
+    V.toast('오늘부터 7일 동안 매일 반복해요.');return true;
+   }
+  };
  }
  /** 큰 단계 next to the streak (app/levels.js): "Lv 3 · 이름" and how far to the next level. Read-only. */
  const levelLine=()=>V.levels?.home?.()||null;
@@ -230,43 +315,14 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    let files=V.media.cached(),root;
    const s=state(files,selectedWeekStart),songs=recentSongs(s,files),current=nowCard(s,songs,nextList(files));
    const refreshWeek=()=>{root?.updateWeek(state(files,selectedWeekStart).week);root?.updateThisWeek?.(state(files).week,V.todayPractice?.());};
-   // Everything on home that follows practice records (today, week, 지금 할 것, recent songs), drawn again in place.
-   const refreshHome=()=>{
-    refreshWeek();if(!root?.isConnected)return;
-    const fresh=state(files),list=recentSongs(fresh,files),next=nowCard(fresh,list,nextList(files));
-    root.updateRecent(todayPicks(fresh,files));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updateAlerts?.(attentionItems());root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());
-   };
-   const goalOf=id=>(V.db.dailyGoals||[]).find(g=>g?.id===id);
-   const backToGoal=id=>setTimeout(()=>root?.focusGoal?.(id),0);
-   /** 시간·녹음 sheet for a completed goal. After a check (asked=true) the result popup follows 저장 and 건너뛰기 alike;
-    * from the row (editing) only a save shows it. The home is updated in place either way. */
-   const timeSheet=(id,asked)=>{
-    const opened=V.goalPerformanceSheet?.(id,{asked,onDone:result=>{
-     if(result.saved){refreshHome();root?.updateGoalTime?.(id,V.goalTime?.(goalOf(id))||null);}
-     if(!asked&&!result.saved)return backToGoal(id);
-     V.todayPracticePopup?.({addedMinutes:result.addedMinutes,...(asked?{}:{title:'저장했어요'}),onClose:()=>backToGoal(id)})||backToGoal(id);
-    }});
-    if(!opened&&asked)V.todayPracticePopup?.({onClose:()=>backToGoal(id)});
-   };
-   try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,todayPractice:V.todayPractice?.()||null,goals:s.goals.map(g=>({...g,routineInfo:V.routineInfo?.(g)||null,time:V.goalTime?.(g)||null})),onGoalRecord:id=>timeSheet(id,false),
-    // Mic on an unfinished goal row: the recorder carries the goal (and its song); saving there offers the goal as done.
-    onGoalMic:id=>{const g=goalOf(id);nav('#/record?goal='+encodeURIComponent(id)+(g?.songId&&V.song(g.songId)?'&song='+encodeURIComponent(g.songId):''));},onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),alerts:attentionItems(),recentSongs:todayPicks(s,files),
+   try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,todayPractice:V.todayPractice?.()||null,
+    todayModel:todayModel(files),todayCard:todayActions(()=>{refreshWeek();delete main.dataset.dirty;}),onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),alerts:attentionItems(),recentSongs:todayPicks(s,files),
     onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),
     onRandomSong:()=>{if(V.songRoulette)return V.songRoulette();const one=window.VzipSongPick?.random?.(V.db,{today:today(),media:(V.media.cached()||[]).map(m=>({songId:m?.songId,date:V.media?.dateOf?.(m)||''}))});if(!one)return;V.toast('오늘은 '+one.title+'!');nav('#/record?song='+encodeURIComponent(one.songId));},onWeek:()=>nav('#/calendar'),onDay:calendar,onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
-    practice:practiceRows(),level:levelLine(),onLevel:()=>nav('#/levels'),onGoals:planSheet,onWeeklyReview:()=>nav('#/practice-review'),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
+    level:levelLine(),onLevel:()=>nav('#/levels'),onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
-    onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet(),
-    onGoalToggle:async(id,completed)=>{
-     const ok=V.change(db=>{if(!M.setGoal(db,id,completed))throw Error('이 목표가 변경됐어요. 화면을 새로 열어주세요.');},{silent:true});
-     if(!ok)throw Error('체크를 저장하지 못했어요. 다시 시도해 주세요.');
-     refreshWeek();
-     delete main.dataset.dirty;
-     if(!completed)return;
-     // Ask for the time at once. A goal that already has a time (unticked and ticked again) is not asked again:
-     // its row shows the time and opens the sheet with it.
-     if(V.goalTime?.(goalOf(id)).minutes)V.todayPracticePopup?.({onClose:()=>backToGoal(id)});else timeSheet(id,true);
-    }});
+    onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet()});
    }catch(error){
     if(!host.isConnected)return;
     host.innerHTML='<p role="alert">홈을 불러오지 못했어요. 기록은 그대로 보관돼 있어요.</p><button type="button" data-home-retry>다시 불러오기</button> <a href="#/songs">내 곡으로 이동</a>';
@@ -274,12 +330,22 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    }
    if(!host.isConnected)return;
    host.replaceChildren(root);applyTheme();
-   // 연습하기 asked for (V.homeShow): once now that home is drawn, and again after the recordings are read (the cards
+   // 오늘 연습 asked for (V.homeShow): once now that home is drawn, and again after the recordings are read (the cards
    // above may have changed height meanwhile).
    const wanted=practiceWanted();
    if(wanted)requestAnimationFrame(()=>{if(root.isConnected)root.showPractice();});
-   // A check, a submission or a set saved while home is open: the states follow without drawing home again.
-   const practiceChanged=()=>{if(root.isConnected){root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());}};
+   // A check, a record, a submission or a set saved while home is open: the card, today and the week follow without
+   // drawing home again.
+   const practiceChanged=()=>{if(root.isConnected){root.updateToday?.(todayModel(files));refreshWeek();root.updateLevel?.(levelLine());}};
+   // 타이머만 켜기: its second only changes the time on the card; starting, stopping or a long gap draws the card again.
+   let timerShape='';
+   const timerChanged=()=>{
+    if(!root.isConnected)return;
+    const st=V.freeTimer?.state()||null,shape=st?(st.away?'away':'run'):'off';
+    if(shape!==timerShape){timerShape=shape;root.updateToday?.(todayModel(files));}else root.tickToday?.(st);
+   };
+   timerShape=(st=>st?(st.away?'away':'run'):'off')(V.freeTimer?.state()||null);
+   const unwatchTimer=V.freeTimer?.watch?.(timerChanged)||(()=>{});
    let mediaGeneration=0,lastDate=today();
    const refreshMedia=async()=>{
     const generation=++mediaGeneration;
@@ -290,7 +356,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     await V.nextPractice?.loadPrecision?.();
     if(!root.isConnected||generation!==mediaGeneration)return;
     const fresh=state(files),list=recentSongs(fresh,media),next=nowCard(fresh,list,nextList(media));
-    root.updateRecent(todayPicks(fresh,media));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updateAlerts?.(attentionItems());root.updatePractice?.(practiceRows());root.updateLevel?.(levelLine());
+    root.updateRecent(todayPicks(fresh,media));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updateAlerts?.(attentionItems());root.updateToday?.(todayModel(media));root.updateLevel?.(levelLine());
    };
    const checkDate=()=>{if(root.isConnected&&today()!==lastDate){lastDate=today();V.softRender();}};
    const visible=()=>{if(document.visibilityState==='visible'){checkDate();if(root.isConnected)refreshMedia();}};
@@ -299,7 +365,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const alertsChanged=()=>{if(root.isConnected)root.updateAlerts?.(attentionItems());};
    window.addEventListener('vzip:v6-media',refreshMedia);window.addEventListener('vzip:data-changed',practiceChanged);window.addEventListener('vzip:server-analysis-updated',alertsChanged);
    document.addEventListener('visibilitychange',visible);
-   stopHome=()=>{clearInterval(timer);window.removeEventListener('vzip:v6-media',refreshMedia);window.removeEventListener('vzip:data-changed',practiceChanged);window.removeEventListener('vzip:server-analysis-updated',alertsChanged);document.removeEventListener('visibilitychange',visible);};
+   stopHome=()=>{unwatchTimer();clearInterval(timer);window.removeEventListener('vzip:v6-media',refreshMedia);window.removeEventListener('vzip:data-changed',practiceChanged);window.removeEventListener('vzip:server-analysis-updated',alertsChanged);document.removeEventListener('visibilitychange',visible);};
    await refreshMedia();
    if(wanted&&root.isConnected)root.showPractice();
    // A level passed since it was last kept is kept now (rare: nine times in all), so it never drops when a record is deleted.

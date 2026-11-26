@@ -297,7 +297,6 @@ test('a finished set that completes the third day of a step: the step is kept, t
   await expect(page.locator('[data-level-news]')).toHaveCount(0);
   expect((await db(page)).practicePlans.map(p => p.kind)).toEqual(['daily-set-prefs']); // nothing is kept before 기록 저장
   await page.getByRole('button', {name:'기록 저장'}).click();
-  await page.locator('.vz-today-popup [data-ok]').click();
   await expect(page.getByRole('heading', {name:'오늘 연습을 기록했어요'})).toBeVisible();
   // The notice, once, on the screen after saving: the level and the step — what happened, not a verdict.
   const news = page.locator('.pset-done [data-level-news]');
@@ -340,8 +339,6 @@ test('a finished set that completes the third day of a step: the step is kept, t
   await startSet(page);
   await run(page).locator('[data-run-stop]').click();
   await page.getByRole('button', {name:'기록 저장'}).click();
-  const popup = page.locator('.vz-today-popup [data-ok]');
-  if (await popup.count()) await popup.click();
   await expect(page.getByRole('heading', {name:'오늘 연습을 기록했어요'})).toBeVisible();
   await expect(page.locator('[data-level-news]')).toHaveCount(0);
   expect((await plans(page, 'skill-step'))).toHaveLength(1);
