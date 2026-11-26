@@ -185,16 +185,10 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-goal-list:empty{display:none;}
 #vocalzip-refined-preview .vz-goals .vz-ai-plan-actions{display:flex;gap:8px;margin-top:8px;}
 #vocalzip-refined-preview .vz-goals .vz-ai-plan-actions .vz-empty-action{flex:1;justify-content:center;min-width:0;min-height:44px;margin:0;padding:0 10px;border-radius:999px;background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);font-size:13px;line-height:18px;font-weight:600;white-space:nowrap;}
-#vocalzip-refined-preview .vz-guided-recs{margin-top:8px;}
-#vocalzip-refined-preview .vz-guided-recs[hidden]{display:none;}
-#vocalzip-refined-preview .vz-guided-heading{display:flex;align-items:center;gap:7px;margin-bottom:8px;color:var(--vz-color-ink);font-size:14px;font-weight:700;}
-#vocalzip-refined-preview .vz-guided-item{display:flex;align-items:center;min-width:0;gap:8px;min-height:52px;padding:4px 4px 4px 12px;border-radius:14px;background:#f7f5fb;}
-#vocalzip-refined-preview .vz-guided-item+.vz-guided-item{margin-top:8px;}
-#vocalzip-refined-preview .vz-guided-copy{min-width:0;flex:1;}
-#vocalzip-refined-preview .vz-guided-copy strong,#vocalzip-refined-preview .vz-guided-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-#vocalzip-refined-preview .vz-guided-copy strong{color:var(--vz-color-ink);font-size:13px;line-height:19px;}
-#vocalzip-refined-preview .vz-guided-copy small{color:var(--vz-color-ink-muted);font-size:11px;line-height:17px;margin-top:2px;}
-#vocalzip-refined-preview .vz-guided-item button{flex:none;min-height:44px;border:0;border-radius:12px;padding:0 10px;background:var(--vz-color-selected-bg,#eee5ff);color:var(--vz-color-accent);font-size:12px;font-weight:700;cursor:pointer;}
+/* 지금 할 것 › "다음 연습 n개 더": the whole 다음 연습 list (#/next-practice), under the card. */
+#vocalzip-refined-preview .vz-now-more{display:flex;align-items:center;justify-content:flex-end;gap:4px;min-height:44px;margin:-8px 0 0 auto;padding:0 4px;border:0;background:none;color:var(--vz-color-accent);font:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+#vocalzip-refined-preview .vz-now-more[hidden]{display:none;}
+#vocalzip-refined-preview .vz-now-more:focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:-2px;border-radius:10px;}
 /* 연습하기: one compact card of the things you do. Rows follow the Home summary rows recipe (white R20, 20px accent
  * icon, 14/20 name + state, chevron); each row is a 48px target. */
 #vocalzip-refined-preview .vz-practice{display:block;padding:14px 12px 6px 16px;border-radius:20px;background:#fff;scroll-margin-top:12px;}
@@ -372,7 +366,11 @@ export async function createFloatingHome(opts={}){
   const badge=now.querySelector(".vz-dday");badge.textContent=item.badge||"";badge.hidden=!badge.textContent;
   now.querySelector("p").textContent=item.line||"";
   action(now,item.label||item.title||"지금 할 것",item.action);
+  // {count, text, action}: the rest of 다음 연습 (the card is its first item, or something else comes first today).
+  nowMore.hidden=!item.more;nowMore.onclick=()=>item.more?.action?.();
+  if(item.more){const chevron=el("i","\ue13a","vz-ui-icon");chevron.setAttribute("aria-hidden","true");nowMore.replaceChildren(el("span",item.more.text),chevron);nowMore.setAttribute("aria-label",item.more.text+" 보기");}
  };
+ const nowMore=el("button",null,"vz-now-more");nowMore.type="button";nowMore.dataset.homeNextMore="";nowMore.hidden=true;now.after(nowMore);
  host.updateNow(opts.now);
  /* 연습하기 (성장 개편 안 B, phase 4): ONE compact card under 지금 할 것 with the things you do. First the 오늘의 연습
   * card (today's steps as a vertical timeline, the progress and one button — it was the 오늘 연습 세트 row), then a row
@@ -587,24 +585,14 @@ export async function createFloatingHome(opts={}){
  q(".vz-goals .vz-title").append(q(".vz-count"));
  q(".vz-goal-tools button").setAttribute("aria-label","오늘의 목표 설정");q(".vz-goal-tools button").onclick=()=>opts.onGoals?.();
  const aiActions=el("div",null,"vz-ai-plan-actions");aiActions.setAttribute("aria-label","AI 연습 계획");
- for(const [label,short,callback] of [["AI로 오늘 할 일 추천받기","AI 오늘 추천",opts.onDailyRecommendation],["주간 돌아보기 · 다음 목표 추천","주간 돌아보기",opts.onWeeklyReview]]){
+ // AI 오늘 추천 moved to the end of the 다음 연습 list ("AI에게 하나 더 받기", asked before anything is sent).
+ for(const [label,short,callback] of [["주간 돌아보기 · 다음 목표 추천","주간 돌아보기",opts.onWeeklyReview]]){
   const button=el("button",short,"vz-empty-action");button.type="button";button.setAttribute("aria-label",label);button.onclick=()=>callback?.();aiActions.append(button);
  }
  q(".vz-goals").append(aiActions);
  const list=q(".vz-goal-list"),prototype=list.firstElementChild.cloneNode(true),items=(opts.goals||[]).map(g=>({...g,completed:Boolean(g.completed)}));list.replaceChildren();list.dataset.many=String(items.length>6);
  if(items.length>6){list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");}
  const error=el("p","","vz-save-error");error.setAttribute("role","status");error.setAttribute("aria-live","polite");list.after(error);
- const guided=el("div",null,"vz-guided-recs");guided.hidden=true;guided.setAttribute("aria-label","다음 연습");error.after(guided);
- host.updateRecommendations=rows=>{
-  const seen=new Set([...(opts.goals||[]).map(g=>String(g.title||"").trim()),String(now.querySelector("h2")?.textContent||"").trim()].filter(Boolean));
-  guided.replaceChildren();const items=(rows||[]).filter(r=>!seen.has(String(r.title||"").trim())).slice(0,1);guided.hidden=!items.length;if(!items.length)return;
-  for(const item of items){
-   const row=el("div",null,"vz-guided-item"),copy=el("div",null,"vz-guided-copy"),button=el("button","따라 하기");
-   copy.append(el("strong",(item.label|| (item.kind==="homework"?"숙제":"분석 추천"))+" · "+item.title),el("small",item.subtitle+(item.kind==="room"?"":" · "+(item.video?"영상 포함":"타이머 안내"))));
-   button.type="button";button.setAttribute("aria-label",item.title+" 따라 하기");button.onclick=()=>opts.onGuidedPractice?.(item);
-   row.append(copy,button);guided.append(row);
-  }
- };host.updateRecommendations(opts.recommendations);
  const refresh=()=>{q(".vz-count").textContent=items.filter(g=>g.completed).length+" / "+items.length+" 완료";};refresh();
  if(!items.length){const button=el("button",null,"vz-empty-action");button.type="button";button.setAttribute("aria-label","오늘의 목표 정하기");button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>오늘의 목표 정하기</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8"/></svg>';button.onclick=()=>opts.onGoals?.();list.append(button);}
  const MAX_GOALS=4,rows=new Map();let expanded=false,more=null;

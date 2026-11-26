@@ -1,0 +1,43 @@
+/* 다음 연습 (#/next-practice, app/next-practice.js): one ranked list. Rows are white cards on the page background;
+ * every control is a 44px target; nothing wider than the screen. */
+.np{display:grid;gap:12px;min-width:0;padding:0 0 46px;overflow-wrap:anywhere}
+.np-basis{margin:0 2px;color:var(--vz-color-ink-muted,#667085);font-size:13px;line-height:20px}
+.np-filters,.np-songs{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.np-filter,.np-song{display:inline-flex;align-items:center;min-height:44px;max-width:100%;padding:0 14px;border:0;border-radius:99px;background:var(--surface-2,#F2F4F7);color:var(--vz-color-ink-secondary,#344054);font:inherit;font-size:13px;font-weight:650;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.np-filter[aria-pressed="true"],.np-song[aria-pressed="true"]{background:var(--vz-color-ink,#101828);color:#fff}
+.np-filter:focus-visible,.np-song:focus-visible,.np-go:focus-visible,.np-add:focus-visible,.np-ai-btn:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:2px}
+.np-list{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.np-item{display:grid;gap:6px;min-width:0;padding:14px;border-radius:16px;background:var(--vz-color-surface,#fff);border:1px solid var(--vz-color-border,#EAECF0)}
+.np-item[data-draft]{border-style:dashed;border-color:#D0D5DD}
+.np-item[data-done]{background:var(--surface-2,#F9FAFB)}
+.np-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0}
+.np-num,.np-check{min-width:16px;color:var(--vz-color-accent,#7A32F5);font-size:13px;font-weight:800;line-height:18px}
+.np-check{color:#23855C}
+.np-chip{background:#F3ECFF;color:#5B1FC2}
+.np-chip[data-np-chip="숙제"]{background:#FFF3DC;color:#8A5A00}
+.np-chip[data-np-chip="레슨 지적"]{background:#FDE8EC;color:#A3263F}
+.np-chip[data-np-chip="측정 기반"],.np-chip[data-np-chip="정밀 측정"]{background:#E3F4EC;color:#147D56}
+.np-chip[data-np-chip="AI 초안"]{background:#F2F4F7;color:#344054}
+.np-title{font-size:16px;line-height:22px;font-weight:800;color:var(--vz-color-ink,#101828);word-break:keep-all;overflow-wrap:anywhere}
+.np-why{font-size:13px;line-height:19px;color:var(--vz-color-ink-muted,#667085)}
+.np-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.np-go,.np-add,.np-added{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;border:0;border-radius:12px;font:inherit;font-size:13px;font-weight:800;text-decoration:none;white-space:nowrap}
+.np-go{background:var(--vz-color-accent,#7A32F5);color:#fff}
+.np-add{background:#F3ECFF;color:#5B1FC2;cursor:pointer}
+.np-add[disabled]{opacity:.6;cursor:default}
+.np-added{background:#E3F4EC;color:#23855C}
+.np-empty{margin:0}
+.np-done{border-radius:14px;background:var(--surface-2,#F9FAFB)}
+.np-done>summary{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 10px;min-height:44px;padding:0 14px;cursor:pointer;color:var(--vz-color-ink-secondary,#344054);font-size:13px;font-weight:700;list-style:none}
+.np-done>summary::-webkit-details-marker{display:none}
+.np-done>summary small{color:var(--vz-color-ink-muted,#667085);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.np-done[open]>summary{border-bottom:1px solid var(--vz-color-border,#EAECF0)}
+.np-done .np-list{padding:10px}
+.np-ai{display:grid;gap:6px;margin-top:6px}
+.np-ai-h{margin:0;font-size:13px;line-height:18px;font-weight:700;color:var(--vz-color-ink-muted,#667085)}
+.np-ai-btn{min-height:48px;border:1px solid var(--vz-color-border,#EAECF0);border-radius:12px;background:var(--vz-color-surface,#fff);color:#5B1FC2;font:inherit;font-size:14px;font-weight:800;cursor:pointer}
+.np-ai-btn[disabled]{opacity:.6;cursor:default}
+.np-ai-note,.np-ai-status{margin:0;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px}
+.np-ai-status:empty{display:none}
+/* 다음 연습 n개 더 / 전체 보기 links on 성장 › 나 and 오늘의 목표 */
+.vz-plan-next-all{display:inline-flex;align-items:center;gap:4px;min-height:44px;color:var(--vz-color-accent,#7A32F5);font-size:13px;font-weight:800;text-decoration:none}

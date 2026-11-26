@@ -281,19 +281,23 @@ test('지금 할 것 homework opens guided practice and the final step saves pra
  await page.getByRole('button',{name:'연습 기록 보기',exact:true}).click();
  await expect(page).toHaveURL(/#\/practices$/);
 });
-test('home shows one recommendation that repeats neither a goal nor the 지금 할 것 card, and starts it',async({page})=>{
+test('지금 할 것 is 다음 연습 item #1 (the homework due soonest), shown once; the rest of the list is one tap away',async({page})=>{
  const value=seed();
  value.assignments.push({id:'a2',title:'립트릴로 고음 연결하기',status:'active',startDate:'2026-11-01',dueDate:'2026-11-07'},{id:'a3',title:'모음 고르게 읽기',status:'active',startDate:'2026-11-01',dueDate:'2026-11-09'});
  await boot(page,value);const before=await db(page);
- await expect(page.locator('.vz-event h2')).toHaveText('호흡을 길게 유지하기');
- const recs=page.locator('.vz-guided-item');
- await expect(recs).toHaveCount(1);await expect(recs).toContainText('립트릴로 고음 연결하기');
- await expect(page.locator('.vz-guided-recs')).not.toContainText('추천 연습');await expect(page.locator('.vz-guided-heading')).toHaveCount(0);
- await expect(page.getByRole('button',{name:'호흡을 길게 유지하기 따라 하기',exact:true})).toHaveCount(0);
- await expect(page.getByRole('button',{name:'모음 고르게 읽기 따라 하기',exact:true})).toHaveCount(0);
- const start=page.getByRole('button',{name:'립트릴로 고음 연결하기 따라 하기',exact:true});
- expect((await start.boundingBox()).height).toBeGreaterThanOrEqual(44);
- await start.click();await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa2$/);
+ // 다음 연습 하나로 (2026-11-26): the card is the first item of the ONE list (homework due soonest first); the 따라 하기 row
+ // under 오늘의 목표 is gone, so nothing repeats it.
+ await expect(page.locator('.vz-event h2')).toHaveText('립트릴로 고음 연결하기');
+ await expect(page.locator('.vz-guided-item,.vz-guided-recs')).toHaveCount(0);
+ for(const t of ['호흡을 길게 유지하기','립트릴로 고음 연결하기','모음 고르게 읽기'])await expect(page.getByRole('button',{name:t+' 따라 하기',exact:true})).toHaveCount(0);
+ const more=page.locator('[data-home-next-more]');
+ await expect(more.locator('span')).toHaveText(/^다음 연습 \d+개 더$/);expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await more.click();await expect(page).toHaveURL(/#\/next-practice$/);
+ const rows=page.locator('[data-next-practice] > .np-list > .np-item');
+ await expect(rows.locator('.np-title').first()).toHaveText('립트릴로 고음 연결하기');
+ await expect(rows.nth(1).locator('.np-title')).toHaveText('호흡을 길게 유지하기');await expect(rows.nth(1).locator('[data-np-added]')).toHaveText('목표에 담김 ✓');
+ await expect(rows.nth(2).locator('.np-title')).toHaveText('모음 고르게 읽기');
+ await rows.first().locator('[data-np-go]').click();await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa2$/);
  const after=await db(page);for(const key of ['assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
 test('active homework card directly opens guided practice',async({page})=>{
@@ -442,14 +446,17 @@ test('지금 할 것 follows today\'s lesson, homework, latest song, upcoming le
  await page.evaluate(()=>VZ.change(d=>{d.lessons=[];}));
  // Songs but nothing sung or practised yet, and no lesson coming: the first take of the newest song (1.0 점검 P1 #3).
  await expect(now).toHaveAttribute('data-kind','first-take');await expect(title).toHaveText('첫 녹음하기');
- // Something practised that is not a song (a training row): a suggested practice, as before.
+ // Something practised that is not a song (a training row): a suggestion — the first item of 다음 연습 (VZ.nextPractice)
+ // that is not in today's goals yet, with its source as the badge and its own way to start it.
  await page.evaluate(()=>VZ.change(d=>{d.practices=[{id:'p-train',date:'2026-10-01',minutes:10,manualMinutes:10,practiceTimeSource:'manual',practiceMode:'training',technique:[],mediaIds:[],completed:[]}];}));
- await expect(now).toHaveAttribute('data-kind','recommend');await expect(title).toHaveText('호흡과 발성 연습하기');await expect(badge).toHaveText('추천');
- await now.click();await expect(page).toHaveURL(/#\/practice-set$/);await page.goto('/#/home');await ready(page);
- // The same suggestion already in today's goals is not repeated: the card then just offers to record.
+ await expect(now).toHaveAttribute('data-kind','recommend');
+ const rec=await page.evaluate(()=>{const x=VZ.nextPractice().items.find(i=>!i.doneToday&&!i.inGoals);return {...x,badge:VZ.nextPractice.label(x.source)};});
+ await expect(title).toHaveText(rec.title);await expect(badge).toHaveText(rec.badge);
+ await now.click();await expect.poll(()=>new URL(page.url()).hash).toBe(rec.go.href);await page.goto('/#/home');await ready(page);
+ // The same suggestion already in today's goals is not repeated: the card moves on to the next one (or just offers to record).
  const goalsBefore=(await db(page)).dailyGoals;
- await page.evaluate(day=>VZ.change(d=>{d.dailyGoals=[...(d.dailyGoals||[]),{id:'g-basic',date:day,title:'호흡과 발성 연습하기',source:'recommendation',sourceId:'basic:breathing',completed:false,order:9}];}),TODAY);
- await expect(now).toHaveAttribute('data-kind','record');await expect(title).toHaveText('지금 녹음하기');await expect(badge).toBeHidden();
+ await page.evaluate(([day,r])=>VZ.change(d=>{d.dailyGoals=[...(d.dailyGoals||[]),{id:'g-basic',date:day,title:r.title,source:'recommendation',sourceId:r.id,completed:false,order:9}];}),[TODAY,rec]);
+ await expect(title).not.toHaveText(rec.title);
  await page.evaluate(goals=>VZ.change(d=>{d.dailyGoals=goals;}),goalsBefore);
  const after=await db(page);for(const key of ['songs','performances','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
@@ -1034,7 +1041,10 @@ test('goal planning separates long selectable rows and keeps save visible on sma
   const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
   await sheet.evaluate(async el=>{await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished));});
   const rows=sheet.locator('.vz-plan-option'),save=sheet.getByRole('button',{name:'목표 저장',exact:true});
-  await expect(rows).toHaveCount(4);await expect(sheet.locator('[data-plan-count]')).toHaveText('3개 선택');
+  // Today's three goals and the top (at most three) of 다음 연습 not in them yet.
+  const offered=await page.evaluate(()=>Math.min(3,VZ.nextPractice().items.filter(x=>!x.doneToday&&!x.inGoals&&x.canAdd).length));
+  expect(offered).toBeGreaterThan(0);
+  await expect(rows).toHaveCount(3+offered);await expect(sheet.locator('[data-plan-count]')).toHaveText('3개 선택');
   const first=await rows.nth(0).boundingBox(),second=await rows.nth(1).boundingBox();
   expect(second.y).toBeGreaterThanOrEqual(first.y+first.height+7);expect(first.height).toBeGreaterThanOrEqual(56);
   const text=await rows.nth(0).locator('.vz-plan-title').boundingBox(),badge=await rows.nth(0).locator('small').boundingBox();
@@ -1363,12 +1373,13 @@ test('Cloud lesson deletion refuses a server lesson that changed before prepare'
 });
 
 
-for(const [label,text,hash] of [['AI로 오늘 할 일 추천받기','AI 오늘 추천','#/practice-review?mode=today'],['주간 돌아보기 · 다음 목표 추천','주간 돌아보기','#/practice-review']]){
+// AI 오늘 추천 moved to the end of #/next-practice ("AI에게 하나 더 받기", tests/next-practice.spec.cjs).
+for(const [label,text,hash] of [['주간 돌아보기 · 다음 목표 추천','주간 돌아보기','#/practice-review']]){
  test('home visibly renders and opens '+label,async({page})=>{
   await boot(page);const button=page.getByRole('button',{name:label,exact:true});
   await expect(button).toBeVisible();await expect(button).toHaveText(text);
-  // Both AI actions share one row of pills.
-  const [a,b]=await page.locator('.vz-ai-plan-actions>button').all();expect(Math.abs((await a.boundingBox()).y-(await b.boundingBox()).y)).toBeLessThanOrEqual(1);
+  await expect(page.getByRole('button',{name:'AI로 오늘 할 일 추천받기',exact:true})).toHaveCount(0);
+  await expect(page.locator('.vz-ai-plan-actions>button')).toHaveCount(1);
   expect(await button.evaluate(el=>el.getRootNode() instanceof ShadowRoot)).toBe(true);
   await button.scrollIntoViewIfNeeded();const box=await button.boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);
   await button.click();await expect(page).toHaveURL(new RegExp(hash.replace(/[?]/g,'\\?')+'$'));

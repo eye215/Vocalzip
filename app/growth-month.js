@@ -6,7 +6,8 @@
  *                  same song, same method and version), 전체 · 곡별, the 연습 녹음 포함 switch (off by default — then the
  *                  numbers are 결과 리포트's), and 지표 자세히: 월별 분석's 이달의 변화 and six measures (전체: 전체 분석's six,
  *                  주간: 주간 요약's 성장 card)
- *   ⓒ 다음 연습     one list from every place that recommends something (app/growth-next-model.js), top 5 and 더 보기,
+ *   ⓒ 다음 연습     one list from every place that recommends something (VZ.nextPractice, app/next-practice.js, on
+ *                  app/growth-next-model.js), top 3 and 더 보기 and a link to the whole list (#/next-practice),
  *                  each with where it came from and a way to start it
  *   ⓓ 지난 흐름 보기 → #/growth-flow (app/monthly-growth.js): the former 결과 리포트 screens with charts, 음역 흐름, AI 코치
  *                  (월별 · 전체 only), 지난 기록·보관 리포트 and 분석 기준
@@ -117,19 +118,14 @@ const CHIP = {homework:'숙제', 'lesson-point':'레슨 지적', skill:'기본�
 const SHOWN = 3;
 const norm = s => window.VzipGrowthNext?.norm?.(s) ?? String(s || '').replace(/\s+/g, '');
 const todayGoals = () => (V.db.dailyGoals || []).filter(g => g?.date === V.today() && !(V.db.deleted?.dailyGoals || []).includes(g.id));
+/** 다음 연습 as every screen reads it (VZ.nextPractice, app/next-practice.js — the same inputs, order and merging as 홈
+ * and #/next-practice). Here: what is still to do today; 오늘 한 것 is on the full list. */
 function nextModel(v) {
-  const N = window.VzipGrowthNext;
-  if (!N) return null;
-  let overall = null, tips = null, changes = null;
-  try { overall = V.growthModel?.(v.items)?.overall || null; } catch (error) { console.error(error); }
-  try { tips = V.practiceTips?.(v.items) || null; } catch (error) { console.error(error); }
-  const gone = V.db.deleted?.monthlyGrowthReports || [];
-  const monthly = (V.db.monthlyGrowthReports || []).filter(r => r && !gone.includes(r.id)).sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')))[0] || null;
-  if (Array.isArray(v.results) && window.VzipGrowthChanges) try {
-    changes = window.VzipGrowthChanges.taskChanges(v.results, {compare:window.VzipPrecisionReport?.compare, labels:window.VzipPrecisionReport?.LABELS || {}, groups:window.VzipPrecisionSession?.GROUPS || []});
-  } catch (error) { console.error(error); }
-  try { return N.build({db:V.db, today:V.today(), overall, monthly, tips, precision:{results:Array.isArray(v.results) ? v.results : null, changes}, limit:50}); }
-  catch (error) { console.error(error); return null; }
+  if (!V.nextPractice) return null;
+  try {
+    const n = V.nextPractice({media:v.items, ...(Array.isArray(v.results) ? {results:v.results} : {})}), items = n.items.filter(x => !x.doneToday).slice(0, 50);
+    return {items, more:0, total:items.length};
+  } catch (error) { console.error(error); return null; }
 }
 const link = (href, label) => '<a class="gc-chip gm-act" href="' + e(href) + '">' + e(label) + '</a>';
 function actionHtml(it, i) {
@@ -169,6 +165,8 @@ function nextHtml(v) {
       items.slice(SHOWN).map((it, k) => itemHtml(it, SHOWN + k)).join('') + '</ol></details>' : '');
   return '<section class="gm-section gm-next-box" data-gm-section="next" aria-labelledby="gm-next-title"><header class="gm-head"><h2 id="gm-next-title">다음 연습</h2>' +
     '<p class="gm-basis" data-gm-basis="next">오늘 기준 · 숙제를 먼저, 그다음 레슨 지적·기본기·측정·계획·AI 초안 순서 · 겹치는 것은 하나로</p></header>' + body +
+    // The whole list (오늘 한 것 too, 목표에 담기 for every item, AI에게 하나 더 받기) on its own page.
+    (n ? '<a class="gm-more-link gm-next-all" href="#/next-practice" data-gm-next-all><span>다음 연습 전체 보기</span><i class="ph ph-arrow-right" aria-hidden="true"></i></a>' : '') +
     // The screens you practise on (연습 세트 · 보이스 체크 · 노래 연습실 · 보컬 트레이닝) live on 오늘 › 연습하기.
     '<a class="gm-more-link gm-today-link" href="#/home" data-home-practice data-gm-today><span>연습은 오늘 탭에서 해요</span><i class="ph ph-arrow-right" aria-hidden="true"></i></a></section>';
 }

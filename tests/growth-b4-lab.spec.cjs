@@ -69,10 +69,12 @@ test('오늘 › 연습하기: one section with the three things you do — the 
   // 내 로드맵 took the place of 노래 연습실 (its fixed 9 steps) and 보컬 트레이닝.
   await expect(section(page).locator('[data-row] strong')).toHaveText(['오늘의 연습', '매일 보이스 체크', '내 로드맵']);
   // 오늘의 연습 is a card now (timeline · progress · one button: tests/daily-set.spec.cjs); the others are rows.
-  // States are what is kept: three checks on the last three days (none today); 내 로드맵 says what it works on.
+  // States are what is kept: three checks on the last three days (none today). 내 로드맵 is a plain link: what it works on
+  // is in 다음 연습 and 오늘의 연습 (다음 연습 하나로, 2026-11-26).
   await expect(row(page, 'practice-set').locator('small')).toHaveText(/^\d+개 · 약 \d+분$/);
   await expect(row(page, 'voice-check').locator('small')).toHaveText('오늘 아직 · 30초 · 연속 3일');
-  await expect(row(page, 'roadmap').locator('small')).toHaveText(/^(손볼 곳|기본기) · \S/);
+  await expect(row(page, 'roadmap').locator('small')).toHaveText('');
+  await expect(row(page, 'roadmap')).toHaveAccessibleName('내 로드맵 보기');
   await expect(row(page, 'voice-check')).toHaveAccessibleName('매일 보이스 체크, 오늘 아직 · 30초 · 연속 3일, 30초 체크 시작하기');
   // Compact, 44px targets, an icon each, inside the screen.
   // Read in one go: home may be drawn again when the recordings arrive, and a row read one by one could be gone in between.
@@ -94,9 +96,10 @@ test('오늘 › 연습하기: one section with the three things you do — the 
   await expect(page.locator('.vz-student-home [data-voice-check-card]')).toHaveCount(0);
   const names = await page.evaluate(() => { const text = document.querySelector('.vz-student-home').shadowRoot.querySelector('main').innerText; return ['오늘의 연습', '연습 세트', '보이스 체크', '노래 연습실', '보컬 트레이닝', '내 로드맵'].map(n => text.split(n).length - 1); });
   expect(names).toEqual([1, 0, 1, 0, 0, 1]);
-  // The existing 따라 하기 suggestion and the AI buttons stay where they were, in 오늘의 목표 (not copied into the section).
-  await expect(page.locator('.vz-student-home .vz-goals .vz-guided-item')).toHaveCount(1);
-  await expect(page.locator('.vz-student-home .vz-goals .vz-ai-plan-actions>button')).toHaveCount(2);
+  // The 따라 하기 row left 오늘의 목표 (다음 연습 하나로: its item is 지금 할 것 or on #/next-practice) and so did AI 오늘
+  // 추천 (now at the end of #/next-practice); 주간 돌아보기 stays in 오늘의 목표 — none copied into the section.
+  await expect(page.locator('.vz-student-home .vz-goals .vz-guided-item')).toHaveCount(0);
+  await expect(page.locator('.vz-student-home .vz-goals .vz-ai-plan-actions>button')).toHaveText(['주간 돌아보기']);
   await expect(section(page).locator('.vz-guided-item, .vz-ai-plan-actions')).toHaveCount(0);
   // A submission or a check saved while home is open: the state follows and the row is the same element (never replaced under a finger).
   await row(page, 'voice-check').evaluate(e => { e.__same = true; });
