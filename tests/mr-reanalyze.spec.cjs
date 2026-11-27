@@ -5,7 +5,7 @@
 // subtraction (synthetic audio only, as tests/v6.spec.cjs does).
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
-const {openFolds} = require('./helpers/song-screen.cjs');
+const {openFolds, songTab} = require('./helpers/song-screen.cjs');
 const fs = require('node:fs');
 const KEY = 'vocal-zip_mvp_v1', SHOTS = process.env.VZ_SHOTS || '';
 const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
@@ -258,6 +258,7 @@ test('보컬 연구소: the row, 고른 녹음만 for the ticked dates, and the 
   // 곡 하나 (성장 개편 phase 3): MR로 다시 분석 is a row of 깊이 보기, the measuring method is in 이 녹음 자세히.
   await openFolds(page);
   await page.goto('/#/vocal-lab/s1');
+  await songTab(page, 'takes');
   const row = page.locator('[data-song-section="deep"] [data-lab-remr]');
   await expect(row).toContainText('MR로 다시 분석');
   await expect(row).toContainText('판정 보류·분석 전 4개');
@@ -293,6 +294,7 @@ test('보컬 연구소: the row, 고른 녹음만 for the ticked dates, and the 
 test('after an MR file is added the MR section asks; without an MR file there is no line and no lab row', async ({page}) => {
   await boot(page, {tracks:[]});
   await page.goto('/#/vocal-lab/s1');
+  await songTab(page, 'takes');
   await expect(page.locator('.vl-dates')).toBeVisible();
   await expect(page.locator('[data-lab-remr]')).toHaveCount(0);
   await page.goto('/#/song/s1'); await page.locator('[data-tab=ar]').click();

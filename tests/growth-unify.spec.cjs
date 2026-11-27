@@ -169,12 +169,12 @@ test('뒤로 from the screens a tab opens returns to that tab, with 성장 lit o
   await dock(page).click();
   await tabs(page).nth(1).click();
   const back = async url => { await page.locator('[data-back]').click(); await expect(page).toHaveURL(url); };
-  // 곡 → 곡 하나 (the ONE song screen with 곡 분석 in it, 큰 정리 2번: dark, as 곡 분석 was) → 뒤로
+  // 곡 → 곡 분석 (the ONE song screen, light like the others) → 뒤로
   await page.locator('[data-hub-song="s1"]').click();
   await expect(page).toHaveURL(/#\/growth-song\/s1$/);
   await expect(dock(page)).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('#top h1')).toHaveText('곡');
-  expect(await page.evaluate(() => getComputedStyle(document.body).colorScheme)).toContain('dark');
+  await expect(page.locator('#top h1')).toHaveText('곡 분석');
+  expect(await page.evaluate(() => getComputedStyle(document.body).colorScheme)).not.toContain('dark');
   await back(/#\/vocal-analysis$/);
   await expect(current(page)).toHaveText('곡');
   // → one analysed recording → 뒤로
@@ -231,7 +231,7 @@ test('a 성장 screen opened with nothing behind it: 뒤로 goes to its 성장 t
   await expect(page).toHaveURL(/#\/growth-lab$/);                   // 리포트 보관함 belongs to 연구소
   await expect(current(page)).toHaveText('기록');
   await page.evaluate(() => { location.hash = '#/vocal-lab/s1'; });
-  await expect(page.locator('#top h1')).toHaveText('곡');
+  await expect(page.locator('#top h1')).toHaveText('곡 분석');
   await expect(page).toHaveURL(/#\/growth-song\/s1$/);
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/vocal-analysis$/);               // a song's 연구소 belongs to 곡
@@ -251,7 +251,7 @@ test('older deep links land where they did', async ({page}) => {
   // #/compare → the lab's comparison of the two takes.
   await page.goto('/#/compare?a=a5&b=a6');
   await expect(page).toHaveURL(/#\/growth-song\/s1\?a=a5&b=a6&compare=1$/);
-  await expect(page.locator('#top h1')).toHaveText('곡');
+  await expect(page.locator('#top h1')).toHaveText('곡 분석');
   // #/vocal-lab?selection=1 → the chosen recordings.
   await page.evaluate(() => sessionStorage.setItem('vocalzip-vocal-lab-selected-media-v1', JSON.stringify(['a5', 'b2'])));
   await page.goto('/#/home'); await page.goto('/#/vocal-lab?selection=1');

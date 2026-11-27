@@ -63,6 +63,7 @@ test('Vocal lab comparison stays within the viewport with long recording names',
  for(const width of [320,390,430,1280]) {
   await page.setViewportSize({width,height:844});
   await page.goto('/#/vocal-lab/s1?ids=m1,m2');
+  await page.locator('[data-sa-tab="takes"]').click();   // 녹음별: the dates and 두 녹음 비교
   // Select both dates when opening the lab without a saved report.
   if(await page.locator('.vl-dates button[aria-pressed=true]').count()!==2) {
    for(const b of await page.locator('.vl-dates button').all()) if(await b.getAttribute('aria-pressed')!=='true') await b.click();

@@ -289,6 +289,7 @@ test.describe('phone 375', () => {
   test('보컬 연구소 opens the same sheet with the earliest and the latest take; nothing is saved when closed', async ({page}) => {
     await boot(page);
     await page.evaluate(() => { location.hash = '#/vocal-lab/s1'; });
+    await page.locator('[data-sa-tab="takes"]').click();   // 녹음별 › 두 녹음 비교
     const entry = page.locator('.lc-lab-entry');
     await expect(entry).toBeVisible();
     await entry.click();

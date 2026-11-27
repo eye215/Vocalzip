@@ -3,6 +3,7 @@
 const {test, expect} = require('@playwright/test');
 const {period} = require('./growth-me-helpers.cjs');
 require('./legacy-session-mode.cjs')(test);
+const {songTab} = require('./helpers/song-screen.cjs');
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
@@ -72,10 +73,11 @@ test('성장 tab: the evening take is the latest one in 전체 분석 and 월별
 test('보컬 연구소 and the song card compare the same first and latest takes', async ({page}) => {
   await boot(page);
   await page.goto('/#/vocal-lab/s1');
+  await songTab(page, 'takes');
   // Date tabs: oldest on the left, newest on the right, by recording time.
   await expect(page.locator('.vl-dates button').first()).toBeVisible();
   for (const b of await page.locator('.vl-dates button').all()) if (await b.getAttribute('aria-pressed') !== 'true') await b.click();
-  const row = page.locator('[data-growth-report] [data-growth-row="intonation"]');
+  const row = page.locator('[data-growth-detail="intonation"]');
   await expect(row).toContainText('±20 cent → ±11 cent');
   await expect(row).toHaveClass(/good/);
   await page.goto('/#/song/s1');
