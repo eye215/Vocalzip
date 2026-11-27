@@ -823,9 +823,12 @@ VZ.route('songs', {title:'내 곡', tab:'songs', noSettings:true, actions:() => 
 }});
 
 /* ---------- 곡 상세 ---------- */
-let songTab = 'media', songSynced = null;
+let songTab = 'media', songSynced = null, songSelecting = false;
+// 녹음 화면 (#/take/<id>, app/recording-detail.js) opened from this list: 뒤로 comes back to the same rows and place.
+let songBack = null;
+VZ.songListReturn = {take:() => { const b = songBack; songBack = null; return b; }, clear:() => { songBack = null; }};
 VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true,
-  leave(){ window.removeEventListener('vzip:data-changed', songSynced); songSynced = null; songTab = 'media'; VZ.lyricsMemo?.close(); document.querySelector('.vz-collection-record')?.setAttribute('href','#/record'); VZ.mediaSelection?.hideSongAction(); },
+  leave(){ window.removeEventListener('vzip:data-changed', songSynced); songSynced = null; songTab = 'media'; songSelecting = false; VZ.lyricsMemo?.close(); document.querySelector('.vz-collection-record')?.setAttribute('href','#/record'); VZ.mediaSelection?.hideSongAction(); },
   actions:r => VZ.song(r.params[0]) ? (VZ.recordHandoffButton?.(r.params[0]) || '') + '<button type="button" class="icon-btn" data-song-menu aria-label="곡 수정·삭제"><i class="ph ph-dots-three-outline"></i></button>' : '',
   render(r) {
     const s = VZ.song(r.params[0]);
@@ -837,9 +840,10 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     // The page header already says 곡 상세: the card shows the title, 작품 / 아티스트 and the totals.
     return '<div class="song-head vz-song-detail-hero"><strong class="vz-song-detail-title">' + esc(s.title) + '</strong><span class="vz-song-detail-sub" data-song-show' + (s.show ? '' : ' hidden') + '>' + esc(s.show || '') + '</span><span class="vz-song-detail-summary" data-summary></span>' +
       // UI 정리 3차: how the song is going (성장 › 곡 하나), one tap from the song — in the card's corner, so the tabs stay high.
-      // 큰 정리 2번: the song's growth in ONE line — its 한마디 (the verdict every 성장 screen shares) · 성장 보기 › (the song screen).
-      '<a class="vz-song-hero-btn" href="#/growth-song/' + encodeURIComponent(s.id) + '" data-song-hero-growth><i class="ph ph-chart-line-up" aria-hidden="true"></i><span data-song-growth-word hidden></span><span>성장 보기</span><i class="ph ph-caret-right" aria-hidden="true"></i></a></div>' +
-      '<div data-repertoire></div><div data-score-points></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
+      // 큰 정리 2번: the song's growth in ONE line — its 한마디 (the verdict every 성장 screen shares) · 곡 분석 › (the song screen;
+      // the 녹음 tab's link has the same words and goes to the same page).
+      '<a class="vz-song-hero-btn" href="#/growth-song/' + encodeURIComponent(s.id) + '" data-song-hero-growth><i class="ph ph-chart-line-up" aria-hidden="true"></i><span data-song-growth-word hidden></span><span>곡 분석</span><i class="ph ph-caret-right" aria-hidden="true"></i></a></div>' +
+      '<div data-repertoire></div><div data-score-points></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '"><span>' + v + '</span></button>').join('') + '</div><div data-body></div>';
   },
   async mount(main, r) {
     const s = VZ.song(r.params[0]); if (!s) return;
@@ -872,6 +876,9 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     // changes nothing that is shown leaves the rows alone, with their selection, open player and scroll position.
     const PAGE = 50, SEP = '\u0002';
     let shown = PAGE, built = '', mediaList = [], syncMedia = null, watcher = null, practices = [], lessons = [];
+    // Back from a recording's 녹음 screen: the same rows (as many as were drawn) and the same place.
+    const back = VZ.songListReturn.take(), returning = back?.id === s.id && songTab === 'media';
+    if (returning) shown = Math.max(PAGE, back.shown || PAGE);
     const fb = l => l.songFeedback?.[s.id] || l.feedback || '';
     /** The lesson or practice record a recording belongs to, if any. */
     const linked = m => {
@@ -904,25 +911,41 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
         }
         watcher?.disconnect(); watcher = null;
         built = next; shown = count; mediaList = visible;
-        // Nothing is ticked to begin with: 보컬 분석하기 appears once recordings are chosen. The lab link is always here.
-        body.innerHTML = '<div class="vz-song-section"><h2>녹음 <span>' + visible.length + '</span></h2>' + (visible.length ? '<a class="vz-song-lab" href="#/vocal-lab/' + encodeURIComponent(s.id) + '">분석·비교 보기<i class="ph ph-caret-right" aria-hidden="true"></i></a>' : '') + '</div>' +
-          (visible.length ? '<div class="vz-song-select-row"><label><input type="checkbox" data-all aria-label="녹음 전체선택"> <span data-all-label>전체선택</span></label><div class="vz-song-selection-actions"><span data-selected-count>선택 0개</span></div></div><div class="vz-song-media-list" data-r data-song-media></div><button type="button" class="btn secondary block vz-song-more-rows" data-more-rows hidden></button>' : VZ.empty('waveform', '이 곡의 녹음이 없어요.', '<a class="btn sm" href="#/record?song=' + encodeURIComponent(s.id) + '">녹음 시작</a>'));
+        // Nothing is ticked to begin with, and there are no boxes until 선택 is pressed (선택 모드: 전체선택, the row boxes
+        // and 보컬 분석하기 once recordings are chosen; 완료 leaves it). The 곡 분석 link is always here.
+        body.innerHTML = '<div class="vz-song-section"><div class="vz-song-section-title"><h2>녹음 <span>' + visible.length + '</span></h2>' + (visible.length ? '<button type="button" class="vz-song-select-toggle" data-select-mode aria-pressed="false">선택</button>' : '') + '</div>' + (visible.length ? '<a class="vz-song-lab" href="#/growth-song/' + encodeURIComponent(s.id) + '">곡 분석<i class="ph ph-caret-right" aria-hidden="true"></i></a>' : '') + '</div>' +
+          (visible.length ? '<div class="vz-song-select-row" data-select-row hidden><label><input type="checkbox" data-all aria-label="녹음 전체선택"> <span data-all-label>전체선택</span></label><div class="vz-song-selection-actions"><span data-selected-count>선택 0개</span></div></div><div class="vz-song-media-list" data-r data-song-media></div><button type="button" class="btn secondary block vz-song-more-rows" data-more-rows hidden></button>' : VZ.empty('waveform', '이 곡의 녹음이 없어요.', '<a class="btn sm" href="#/record?song=' + encodeURIComponent(s.id) + '">녹음 시작</a>'));
         const host = body.querySelector('[data-song-media]');
         if (host) {
           const all = body.querySelector('[data-all]'), allLabel = body.querySelector('[data-all-label]'), more = body.querySelector('[data-more-rows]');
+          const modeButton = body.querySelector('[data-select-mode]'), selectRow = body.querySelector('[data-select-row]');
+          const setSelecting = on => {
+            songSelecting = on;
+            host.toggleAttribute('data-selecting', on); selectRow.hidden = !on;
+            modeButton.textContent = on ? '완료' : '선택'; modeButton.setAttribute('aria-pressed', String(on));
+            if (!on) { VZ.mediaSelection?.clear(); selectionTouched = false; syncMedia?.(); }
+          };
+          modeButton.onclick = () => setSelecting(!songSelecting);
           const decorate = (row, item) => {
-            // On the song's own page its title is not repeated: "곡 제목 2026-11-01" reads "2026-11-01".
+            // The row says what the recording is (녹음 유형, or 공연) and, after it, its own short name when it has one: on
+            // the song's page the song title is not repeated, and a name that is only the date says nothing the line under
+            // it does not ("곡 제목 2026-11-01" → "곡 녹음"; "곡 제목 2026-11-09 2" → "곡 녹음 2"; "갈라 리허설" stays).
             const name = row.querySelector('.vz-record-name'), label = M.label(item), title = (VZ.song(s.id) || s).title;
-            const rest = title && label.startsWith(title) ? label.slice(title.length).replace(/^[\s·\-–—_,:]+/, '') : '';
-            if (rest) { name.textContent = rest; name.title = label; }
-            // The chip is the 녹음 유형 (곡 녹음 · 레슨 녹음 · 트레이닝 · 연습실), or 공연 when the recording carries that tag. It
-            // says "기록" and opens the record only when a lesson or practice record really holds this recording.
-            const kind = M.recordingCategory(item), record = linked(item);
-            const chip = document.createElement('span');
-            chip.className = 'vz-song-kind ' + (M.isPerformance(item) ? 'performance' : (record ? record.kind : kind) === 'lesson' ? 'lesson' : 'practice');
-            chip.textContent = M.isPerformance(item) ? '공연' : record ? (record.kind === 'lesson' ? '레슨 기록' : '연습 기록') : M.recordingTypeName(kind);
-            if (record) { chip.dataset.linkedRecord = item.id; chip.tabIndex = 0; chip.setAttribute('role','button'); chip.setAttribute('aria-label',chip.textContent+' 보기'); chip.addEventListener('keydown',e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chip.click(); } }); }
-            row.querySelector('.item-title').append(chip);
+            const rest = (title && label.startsWith(title) ? label.slice(title.length) : label).replace(/^[\s·\-–—_,:]+/, '').trim();
+            const dated = rest.match(/^\d{4}[-.]\d{1,2}[-.]\d{1,2}(?:\s+(\d+))?$/);
+            const short = dated ? dated[1] || '' : rest === title ? '' : rest;
+            const kind = M.recordingCategory(item), record = linked(item), word = M.recordingTypeName(kind);
+            name.textContent = word + (short ? (dated ? ' ' : ' · ') + short : ''); name.title = label;
+            // The date line keeps the date, length and the rest; the 녹음 유형 is in the title now, 공연 in a chip.
+            const sub = row.querySelector('.item-sub');
+            if (sub) sub.textContent = sub.textContent.split(' · ').map(part => part === word + '·가져옴' ? '가져옴' : part).filter(part => part !== word && part !== '공연').join(' · ');
+            // Chips: 공연 when the recording carries that tag; 연습 기록 · 레슨 기록 only when a record really holds it
+            // (the 녹음 screen opens that record).
+            const chip = (cls, text) => { const c = document.createElement('span'); c.className = 'vz-song-kind ' + cls; c.textContent = text; row.querySelector('.item-title').append(c); };
+            if (M.isPerformance(item)) chip('performance', '공연');
+            if (record) chip(record.kind, record.kind === 'lesson' ? '레슨 기록' : '연습 기록');
+            const chev = row.querySelector('.chev'); if (chev) chev.className = 'ph ph-caret-right chev';
+            row.querySelector('[data-toggle]')?.removeAttribute('aria-expanded');
           };
           const add = items => {
             host.insertAdjacentHTML('beforeend', items.map(VZ.mediaRow).join(''));
@@ -944,14 +967,15 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
             shown += items.length; add(items); built = signature(mediaList, shown);
             M.prefetch(items); sync();
           };
+          // A row opens the 녹음 screen (#/take/<id>, app/recording-detail.js: player, 분석 결과, 연습 기록, ⋯ menu); 뒤로 comes
+          // back to these rows at the same place. In 선택 모드 a row ticks itself instead.
           host.addEventListener('click', e => {
-            const chip = e.target.closest('[data-linked-record]');
-            if (!chip) return;
+            const toggle = e.target.closest('[data-toggle]'), row = toggle?.closest('[data-media]');
+            if (!toggle || !row || !host.contains(row) || e.target.closest('.vz-media-select')) return;
             e.preventDefault(); e.stopImmediatePropagation();
-            const item = mediaList.find(m => String(m.id) === chip.dataset.linkedRecord), record = item && linked(item);
-            if (!record) return;
-            const title = record.kind === 'lesson' ? '레슨 기록' : '연습 기록';
-            VZ.sheet({title, body:'<div class="vz-song-linked-sheet"><p class="small muted">'+esc(VZ.dateLabel(record.date))+' · '+esc((VZ.song(s.id) || s).title)+'</p><strong>'+esc([record.minutes,record.rating].filter(Boolean).join(' · ') || title)+'</strong><div class="vz-song-linked-note">'+esc(record.summary)+'</div></div>'});
+            if (songSelecting) { row.querySelector('.vz-media-select')?.click(); return; }
+            songBack = {id:s.id, shown, y:window.scrollY};
+            VZ.nav('#/take/' + encodeURIComponent(row.dataset.media));
           }, true);
           host.addEventListener('click', e => { if (e.target.closest('.vz-media-select, [data-toggle]')) { selectionTouched = true; setTimeout(sync, 0); } }, true);
           add(mediaList.slice(0, shown));
@@ -963,7 +987,9 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
             const near = new IntersectionObserver(entries => { if (!entries.some(e => e.isIntersecting)) return; grow(); near.unobserve(more); if (shown < mediaList.length) near.observe(more); }, {rootMargin:'600px 0px'});
             near.observe(more); watcher = near;
           }
-          syncMedia = sync; sync();
+          syncMedia = sync;
+          if (songSelecting) setSelecting(true); // a redraw keeps 선택 모드
+          sync();
         } else syncMedia = null;
         VZ.mediaSelection?.showSongAction();
         return;
@@ -987,7 +1013,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       else if (songTab === 'lyrics') {
         const current = VZ.song(s.id) || s;
         const fields = [['lyrics','가사 원문',30000,11],['translation','한글 해석 / 번역',30000,8],['lyricNotes','발음 / 호흡 / 감정 메모',12000,7]];
-        const preview = value => String(value || '').trim().replace(/\s+/g,' ').slice(0,180) || '입력한 내용이 없습니다';
+        const preview = value => String(value || '').trim().replace(/\s+/g,' ').slice(0,180) || '아직 적은 내용이 없어요';
         // 가사 외우기 (app/lyrics-memo.js) takes over the tab while open; it only writes songs[].lyricsMemo.
         if (VZ.lyricsMemo?.isOpen(s.id)) { VZ.lyricsMemo.render(body, current, {onClose:draw}); return; }
         const memoEntry = VZ.lyricsMemo ? VZ.lyricsMemo.entry(current) : '', memoFirst = !!(String(current.lyrics || '').trim() || String(current.translation || '').trim());
@@ -1027,10 +1053,11 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     // The tab bar sticks to the top: a tab chosen further down starts its list right under the bar.
     main.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
       VZ.mediaSelection?.hideSongAction();
-      songTab = b.dataset.tab; selectionTouched = false; shown = PAGE; built = ''; watcher?.disconnect(); watcher = null; draw();
+      songTab = b.dataset.tab; selectionTouched = false; songSelecting = false; shown = PAGE; built = ''; watcher?.disconnect(); watcher = null; draw();
       // Keep the user's current scroll position when changing tabs.
     });
     draw();
+    if (returning) requestAnimationFrame(() => { if (body.isConnected) window.scrollTo(0, back.y || 0); });
     // 레슨 지적 체크 (app/score-points.js): its card redraws itself.
     VZ.scorePoints?.card(main.querySelector('[data-score-points]'), s.id);
     // Data from another device arrives as vzip:data-changed. This screen is not re-rendered in the background (selection,

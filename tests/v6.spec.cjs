@@ -218,10 +218,12 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  await expect(page.locator('.vl-report')).toHaveCount(1);
  await page.locator('.vl-report').click();
  await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
- // The song page holds no lab content of its own: one link in the 녹음 heading leads to the lab (nothing is ticked by default any more).
+ // The song page holds no lab content of its own: the hero's 곡 분석 and the 녹음 heading's 곡 분석 lead to the song's
+ // 곡 분석 screen (nothing is ticked by default any more).
  await page.goto('/#/song/s1');
- await expect(page.locator('#view [href^="#/vocal-lab/"]')).toHaveCount(1);
- await expect(page.locator('#view .vz-song-lab')).toHaveAttribute('href', '#/vocal-lab/s1');
+ await expect(page.locator('#view [href^="#/vocal-lab/"]')).toHaveCount(0);
+ await expect(page.locator('#view [href="#/growth-song/s1"]')).toHaveCount(2);
+ await expect(page.locator('#view .vz-song-lab')).toHaveAttribute('href', '#/growth-song/s1');
  await expect(page.locator('#view .vl-player, #view .vl-dates')).toHaveCount(0);
 });
 
@@ -2184,26 +2186,25 @@ test('Song detail shows real growth, recording selection and analysis handoff', 
   await expect(page.getByRole('tab', {name:'녹음'})).toHaveAttribute('aria-selected','true');
   await expect(page.getByRole('tab', {name:'레슨'})).toHaveCount(0);
   await expect(page.locator('.vz-song-media-list [data-media]')).toHaveCount(2);
+  // No boxes until 선택: then 전체선택 and a box on each row; a row tapped in 선택 모드 ticks (it does not open).
   const all = page.getByRole('checkbox', {name:'녹음 전체선택'});
+  await expect(all).toBeHidden();
+  await page.locator('[data-select-mode]').click();
   await all.check();
   await expect(page.locator('[data-selected-count]')).toHaveText('선택 2개');
   const firstRow=page.locator('.vz-song-media-list [data-media]').first();
   const checkbox=firstRow.locator('.vz-media-select');
   const rowButton=firstRow.locator('[data-toggle]');
   await expect(rowButton).toHaveCSS('background-color','rgb(255, 255, 255)');
-  await rowButton.click();
-  await expect(rowButton).toHaveAttribute('aria-expanded','true');
-  await expect(firstRow.locator('.media-open')).toBeVisible();
   await expect(checkbox).toHaveAttribute('aria-pressed','true');
-  await checkbox.click();
+  await rowButton.click();
+  await expect(page).toHaveURL(/#\/song\/s1$/);
   await expect(checkbox).toHaveAttribute('aria-pressed','false');
   await expect(all).not.toBeChecked();
   await expect(page.locator('[data-selected-count]')).toHaveText('선택 1개');
-  await expect(rowButton).toHaveAttribute('aria-expanded','true');
   await expect(rowButton).toHaveCSS('background-color','rgb(255, 255, 255)');
   await checkbox.click();
   await expect(checkbox).toHaveAttribute('aria-pressed','true');
-  await expect(rowButton).toHaveAttribute('aria-expanded','true');
   await expect(page.getByRole('button', {name:'보컬 분석하기'})).toBeEnabled();
   await page.getByRole('button', {name:'보컬 분석하기'}).click();
   await expect(page).toHaveURL(/#\/growth-song\/s1\?selection=1$/);

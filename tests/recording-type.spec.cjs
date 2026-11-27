@@ -49,10 +49,13 @@ test('녹음 유형 is written with the same words in the tabs, the rows, 정보
     await page.evaluate(() => VZ.closeSheets());
   }
 
-  // 곡 상세 › 녹음: the chip says the type (or 공연), "기록" only when a record holds the recording.
+  // 곡 상세 › 녹음: the row title starts with the type (the same words); 공연 is a chip, "기록" a chip only when a record
+  // holds the recording.
   await page.goto('/#/song/s1');
-  const chip = id => page.locator('.vz-song-media-list [data-media="' + id + '"] .vz-song-kind');
-  await expect(chip('row-song-s1')).toHaveText('곡 녹음');
+  const songRow = id => page.locator('.vz-song-media-list [data-media="' + id + '"]');
+  const chip = id => songRow(id).locator('.vz-song-kind');
+  await expect(songRow('row-song-s1').locator('.vz-record-name')).toHaveText(/^곡 녹음/);
+  await expect(chip('row-song-s1')).toHaveCount(0);
   await expect(chip('row-performance')).toHaveText('공연');
   await expect(chip('row-practice-song')).toHaveText('연습 기록');
 });

@@ -24,7 +24,8 @@ const stored = (page, id) => page.evaluate(id => window.__rows[id] || null, id);
 const fresh = async (page, hash) => { await page.goto('/#/home'); await page.goto('/' + hash); };
 const SCREENS = {
   '전체 녹음':async (page, id) => { await fresh(page, '#/library'); const row = page.locator('.lib-record[data-media="' + id + '"]'); await row.locator('[data-toggle]').click(); return row.locator('[data-lib-row-more]'); },
-  '곡 상세 › 녹음':async (page, id) => { await fresh(page, '#/song/s1'); const row = page.locator('.vz-song-media-list [data-media="' + id + '"]'); await row.locator('[data-toggle]').click(); return row.locator('[data-media-more]'); },
+  // 곡 상세 › 녹음: a row opens the recording's 녹음 screen (#/take/<id>), whose top bar has the ⋯.
+  '곡 상세 › 녹음':async (page, id) => { await fresh(page, '#/song/s1'); const row = page.locator('.vz-song-media-list [data-media="' + id + '"]'); await row.locator('[data-toggle]').click(); await expect(page).toHaveURL(new RegExp('#/take/' + id + '$')); await expect(page.locator('[data-recd-tiles], [data-recd-none]')).toHaveCount(1); return page.locator('#top [data-recd-more]'); },
   '녹음 재생':async (page, id) => { await fresh(page, '#/recording/' + id); return page.locator('[data-recording] [data-media-more]'); },
   '곡 확인':async (page, id) => { await fresh(page, '#/song-suggest'); return page.locator('.vz-sc-record').filter({hasText:'유형 ' + id}).locator('.vz-sc-menu'); }
 };

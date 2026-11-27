@@ -1,0 +1,88 @@
+/* 녹음 화면 (#/take/<id>, app/recording-detail.js): white cards on the lavender canvas, purple only. */
+body[data-vz-route="take"]{background:var(--vz-color-canvas,#F7F5FB);color:#101828}
+body[data-vz-route="take"] .v-app{max-width:560px;margin:auto;padding:max(8px,env(safe-area-inset-top)) 16px calc(var(--vz-nav-stack,90px) + 40px)}
+body[data-vz-route="take"] #view{padding:0}
+/* ‹ · 녹음 · ⋯ — the title in the middle, 17px. */
+body[data-vz-route="take"] #top{position:relative;display:flex;align-items:center;justify-content:space-between;min-height:56px;margin:0 -4px 6px;padding:0;background:transparent;border:0;box-shadow:none}
+body[data-vz-route="take"] #top .v-top-left{position:static}
+body[data-vz-route="take"] #top h1{position:absolute;left:56px;right:56px;top:50%;transform:translateY(-50%);margin:0;text-align:center;font-size:17px;line-height:24px;font-weight:800;color:#101828;pointer-events:none}
+body[data-vz-route="take"] #top .icon-btn{display:grid;place-items:center;min-width:44px;min-height:44px;border:0;background:transparent;color:#101828}
+body[data-vz-route="take"] #top .icon-btn i{font-size:22px;color:#101828}
+body[data-vz-route="take"] #top [data-recd-more] i{color:#667085}
+
+.vz-recd{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0}
+.vz-recd-loading{margin:24px 4px;color:#667085;font-size:14px}
+.vz-recd-card{box-sizing:border-box;min-width:0;padding:16px;border-radius:22px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.05),0 8px 24px rgba(59,15,140,.06)}
+.vz-recd-h{margin:0;font-size:17px;line-height:24px;font-weight:800;color:#101828}
+
+/* 카드 1: chips, title, the line under it, waveform, ▶, 내 만족도 */
+.vz-recd-chips{display:flex;flex-wrap:wrap;gap:6px}
+.vz-recd-chip{display:inline-flex;align-items:center;min-height:26px;padding:0 9px;border-radius:99px;background:#F6F3FB;color:#667085;font-size:13px;font-weight:700;white-space:nowrap}
+.vz-recd-chip.is-kind{background:#EFE8FC;color:#5B1FC2;font-weight:800}
+.vz-recd-title{margin:8px 0 0;font-size:20px;line-height:28px;font-weight:900;letter-spacing:-.02em;color:#101828;overflow-wrap:anywhere}
+.vz-recd-meta{margin:2px 0 0;font-size:13px;line-height:19px;color:#667085;overflow-wrap:anywhere}
+.vz-recd-wave{position:relative;display:flex;align-items:center;justify-content:space-between;gap:2px;height:46px;margin:12px 0 4px}
+.vz-recd-wave>span{flex:1 1 0;min-width:1px;max-width:4px;border-radius:2px;background:#D9C6FF}
+.vz-recd-wave>span.on{background:#7A32F5}
+.vz-recd-wave.is-track>span.vz-recd-track{flex:1;max-width:none;height:6px;border-radius:99px;background:#EFE8FC;overflow:hidden}
+.vz-recd-track>span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#9A5BFF,#7A32F5)}
+/* The waveform is the seek bar: a native range over it (touch, keys, screen readers), invisible. */
+.vz-recd-wave input{position:absolute;inset:-6px 0;width:100%;height:calc(100% + 12px);margin:0;opacity:0;cursor:pointer}
+.vz-recd-wave input:focus-visible{opacity:.001}
+.vz-recd-wave:has(input:focus-visible){outline:2px solid #DCC4FF;outline-offset:4px;border-radius:8px}
+.vz-recd-times{display:flex;justify-content:space-between;font-size:13px;line-height:18px;color:#7D8597;font-variant-numeric:tabular-nums}
+.vz-recd-controls{display:flex;align-items:center;justify-content:center;gap:26px;margin-top:8px}
+.vz-recd-skip{display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:99px;background:transparent;color:#667085;font-size:18px;cursor:pointer}
+.vz-recd-skip:disabled{color:#D0D5DD;cursor:default}
+.vz-recd-controls.is-single .vz-recd-skip{visibility:hidden}
+.vz-recd-play{display:grid;place-items:center;width:52px;height:52px;padding:0;border:0;border-radius:99px;background:linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%);color:#fff;font-size:20px;box-shadow:0 8px 18px rgba(122,50,245,.3);cursor:pointer}
+.vz-recd-play:active{transform:scale(.96)}
+.vz-recd-skip:focus-visible,.vz-recd-play:focus-visible,.vz-recd-rating:focus-visible,.vz-recd-soft:focus-visible,.vz-recd-row:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px}
+/* M.player underneath: only its message (불러오는 중 · 재생할 수 없어요 …) shows. */
+.vz-recd-engine .player-row{display:none}
+.vz-recd-engine .player{padding:0;margin:0;background:none;border:0}
+.vz-recd-engine [data-msg]{margin:6px 0 0;text-align:center;font-size:12px;color:#667085}
+.vz-recd-engine [data-msg]:empty{display:none}
+.vz-recd-engine video{display:block;width:100%;max-height:240px;margin-top:10px;border-radius:14px;background:#101828}
+.vz-recd-rating{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:44px;margin-top:12px;padding:8px 0 0;border:0;border-top:1px solid #F2EFF7;background:transparent;font:inherit;text-align:left;cursor:pointer}
+.vz-recd-rating-label{font-size:13px;color:#667085}
+.vz-recd-rating-label small{margin-left:4px;font-size:12px;color:#98A2B3}
+.vz-recd-stars{color:#7A32F5;letter-spacing:3px;font-size:16px}
+.vz-recd-stars .off{color:#E6DDF6}
+.vz-recd-stars-empty{font-size:13px;color:#98A2B3}
+.vz-recd-review{margin:6px 0 0;padding:10px 12px;border-radius:12px;background:#F6F3FB;font-size:13px;line-height:19px;color:#475467;white-space:pre-wrap;overflow-wrap:anywhere}
+.vz-recd-review[hidden]{display:none}
+
+/* 분석 결과 */
+.vz-recd-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:12px}
+.vz-recd-tile{min-width:0;padding:9px 10px;border-radius:12px;background:#F6F3FB}
+.vz-recd-tile span{display:block;font-size:13px;line-height:18px;color:#667085}
+.vz-recd-tile strong{display:block;margin-top:2px;font-size:14px;line-height:20px;font-weight:800;color:#101828;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vz-recd-buttons{display:flex;gap:8px;margin-top:12px}
+.vz-recd-soft{flex:1;display:flex;align-items:center;justify-content:center;min-width:0;min-height:44px;padding:0 10px;border:0;border-radius:14px;background:#EFE8FC;color:#5B1FC2;font:inherit;font-size:14px;font-weight:800;text-align:center;text-decoration:none;cursor:pointer}
+.vz-recd-soft.is-block{width:100%;margin-top:12px}
+.vz-recd-soft:active{background:#E4D8FB}
+.vz-recd-line{margin:8px 0 0;font-size:14px;line-height:20px;color:#667085}
+.vz-recd-note{margin:8px 0 0;font-size:12px;line-height:18px;color:#667085}
+
+/* 연습 기록 · 곡 분석에서 보기 · 다른 곡으로 옮기기 */
+.vz-recd-rows{padding:2px 16px}
+.vz-recd-rows[hidden]{display:none}
+.vz-recd-row{display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;min-width:0;min-height:52px;padding:14px 0;border:0;border-top:1px solid #F2EFF7;background:transparent;color:#101828;font:inherit;text-align:left;text-decoration:none;cursor:pointer}
+.vz-recd-row:first-child{border-top:0}
+.vz-recd-row strong{flex:none;font-size:15px;line-height:21px;font-weight:800}
+.vz-recd-row span{flex:1;min-width:0;font-size:13px;line-height:19px;color:#667085;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vz-recd-row i{flex:none;margin-left:auto;font-size:15px;color:#7D8597}
+
+@media(max-width:359px){
+  .vz-recd-card{padding:14px}
+  .vz-recd-rows{padding:2px 14px}
+  .vz-recd-tile{padding:8px}
+  .vz-recd-tile strong{font-size:13px}
+  .vz-recd-controls{gap:18px}
+  .vz-recd-soft{font-size:13px;padding:0 6px}
+}
+@media(min-width:768px){
+  body[data-vz-route="take"] .v-app{max-width:620px}
+}
+@media(prefers-reduced-motion:reduce){.vz-recd-play:active{transform:none}}
