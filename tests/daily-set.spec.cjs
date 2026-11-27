@@ -61,9 +61,16 @@ const to = (page, hash) => page.evaluate(h => { location.hash = h; }, hash);
 const db = page => page.evaluate(() => JSON.parse(JSON.stringify(VZ.db)));
 const section = page => page.locator('.vz-student-home [data-home-practice]');
 const card = page => section(page).locator('[data-row="practice-set"]');
+// 오늘의 연습 on home (design-system/practice-card-html.js): the large tile is the button (start / carry on / save / again),
+// the bar has one segment per step (data-state done | skipped | next | left), its aria-label starts with the set's line.
 const goButton = page => card(page).locator('[data-set-go]');
-const goText = page => goButton(page).locator('span'); // the words, without the icon glyph
-const line = page => card(page).locator('[data-set-line] li');
+const goText = page => goButton(page).locator('.vz-pc-title');
+const goMeta = page => goButton(page).locator('.vz-pc-meta');
+const line = page => card(page).locator('[data-set-bar] > i');
+const tiles = page => card(page).locator('.vz-pc-tile');
+const labels = page => tiles(page).evaluateAll(els => els.map(e => e.dataset.label));
+const reEsc = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const setLine = (page, text) => expect(card(page).locator('[data-set-bar]')).toHaveAttribute('aria-label', new RegExp('^' + reEsc(text) + '\\. '));
 const run = page => page.locator('[data-pset-run]');
 const primary = page => run(page).locator('[data-run-primary]');
 const word = page => run(page).locator('[data-run-word]');
@@ -91,7 +98,7 @@ async function holdNote(page, hold = 4) {
 async function noOverflow(page) {
   const r = await page.evaluate(() => {
     const all = [...document.querySelectorAll('#view *'), ...(document.querySelector('.vz-student-home')?.shadowRoot?.querySelectorAll('[data-home-practice] *') || [])];
-    return {wide:Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - innerWidth, over:all.filter(e => { const b = e.getBoundingClientRect(); return b.width && b.right > innerWidth + 1; }).map(e => e.className || e.tagName).slice(0, 5)};
+    return {wide:Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - innerWidth, over:all.filter(e => { const b = e.getBoundingClientRect(); return b.width && b.right > innerWidth + 1 && !e.closest('.vz-pc-tiles'); }).map(e => e.className || e.tagName).slice(0, 5)};
   });
   expect(r.wide).toBeLessThanOrEqual(1); expect(r.over).toEqual([]);
 }
@@ -114,7 +121,7 @@ async function skipTo(page, mode) {
   await expect(run(page)).toHaveAttribute('data-mode', mode);
 }
 
-test('오늘 › 오늘 연습: the 오늘의 연습 part shows its progress, "시작하면: …" with the steps unfolding as a timeline, and ONE button; the other rows stay below', async ({page}) => {
+test('오늘 › 오늘의 연습: the steps as a bar and a row of tiles, the one to do now large; every tile starts the set; nothing else below', async ({page}) => {
   await page.setViewportSize({width:390, height:844});
   const value = seed({assignments:[{id:'hw1', title:'립트릴로 고음 연결하기', status:'active', startDate:'2026-11-01', dueDate:'2026-11-08'}]});
   await boot(page, value);
@@ -122,33 +129,36 @@ test('오늘 › 오늘 연습: the 오늘의 연습 part shows its progress, "�
   // What the model builds is what the card lists.
   const built = D.build(value, {today:TODAY});
   expect(built.steps.map(s => s.id)).toEqual(['next-hw-hw1', 'ex-loosen-neck', 'ex-breath-s', 'ex-voice-hum', 'ex-ear-follow']);
-  await expect(card(page).locator('.vz-set-head strong')).toHaveText('오늘의 연습');
-  await expect(card(page).locator('.vz-set-head small')).toHaveText('5개 · 약 ' + built.minutes + '분');
+  await expect(card(page).locator('h2')).toHaveText('오늘의 연습');
+  await expect(card(page)).toHaveAttribute('data-state', 'new');
+  await setLine(page, '5개 · 약 ' + built.minutes + '분');
   await expect(line(page)).toHaveCount(5);
-  await expect(line(page).locator('.vz-set-item b')).toHaveText(['숙제', '목 풀기', '호흡', '발성', '음감 · 추천']);
-  await expect(line(page).locator('.vz-set-item span')).toHaveText(['립트릴로 고음 연결하기', '목·어깨 풀기', '“스~” 길게 내쉬기', '허밍 롱톤', '음 따라 부르기']);
-  expect(await line(page).evaluateAll(els => els.map(e => e.dataset.state))).toEqual(['next', 'left', 'left', 'left', 'left']);
-  await expect(line(page).locator('.vz-set-meta em')).toHaveText(['다음', '남음', '남음', '남음', '남음']);
-  await expect(line(page).locator('.vz-set-meta > span:not(.vz-visually-hidden)')).toHaveText(['3분', '3분', '3분', '3분', '3분']);
-  expect(await line(page).evaluateAll(els => els.map(e => !!e.querySelector('[data-mic]')))).toEqual([false, false, false, true, true]); // mic badge
-  await expect(goText(page)).toHaveText('시작하기 · 약 ' + built.minutes + '분'); // 오늘 연습: the estimated time on the button
-  await expect(goButton(page)).toHaveAccessibleName('오늘의 연습 시작하기, 5개 약 ' + built.minutes + '분, 처음 립트릴로 고음 연결하기');
+  expect(await line(page).evaluateAll(els => els.map(e => [e.dataset.state, e.dataset.look, e.style.flexGrow]))).toEqual([['next', 'next', '3'], ['left', 'rest', '3'], ['left', 'rest', '3'], ['left', 'rest', '3'], ['left', 'rest', '3']]);
+  await expect(tiles(page)).toHaveCount(5);
+  expect(await labels(page)).toEqual(['숙제', '목 풀기', '호흡', '발성', '음감 · 추천']);
+  await expect(tiles(page).locator('.vz-pc-title')).toHaveText(['립트릴로 고음 연결하기', '목·어깨 풀기', '“스~” 길게 내쉬기', '허밍 롱톤', '음 따라 부르기']);
+  await expect(tiles(page).locator('.vz-pc-meta')).toHaveText(['3분 · 눌러서 시작', '3분', '3분', '3분', '3분']);
+  expect(await tiles(page).evaluateAll(els => els.map(e => e.dataset.look))).toEqual(['now', 'step', 'step', 'step', 'step']);
+  await expect(goText(page)).toHaveText('립트릴로 고음 연결하기');
+  await expect(goButton(page)).toHaveAccessibleName('숙제 립트릴로 고음 연결하기, 3분, 눌러서 시작');
   await expect(card(page).locator('[data-set-pick]')).toHaveAccessibleName('오늘의 연습 편집');
-  await expect(card(page).locator('[data-set-pick]')).toContainText('편집');
-  // "시작하면: …" says the steps shortly; the timeline unfolds under it (collapsed at first).
-  await expect(card(page).locator('[data-set-summary]')).toHaveText('시작하면: 숙제 → 기본기 4개');
-  await expect(card(page).locator('[data-set-line]')).toBeHidden();
-  await card(page).locator('[data-set-summary]').click();await expect(card(page).locator('[data-set-line]')).toBeVisible();
-  // One card, then the small rows; the old 연습 세트 row is not there a second time.
-  expect(await section(page).locator('[data-row]').evaluateAll(els => els.map(e => [e.dataset.row, e.tagName]))).toEqual([['practice-set', 'DIV'], ['voice-check', 'BUTTON'], ['roadmap', 'BUTTON'], ['weekly-review', 'BUTTON']]);
-  await expect(section(page).locator('.vz-practice-row strong')).toHaveText(['매일 보이스 체크', '내 로드맵', '주간 돌아보기']);
+  await expect(card(page).locator('[data-set-pick]')).toHaveText('편집');
+  // The old timeline, "시작하면: …", the one big button and the small rows are gone.
+  await expect(card(page).locator('[data-set-summary],[data-set-line],.vz-set-go,.vz-practice-row')).toHaveCount(0);
+  expect(await section(page).locator('[data-row]').evaluateAll(els => els.map(e => [e.dataset.row, e.tagName]))).toEqual([['practice-set', 'DIV']]);
   expect(await page.evaluate(() => document.querySelector('.vz-student-home').shadowRoot.querySelector('main').innerText.split('연습 세트').length - 1)).toBe(0);
-  expect((await goButton(page).boundingBox()).height).toBeGreaterThanOrEqual(56);
   await targets(card(page).locator('button'));
+  // The large tile twinkles softly (decoration only).
+  expect(await goButton(page).locator('.vz-tw').count()).toBe(5);
   for (const [width, height] of [[320, 640], [390, 844], [820, 1180], [1180, 820]]) { await page.setViewportSize({width, height}); await noOverflow(page); }
   // Reading home writes nothing.
   expect(await db(page)).toEqual(before);
   expect(await page.evaluate(() => Object.keys(localStorage).filter(k => k.includes('practice_set_live')).length)).toBe(0);
+  // A small tile starts the set too (at its first step, as the card's one button did).
+  await page.setViewportSize({width:390, height:844});
+  await tiles(page).nth(3).click();
+  await expect(run(page)).toBeVisible();
+  await expect(say(page)).toHaveText('립트릴로 고음 연결하기');
 });
 
 test('a whole set on the doing screen: timer, paced breathing, held notes with word feedback, then ONE practice row that 이번 달 picks up', async ({page}) => {
@@ -282,9 +292,10 @@ test('a whole set on the doing screen: timer, paced breathing, held notes with w
   await page.clock.resume();
   await to(page, '#/home'); await ready(page);
   await expect(card(page)).toHaveAttribute('data-state', 'done');
-  await expect(card(page).locator('.vz-set-head small')).toHaveText('오늘 연습 끝 · ' + minutes + '분');
+  await expect(card(page).locator('[data-set-done]')).toHaveText('오늘 연습 끝 · ' + minutes + '분');
   expect(await line(page).evaluateAll(els => els.map(e => e.dataset.state))).toEqual(['done', 'done', 'done', 'done']);
   await expect(goText(page)).toHaveText('한 번 더 하기');
+  await expect(tiles(page)).toHaveCount(1); // done steps leave the row (none of them is a goal)
   await to(page, '#/growth');
   await expect(page.locator('[data-gm-section="done"] [data-gm-tile="minutes"] strong')).toHaveText(minutes + '분');
   expect(await page.evaluate(() => VZ.todayPractice().minutes)).toBeCloseTo(row.minutes, 1);
@@ -299,8 +310,8 @@ test('leaving in the middle keeps today\'s progress: 이어서 하기 comes back
   await ready(page);
   await expect(page.locator('body')).not.toHaveClass(/vz-set-run/);
   await expect(card(page)).toHaveAttribute('data-state', 'live');
-  await expect(card(page).locator('.vz-set-head small')).toHaveText('0 / 4 · 약 12분');
-  await expect(goText(page)).toHaveText('이어서 하기 · 목·어깨 풀기');
+  await setLine(page, '0 / 4 · 약 12분');
+  await expect(goText(page)).toHaveText('목·어깨 풀기');await expect(goMeta(page)).toHaveText('3분 · 이어서 하기');
   await expect(page.locator('.pset-mini')).toBeHidden(); // an exercise is never timed away from its screen
   await elapse(page, 900);
   await goButton(page).click();
@@ -324,10 +335,11 @@ test('leaving in the middle keeps today\'s progress: 이어서 하기 comes back
   await expect(run(page)).toHaveAttribute('data-state', 'ready');
   await run(page).locator('[data-run-exit]').click();
   await ready(page);
-  await expect(card(page).locator('.vz-set-head small')).toHaveText('1 / 4 · 약 12분');
-  expect(await line(page).evaluateAll(els => els.map(e => e.dataset.state))).toEqual(['done', 'next', 'left', 'left']);
-  await expect(line(page).locator('.vz-set-meta em')).toHaveText(['완료', '다음', '남음', '남음']);
-  await expect(goText(page)).toHaveText('이어서 하기 · “스~” 길게 내쉬기');
+  await setLine(page, '1 / 4 · 약 12분');
+  expect(await line(page).evaluateAll(els => els.map(e => [e.dataset.state, e.dataset.look]))).toEqual([['done', 'done'], ['next', 'next'], ['left', 'rest'], ['left', 'rest']]);
+  // The done step leaves the row of tiles; the next one is the large tile.
+  await expect(tiles(page).locator('.vz-pc-title')).toHaveText(['“스~” 길게 내쉬기', '허밍 롱톤', '음 따라 부르기']);
+  await expect(goText(page)).toHaveText('“스~” 길게 내쉬기');await expect(goMeta(page)).toHaveText('3분 · 이어서 하기');
   await goButton(page).click();
   await expect(count(page)).toHaveText('2 / 4');
   // Stop here: the summary has the real seconds — 60 + 166 of the first step, 20 of the second — and nothing else.
@@ -448,11 +460,11 @@ test('편집: ONE screen — a built-in row says which exercises take turns or r
   expect(row).toHaveLength(1); expect(row[0].groupsOff).toEqual({});
   // The card follows at once, and tomorrow's 목 풀기 is 허밍 again (after ① 보이스 체크, on by default with no check saved).
   await to(page, '#/home');
-  await expect(line(page).first().locator('.vz-set-item span')).toHaveText('보이스 체크 30초');
-  await expect(line(page).nth(1).locator('.vz-set-item span')).toHaveText('허밍');
+  await expect(tiles(page).first().locator('.vz-pc-title')).toHaveText('보이스 체크 30초');
+  await expect(tiles(page).nth(1).locator('.vz-pc-title')).toHaveText('허밍');
   await page.clock.setFixedTime(new Date('2026-11-05T09:00:00.000Z'));
   await page.reload(); await ready(page);
-  await expect(line(page).nth(1).locator('.vz-set-item span')).toHaveText('허밍');
+  await expect(tiles(page).nth(1).locator('.vz-pc-title')).toHaveText('허밍');
 });
 
 test('연습 전후 30초 녹음: turned on in 고르기, saved as practice recordings linked to the set, then 가리고 듣기 for the pair', async ({page}) => {
@@ -487,7 +499,7 @@ test('연습 전후 30초 녹음: turned on in 고르기, saved as practice reco
   await expect(page.locator('.pset-plan .pset-row[data-kind="take"]')).toHaveCount(2);
   await to(page, '#/home');
   await expect(line(page)).toHaveCount(6);
-  await expect(line(page).first()).toContainText('연습 전 30초 녹음'); await expect(line(page).last()).toContainText('연습 후 30초 녹음');
+  await expect(tiles(page).first()).toContainText('연습 전 30초 녹음'); await expect(tiles(page).last()).toContainText('연습 후 30초 녹음');
   await start(page);
   // Before the first step: a take, up to 30 seconds. It is not started by itself.
   await expect(count(page)).toHaveText('1 / 6');
@@ -544,10 +556,10 @@ test('곡: the set ends with 곡에 적용하기 and an optional 녹음, the doi
     scoreAnnotations:[{id:'point:pt1', kind:'score-point', songId:'s1', text:'호흡을 끊지 않기', measures:{from:3, to:4}, created:1}]}));
   // The latest practised song, as 오늘 연습 세트 ended (a running monthly plan's song comes first: tests/daily-set-model.test.cjs).
   await expect(line(page)).toHaveCount(6);
-  await expect(line(page).locator('.vz-set-item b')).toHaveText(['목 풀기', '호흡', '발성', '음감 · 추천', '곡', '녹음']);
-  await expect(line(page).locator('.vz-set-item span').nth(4)).toHaveText('곡에 적용하기 · This Is the Moment');
-  await expect(line(page).nth(4).locator('.vz-set-meta > span:not(.vz-visually-hidden)')).toHaveText('10분');
-  await expect(card(page).locator('.vz-set-head small')).toHaveText('6개 · 약 25분');
+  expect(await labels(page)).toEqual(['목 풀기', '호흡', '발성', '음감 · 추천', '곡', '녹음']);
+  await expect(tiles(page).nth(4).locator('.vz-pc-title')).toHaveText('곡에 적용하기 · This Is the Moment');
+  await expect(tiles(page).nth(4).locator('.vz-pc-meta')).toHaveText('10분');
+  await setLine(page, '6개 · 약 25분');
   await noOverflow(page);
   await start(page);
   for (let i = 0; i < 4; i++) await run(page).locator('[data-run-skip]').click();
@@ -640,7 +652,9 @@ test('a finished set on 오늘: a step under a minute says its seconds, not "0�
     dailySet:{v:1, minutes:2.5, items:[item('a', '허밍 롱톤', 30), item('b', '립트릴', 120), item('c', '“스~” 길게', 0, 'skipped')]}}];
   await boot(page, value);
   await expect(card(page)).toHaveAttribute('data-state', 'done');
-  await expect(line(page).locator('.vz-set-meta > span:not(.vz-visually-hidden)')).toHaveText(['30초', '2분', '0분']);
+  await expect(card(page).locator('[data-set-done]')).toHaveText('오늘 연습 끝 · 3분');
+  // The bar says each step with its time: seconds under a minute, never "0분" for 30 seconds.
+  await expect(card(page).locator('[data-set-bar]')).toHaveAttribute('aria-label', '오늘 연습 끝 · 3분. 허밍 롱톤 30초 완료, 립트릴 2분 완료, “스~” 길게 0분 건너뜀');
 });
 
 test('소리 안내: on a hold, 2 s with no note heard says why — nothing reaches the mic, too quiet, — and goes once a note is heard', async ({page}) => {
@@ -806,10 +820,10 @@ test('① 보이스 체크 30초: first in the full set only while no check is s
   expect(built.steps.map(s => s.id)).toEqual(['voice-check', 'ex-loosen-neck', 'ex-breath-s', 'ex-voice-hum', 'ex-ear-follow']);
   expect(built.minutes).toBe(D.build(value, {today:TODAY}).minutes + 1);
   await boot(page, value);
-  await expect(card(page).locator('.vz-set-head small')).toHaveText('5개 · 약 ' + built.minutes + '분');
-  await expect(card(page).locator('[data-set-summary]')).toHaveText('시작하면: 보이스 체크 30초 → 기본기 4개');
-  await expect(line(page).first().locator('.vz-set-item b')).toHaveText('보이스 체크');
-  await expect(line(page).first().locator('.vz-set-item span')).toHaveText('보이스 체크 30초');
+  await setLine(page, '5개 · 약 ' + built.minutes + '분');
+  // The voice check is the first tile (매일 보이스 체크 is no row of home any more: this step is the way to it).
+  expect((await labels(page))[0]).toBe('보이스 체크');
+  await expect(goText(page)).toHaveText('보이스 체크 30초');
   // 편집 › its row › 보이스 체크 빼기: kept in the one 고르기 row; the card follows.
   await card(page).locator('[data-set-pick]').click();
   const plan = page.locator('.pset-plan');
@@ -819,7 +833,7 @@ test('① 보이스 체크 30초: first in the full set only while no check is s
   await expect(plan.locator('.pset-row[data-kind="voice-check"]')).toHaveCount(0);
   expect((await db(page)).practicePlans.find(p => p.id === 'daily-set-prefs').groupsOff).toEqual({rhythm:true, 'voice-check':true});
   await to(page, '#/home');
-  await expect(line(page).first().locator('.vz-set-item span')).toHaveText('목·어깨 풀기');
+  await expect(goText(page)).toHaveText('목·어깨 풀기');
   // 연습 추가 › 보이스 체크 30초 · 다시 넣기.
   await card(page).locator('[data-set-pick]').click();
   await plan.locator('[data-add]').click();
@@ -830,7 +844,7 @@ test('① 보이스 체크 30초: first in the full set only while no check is s
   await page.evaluate(d => VZ.change(db => { db.practices.push({id:'voice-check:t0', date:d, minutes:.5, manualMinutes:.5, practiceMode:'training', practiceTimeSource:'voice-check', voiceCheck:{v:1, selfRating:4, at:Date.now()}}); }, {silent:true}), TODAY);
   await to(page, '#/home');
   await expect(line(page)).toHaveCount(4);
-  await expect(card(page).locator('[data-set-summary]')).toHaveText('시작하면: 기본기 4개');
+  expect(await labels(page)).toEqual(['목 풀기', '호흡', '발성', '음감 · 추천']);
 });
 
 test('① 보이스 체크 30초: 뒤로 leaves it open, then the check saves and the set goes on; its row keeps its minutes, the set row counts none of them; 목 상태 2 turns 곡에 적용하기 quiet', async ({page}) => {

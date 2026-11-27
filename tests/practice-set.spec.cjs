@@ -84,7 +84,9 @@ const db = page => page.evaluate(() => JSON.parse(JSON.stringify(VZ.db)));
 // The 오늘의 연습 card of 오늘 › 연습하기 (it was the 오늘 연습 세트 row) and its one button.
 const entry = page => page.locator('.vz-student-home [data-home-practice] [data-row="practice-set"]');
 const goButton = page => entry(page).locator('[data-set-go]');
-const goText = page => goButton(page).locator('span'); // the words, without the icon glyph
+// 오늘의 연습 on home (design-system/practice-card-html.js): the large tile is the button; the bar's aria-label starts with the set's line.
+const goText = page => goButton(page).locator('.vz-pc-title');
+const barSays = page => entry(page).locator('[data-set-bar]');
 const rows = page => page.locator('.pset-plan .pset-row');
 // WebKit reloads on goto() to the URL it is already on: addresses change in the page.
 const to = (page, hash) => page.evaluate(h => {location.hash = h;}, hash);
@@ -134,7 +136,7 @@ test('the set list keeps the person\'s own steps under today\'s built-in ones; e
   await boot(page, pinnedSeed());
   const before = await db(page);
   await expect(entry(page)).toBeVisible();
-  await expect(entry(page)).toContainText('오늘의 연습');await expect(entry(page)).toContainText('8개');
+  await expect(entry(page)).toContainText('오늘의 연습');await expect(barSays(page)).toHaveAttribute('aria-label',/^8개 · /);
   // Reading home writes nothing.
   expect((await db(page)).practicePlans).toEqual(before.practicePlans);
   await openList(page);
@@ -276,8 +278,8 @@ test('an own step follows the clock: another app and a reload count the real tim
   await expect(run(page).locator('[data-clock-sub]')).toHaveText('목표 5분 지남 · 연습 7:30');
   await page.goto('/#/home');
   await ready(page);
-  await expect(goText(page)).toHaveText('이어서 하기 · 호흡을 길게 유지하기');await expect(goButton(page)).toHaveAccessibleName(/^오늘의 연습 이어서 하기/);
-  await expect(entry(page).locator('.vz-set-head small')).toContainText('0 / 5');
+  await expect(goText(page)).toHaveText('호흡을 길게 유지하기');await expect(goButton(page)).toHaveAccessibleName(/, 이어서 하기$/);
+  await expect(barSays(page)).toHaveAttribute('aria-label',/^0 \/ 5 · /);
   await goButton(page).click();
   await expect(run(page).locator('[data-clock]')).toHaveText('+2:30'); // the visit to home neither paused nor double counted
   // The planned time runs out while away: said plainly, the step stays, nothing is saved by itself.
@@ -342,7 +344,7 @@ test('leaving the summary keeps it; discarding writes nothing', async({page}) =>
   await page.getByRole('button',{name:'저장하지 않고 끝내기'}).click();
   await page.getByRole('button',{name:'끝내기',exact:true}).click();
   await ready(page);
-  await expect(goText(page)).toHaveText(/^시작하기 · /);
+  await expect(entry(page)).toHaveAttribute('data-state','new');await expect(goButton(page).locator('.vz-pc-meta')).toHaveText(/ · 눌러서 시작$/);
   await expect(pill(page)).toBeHidden();
   const after = await db(page);
   for (const key of ['practices','dailyGoals','assignments','practicePlans']) expect(after[key]).toEqual(before[key]);
@@ -638,8 +640,8 @@ test('a song section added on the list is kept at once for the sets to come and 
   await expect(page.locator('[name=pset-remember]')).toHaveCount(0);
   // The home card shows it now; a week later the set offers the section again.
   await to(page, '#/home'); await ready(page);
-  await expect(entry(page)).toContainText('9개');
-  await expect(entry(page).locator('[data-set-line] li').nth(7)).toContainText('This Is the Moment 0:30–1:10');
+  await expect(barSays(page)).toHaveAttribute('aria-label',/^9개 · /);
+  await expect(entry(page).locator('.vz-pc-tile').nth(7)).toContainText('This Is the Moment 0:30–1:10');
   await page.clock.setFixedTime(new Date('2026-11-11T09:00:00.000Z'));
   await page.reload(); await ready(page);
   await openList(page);

@@ -1,5 +1,6 @@
 /* 오늘 연습 — ONE list on home for today's goals and today's practice records (pure: no DOM, storage or network; also
- * loaded by Node tests). The view is design-system/today-card-html.js; home wires it (design-system/student-home-app.js).
+ * loaded by Node tests). Home's 오늘의 연습 card (design-system/practice-card-html.js) shows its 계획 list as 필수 미션;
+ * home wires it (design-system/student-home-app.js).
  *
  * A goal is "what I meant to do", a practice record "what I did" (owner, 2026-11-26). So:
  *   계획 rows  = today's goals (homework, routine and personal goals), each with the minutes of the records linked to it.

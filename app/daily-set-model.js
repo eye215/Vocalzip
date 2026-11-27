@@ -351,11 +351,12 @@ function labelOf(s){
 const shortTitle=s=>{const k=KIND[s.kind];return k&&String(s.title).startsWith(k+' · ')?String(s.title).slice(k.length+3):String(s.title);};
 /**
  * The vertical timeline of a set. steps: a built set's steps, or a session's (then `session` gives the states):
- * state 'done' | 'skipped' | 'next' (the one to do now) | 'left'.
+ * state 'done' | 'skipped' | 'next' (the one to do now) | 'left'. kind / group / goalId (when the step has them) say what
+ * the step is and which of today's goals it is (오늘's 오늘의 연습 card: its icon and 필수 미션 flag); nothing more is read.
  */
 function timeline(steps,session=null){
   const run=!!session&&session.phase!=='summary';
-  return list(steps).map((s,i)=>({id:s.id,title:shortTitle(s),label:labelOf(s)+(s.focus?' · 추천':''),minutes:Number(s.minutes)||0,mic:!!s.mic,optional:!!s.optional,
+  return list(steps).map((s,i)=>({id:s.id,kind:s.kind||'',...(s.group?{group:s.group}:{}),...(s.goalId?{goalId:s.goalId}:{}),title:shortTitle(s),label:labelOf(s)+(s.focus?' · 추천':''),minutes:Number(s.minutes)||0,mic:!!s.mic,optional:!!s.optional,
     state:!session?(i===0?'next':'left'):s.skipped?'skipped':s.done?'done':run&&i===session.index?'next':'left'}));
 }
 const progress=session=>{const n=session.steps.filter(s=>s.done||s.skipped).length;return {done:n,total:session.steps.length};};

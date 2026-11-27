@@ -137,8 +137,9 @@ test('오늘의 연습: the measuring exercises are in the set when 호흡 · �
   for (const id of ['breath-hiss', 'voice-vibrato', 'rhythm-ta']) expect(seen.has(id), id).toBe(true);
   // On the card: 호흡 with only “스~” 길게 on, and 리듬.
   await boot(page, seed({practicePlans:[{id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'breath-s':true, 'breath-pulse':true}, groupsOff:{song:true, 'voice-check':true}, replace:{}}]}));
-  const names = card(page).locator('[data-set-line] li .vz-set-item span'), labels = card(page).locator('[data-set-line] li .vz-set-item b');
-  await expect(labels).toHaveText(['목 풀기', '호흡 · 추천', '발성', '음감', '리듬']);
+  // The tiles of 오늘의 연습 on home (design-system/practice-card-html.js): data-label is the step's group.
+  const names = card(page).locator('.vz-pc-tile .vz-pc-title');
+  expect(await card(page).locator('.vz-pc-tile').evaluateAll(els => els.map(e => e.dataset.label))).toEqual(['목 풀기', '호흡 · 추천', '발성', '음감', '리듬']);
   await expect(names.nth(1)).toHaveText('“스~” 길게');
   await expect(names.nth(4)).toHaveText('“타” 따라 하기');
   // 편집 opens today's list; the 리듬 row's sheet lists its exercises, and 리듬 쉬기 takes it out of the set.
@@ -150,7 +151,7 @@ test('오늘의 연습: the measuring exercises are in the set when 호흡 · �
   await sheet.locator('[data-rest]').click();
   await expect(page.locator('.pset-row[data-step="ex-rhythm-ta"]')).toHaveCount(0);
   await to(page, '#/home');
-  await expect(labels).toHaveText(['목 풀기', '호흡 · 추천', '발성', '음감']);
+  expect(await card(page).locator('.vz-pc-tile').evaluateAll(els => els.map(e => e.dataset.label))).toEqual(['목 풀기', '호흡 · 추천', '발성', '음감']);
 });
 
 test('“스~” 길게: the mic times one continuous hiss (a 0.1 s dip does not end it), the result screen says it, the run row keeps it, 단계 starts counting', async ({page}) => {

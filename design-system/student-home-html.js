@@ -1,6 +1,6 @@
 /* Direct integration of the approved home HTML, including its circular quick action.
  * Demo scripts/dialogs stay inert; only root markup and style blocks are used. */
-import {createTodayCard,TODAY_CARD_CSS} from './today-card-html.js?v=today1-20261126';
+import {createPracticeCard,PRACTICE_CARD_CSS} from './practice-card-html.js?v=prac1-20261127';
 export const FLOATING_HOME_SOURCE = "4985592d5e93a09ba1300cf57ba4eee866db531b";
 const tokenAsset=new URL("./tokens.css?v=14",import.meta.url);
 const asset=new URL("./Vocalzip_Floating_Record_Home.html?v="+FLOATING_HOME_SOURCE.slice(0,12),import.meta.url);
@@ -183,80 +183,19 @@ const adaptations=String.raw`
 .vz-visually-hidden{position:absolute!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;border:0!important;clip:rect(0,0,0,0)!important;overflow:hidden!important;white-space:nowrap!important;}
 #vocalzip-refined-preview [role=button]{cursor:pointer;}
 #vocalzip-refined-preview [role=button]:focus-visible{outline:var(--vz-focus-width) solid var(--vz-color-focus);outline-offset:var(--vz-focus-offset);}
-#vocalzip-refined-preview .vz-event-row{min-height:var(--vz-touch-min);}
 #vocalzip-refined-preview .vz-title[role=button],#vocalzip-refined-preview .vz-song h3[role=button]{position:relative;}
 #vocalzip-refined-preview .vz-title[role=button]::after,#vocalzip-refined-preview .vz-song h3[role=button]::before{content:"";position:absolute;left:0;right:0;top:50%;height:max(100%,44px);transform:translateY(-50%);}
 #vocalzip-refined-preview .vz-card-heading{flex-wrap:wrap;}
 #vocalzip-refined-preview .vz-dday{flex:none;white-space:nowrap;}
-#vocalzip-refined-preview .vz-event-heading h2{min-width:0;}
 #vocalzip-refined-preview .vz-listen{min-width:0;white-space:normal;}
-#vocalzip-refined-preview .vz-event-content,#vocalzip-refined-preview .vz-event-heading,#vocalzip-refined-preview .vz-title,#vocalzip-refined-preview .vz-shortcut>span{min-width:0;}
-#vocalzip-refined-preview .vz-event h2{word-break:keep-all;overflow-wrap:anywhere;line-height:1.33333333;}
+#vocalzip-refined-preview .vz-title,#vocalzip-refined-preview .vz-shortcut>span{min-width:0;}
 #vocalzip-refined-preview .vz-card h2{line-height:1.44444444;}
 #vocalzip-refined-preview .vz-song{aspect-ratio:auto;}
 #vocalzip-refined-preview .vz-song h3{line-height:1.27777778;}
 #vocalzip-refined-preview .vz-time b{line-height:1.14285714;}
 #vocalzip-refined-preview .vz-day-minutes{line-height:1.45454545;}
-#vocalzip-refined-preview .vz-event-row strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 #vocalzip-refined-preview .vz-shortcut strong{min-width:0;white-space:normal;overflow-wrap:anywhere;}
-/* 지금 할 것 › "다음 연습 n개 더": the whole 다음 연습 list (#/next-practice), under the card. */
-#vocalzip-refined-preview .vz-now-more{display:flex;align-items:center;justify-content:flex-end;gap:4px;min-height:44px;margin:-8px 0 0 auto;padding:0 4px;border:0;background:none;color:var(--vz-color-accent);font:inherit;font-size:13px;font-weight:700;cursor:pointer;}
-#vocalzip-refined-preview .vz-now-more[hidden]{display:none;}
-#vocalzip-refined-preview .vz-now-more:focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:-2px;border-radius:10px;}
-/* 연습하기: one compact card of the things you do. Rows follow the Home summary rows recipe (white R20, 20px accent
- * icon, 14/20 name + state, chevron); each row is a 48px target. */
-#vocalzip-refined-preview .vz-practice{display:block;padding:14px 12px 6px 16px;border-radius:20px;background:#fff;scroll-margin-top:12px;}
-#vocalzip-refined-preview .vz-practice[hidden]{display:none;}
-#vocalzip-refined-preview .vz-practice-title{margin:0 0 4px;font-size:15px;line-height:21px;font-weight:600;color:var(--vz-color-ink,#101828);outline:none;}
-#vocalzip-refined-preview .vz-practice-row{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;margin:0;padding:0;border:0;background:none;color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;}
-#vocalzip-refined-preview .vz-practice-row+.vz-practice-row{border-top:1px solid #F2EFF7;}
-#vocalzip-refined-preview .vz-practice-row>.vz-ui-icon:first-child{flex:none;width:20px;font-size:20px;color:var(--vz-color-accent,#7A32F5);}
-#vocalzip-refined-preview .vz-practice-row>.vz-ui-icon:last-child{flex:none;font-size:15px;color:#98A2B3;}
-#vocalzip-refined-preview .vz-practice-copy{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0;}
-#vocalzip-refined-preview .vz-practice-copy strong{flex:none;font-size:14px;line-height:20px;font-weight:600;}
-#vocalzip-refined-preview .vz-practice-copy small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:20px;color:var(--vz-color-ink-secondary,#475467);font-variant-numeric:tabular-nums;}
-#vocalzip-refined-preview .vz-practice-row[data-tone="done"] small{color:var(--vz-color-success,#23855C);}
-#vocalzip-refined-preview .vz-practice-row[data-tone="live"] small{color:var(--vz-color-accent,#7A32F5);font-weight:600;}
-#vocalzip-refined-preview .vz-practice-row:active{background:#F7F5FB;}
-#vocalzip-refined-preview .vz-practice-row:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;border-radius:12px;}
-#vocalzip-refined-preview .vz-practice.is-shown{box-shadow:0 0 0 2px #DCC4FF;}
-/* 오늘의 연습 card: the first thing in 연습하기 — today's steps as a vertical timeline, the progress, ONE button. */
-#vocalzip-refined-preview .vz-set-card{display:block;padding:0 4px 12px 0;}
-#vocalzip-refined-preview .vz-set-card+.vz-practice-row{border-top:1px solid #F2EFF7;}
-#vocalzip-refined-preview .vz-set-head{display:flex;align-items:center;gap:8px;min-height:44px;}
-#vocalzip-refined-preview .vz-set-head strong{flex:none;font-size:15px;line-height:21px;font-weight:700;color:var(--vz-color-ink,#101828);}
-#vocalzip-refined-preview .vz-set-head small{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:20px;color:var(--vz-color-ink-secondary,#475467);font-variant-numeric:tabular-nums;}
-#vocalzip-refined-preview .vz-set-card[data-state="live"] .vz-set-head small{color:var(--vz-color-accent,#7A32F5);font-weight:600;}
-#vocalzip-refined-preview .vz-set-card[data-state="done"] .vz-set-head small{color:var(--vz-color-accent,#7A32F5);font-weight:600;}
-#vocalzip-refined-preview .vz-set-pick{flex:none;display:inline-flex;align-items:center;gap:4px;min-width:44px;min-height:44px;margin:0;padding:0 8px;border:0;border-radius:12px;background:none;color:var(--vz-color-accent,#7A32F5);font:inherit;font-size:14px;line-height:20px;font-weight:600;cursor:pointer;}
-#vocalzip-refined-preview .vz-set-pick .vz-ui-icon{font-size:16px;}
-#vocalzip-refined-preview .vz-set-line{list-style:none;margin:0 0 12px;padding:0;}
-#vocalzip-refined-preview .vz-set-line li{position:relative;display:flex;align-items:center;gap:8px;min-height:36px;padding-left:28px;}
-#vocalzip-refined-preview .vz-set-line li::before{content:"";position:absolute;z-index:1;left:3px;top:50%;box-sizing:border-box;width:14px;height:14px;margin-top:-7px;border:2px solid #D0D5DD;border-radius:50%;background:#fff;}
-#vocalzip-refined-preview .vz-set-line li::after{content:"";position:absolute;left:9px;top:-50%;width:2px;height:100%;background:#E8E4F0;}
-#vocalzip-refined-preview .vz-set-line li:first-child::after{display:none;}
-#vocalzip-refined-preview .vz-set-line li[data-state="done"]::before{border-color:var(--vz-color-accent,#7A32F5);background:var(--vz-color-accent,#7A32F5) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3.2 7.3l2.4 2.3 5-5.2' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/10px 10px no-repeat;}
-#vocalzip-refined-preview .vz-set-line li[data-state="done"]::after,#vocalzip-refined-preview .vz-set-line li[data-state="skipped"]::after,#vocalzip-refined-preview .vz-set-line li[data-state="next"]:not(:first-child)::after{background:#C9B2F7;}
-#vocalzip-refined-preview .vz-set-line li[data-state="skipped"]::before{border-color:#C9B2F7;border-style:dashed;}
-#vocalzip-refined-preview .vz-set-line li[data-state="next"]::before{border-color:var(--vz-color-accent,#7A32F5);box-shadow:0 0 0 4px #F3ECFF;}
-#vocalzip-refined-preview .vz-set-item{flex:1;min-width:0;display:flex;align-items:baseline;gap:6px;}
-#vocalzip-refined-preview .vz-set-item b{flex:none;font-size:12px;line-height:18px;font-weight:600;color:var(--vz-color-ink-muted,#667085);}
-#vocalzip-refined-preview .vz-set-item span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px;font-weight:600;color:var(--vz-color-ink,#101828);}
-#vocalzip-refined-preview .vz-set-line li[data-state="done"] .vz-set-item span,#vocalzip-refined-preview .vz-set-line li[data-state="skipped"] .vz-set-item span{color:var(--vz-color-ink-muted,#667085);font-weight:500;}
-#vocalzip-refined-preview .vz-set-meta{flex:none;display:flex;align-items:center;gap:6px;font-size:13px;line-height:20px;color:var(--vz-color-ink-secondary,#475467);font-variant-numeric:tabular-nums;}
-#vocalzip-refined-preview .vz-set-meta .vz-ui-icon{font-size:14px;color:var(--vz-color-accent,#7A32F5);}
-#vocalzip-refined-preview .vz-set-meta em{font-style:normal;font-size:12px;font-weight:700;color:var(--vz-color-accent,#7A32F5);}
-#vocalzip-refined-preview .vz-set-line li[data-state="done"] .vz-set-meta em{color:var(--vz-color-accent,#7A32F5);}
-#vocalzip-refined-preview .vz-set-line li[data-state="skipped"] .vz-set-meta em{color:var(--vz-color-ink-muted,#667085);}
-#vocalzip-refined-preview .vz-set-go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;margin:0;padding:0 16px;border:0;border-radius:16px;background:var(--vz-gradient-floating,linear-gradient(135deg,#9557FF 0%,#7A32F5 52%,#6D2BE5 100%));color:#fff;font:inherit;font-size:16px;line-height:22px;font-weight:700;letter-spacing:-.01em;cursor:pointer;}
-#vocalzip-refined-preview .vz-set-go span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-#vocalzip-refined-preview .vz-set-go .vz-ui-icon{flex:none;font-size:18px;}
-#vocalzip-refined-preview .vz-set-card[data-state="done"] .vz-set-go{background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);}
-#vocalzip-refined-preview .vz-set-go:active{transform:scale(.99);}
-#vocalzip-refined-preview .vz-set-go:focus-visible,#vocalzip-refined-preview .vz-set-pick:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;}
-@media(prefers-reduced-motion:reduce){#vocalzip-refined-preview .vz-set-go:active{transform:none;}}
-@media(max-width:355px){#vocalzip-refined-preview .vz-practice-copy{flex-direction:column;align-items:flex-start;gap:0;padding:6px 0;}#vocalzip-refined-preview .vz-practice-copy small{max-width:100%;}}
-@media(max-width:355px){#vocalzip-refined-preview .vz-event h2{line-height:1.45454545;}#vocalzip-refined-preview .vz-card h2{line-height:1.625;}}
+@media(max-width:355px){#vocalzip-refined-preview .vz-card h2{line-height:1.625;}}
 /* Wide screens (after the rules above so it wins): two columns. */
 #vocalzip-refined-preview .vz-col{display:contents;}
 #vocalzip-refined-preview .vz-col>.vz-card{margin-bottom:12px;}
@@ -269,21 +208,12 @@ const adaptations=String.raw`
  /* Tablets: the full 주간 연습 card (rings, arrows) beside the summary, and everything reads larger. */
  #vocalzip-refined-preview .vz-col-side>.vz-week{display:block;}
  #vocalzip-refined-preview .vz-col>.vz-card{margin-bottom:16px;padding:24px;border-radius:24px;}
- #vocalzip-refined-preview .vz-event{min-height:120px;margin-bottom:16px;padding:24px 28px;}
- #vocalzip-refined-preview .vz-event h2{font-size:28px;line-height:36px;}
- #vocalzip-refined-preview .vz-event p{font-size:16px;line-height:24px;}
  #vocalzip-refined-preview .vz-week h2{font-size:20px;line-height:28px;}
  #vocalzip-refined-preview .vz-summary{padding:8px 20px 8px 24px;}
  #vocalzip-refined-preview .vz-summary-row{min-height:64px;gap:14px;}
  #vocalzip-refined-preview .vz-summary-copy strong,#vocalzip-refined-preview .vz-summary-value{font-size:16px;line-height:24px;}
  #vocalzip-refined-preview .vz-summary-badge{font-size:15px;line-height:22px;}
  #vocalzip-refined-preview .vz-summary-row>.vz-ui-icon:first-child{width:24px;font-size:24px;}
- #vocalzip-refined-preview .vz-col>.vz-practice{padding:20px 20px 12px 24px;}
- #vocalzip-refined-preview .vz-practice-title{margin-bottom:6px;font-size:20px;line-height:28px;}
- #vocalzip-refined-preview .vz-practice-row{min-height:60px;gap:14px;}
- #vocalzip-refined-preview .vz-practice-copy strong{font-size:16px;line-height:24px;}
- #vocalzip-refined-preview .vz-practice-copy small{font-size:15px;line-height:22px;}
- #vocalzip-refined-preview .vz-practice-row>.vz-ui-icon:first-child{width:24px;font-size:24px;}
  #vocalzip-refined-preview .vz-recent{margin-top:20px;}
  #vocalzip-refined-preview .vz-recent-heading{margin-bottom:10px;font-size:18px;line-height:26px;}
  #vocalzip-refined-preview .vz-recent-pills{flex-wrap:wrap;gap:10px;overflow:visible;}
@@ -306,7 +236,7 @@ export async function createFloatingHome(opts={}){
  template.styles.forEach((css,i)=>{const style=el("style",css);style.dataset.sourceStyle=String(i);shadow.append(style);});
  const tokenStyle=el("style",template.tokens);tokenStyle.dataset.sharedTokens="true";shadow.append(tokenStyle);
  const integration=el("style",adaptations);integration.dataset.integration="accessibility";shadow.append(integration);
- const todayStyle=el("style",TODAY_CARD_CSS);todayStyle.dataset.integration="today";shadow.append(todayStyle);
+ const todayStyle=el("style",PRACTICE_CARD_CSS);todayStyle.dataset.integration="today";shadow.append(todayStyle);
  const root=document.importNode(template.root,true);root.setAttribute("aria-label","Vocalzip 홈");shadow.append(root);
  // Extend only the rendered dock; keep the approved HTML file untouched.
  // On home, the ordinary .v-nav is hidden in favor of this shadow-root dock.
@@ -351,11 +281,10 @@ export async function createFloatingHome(opts={}){
  const settingsButton=q('[aria-label="프로필"]');settingsButton.setAttribute("aria-label","설정");settingsButton.title="설정";
  settingsButton.onclick=()=>opts.onProfile?.();
  /* v4 home (docs/design/VOCALZIP_DESIGN_SYSTEM_V4_2026-11-12.md, Home order): the top (today's ring, the week's days,
-  * the 단계 chips), one "지금 할 것" card, 오늘 연습, one Home summary rows card (next schedule) and the songs for today as
-  * pills. The approved markup still supplies the card and dock; its week rings, event rows and recent-song/shortcut
-  * tiles leave home (기록 and 성장 hold those views). */
- const section=q(".vz-schedule"),now=q(".vz-event");
- section.querySelectorAll(".vz-event-row").forEach(e=>e.remove());
+  * the 단계 chips), ONE 오늘의 연습 card, one Home summary rows card (next schedule) and the songs for today as pills.
+  * The approved markup still supplies the cards and dock; its "지금 할 것" event card and event rows, week rings and
+  * recent-song/shortcut tiles leave home (home step 2, 2026-11-27: the event card went; 기록 and 성장 hold the rest). */
+ const section=q(".vz-schedule");
  q(".vz-quick-grid")?.remove();const weekCard=q(".vz-week"); // 주간 연습 card: shown on tablets only (CSS)
  /* 오늘 위쪽 (home top, 2026-11-27). The wordmark leaves; in its place today's minutes as a ring against the day's target
   * (the numbers VZ.todayPractice gives), the date and one short line. The bell and the gear stay where they were. */
@@ -416,35 +345,23 @@ export async function createFloatingHome(opts={}){
   levelRow.hidden=!info&&!levelRow.querySelector("[data-home-area]");
  };
  host.updateLevel(opts.level||null);
- host.updateNow=item=>{
-  section.hidden=!item;if(!item)return;
-  now.dataset.kind=item.kind||"";now.querySelector("h2").textContent=item.title||"";
-  const badge=now.querySelector(".vz-dday");badge.textContent=item.badge||"";badge.hidden=!badge.textContent;
-  now.querySelector("p").textContent=item.line||"";
-  action(now,item.label||item.title||"지금 할 것",item.action);
-  // {count, text, action}: the rest of 다음 연습 (the card is its first item, or something else comes first today).
-  nowMore.hidden=!item.more;nowMore.onclick=()=>item.more?.action?.();
-  if(item.more){const chevron=el("i","\ue13a","vz-ui-icon");chevron.setAttribute("aria-hidden","true");nowMore.replaceChildren(el("span",item.more.text),chevron);nowMore.setAttribute("aria-label",item.more.text+" 보기");}
- };
- const nowMore=el("button",null,"vz-now-more");nowMore.type="button";nowMore.dataset.homeNextMore="";nowMore.hidden=true;now.after(nowMore);
- host.updateNow(opts.now);
- /* 오늘 연습 (owner's design, 2026-11-26): ONE card under 지금 할 것 for today's goals and today's practice, with
-  * 오늘의 연습 (시작하기 · 타이머만 켜기) and the small rows 매일 보이스 체크 · 내 로드맵 · 주간 돌아보기. It takes the place of the
-  * separate 오늘의 목표 and 연습하기 cards (design-system/today-card-html.js; data and actions from the app). */
- const todayCard=createTodayCard(opts.todayCard||{}),practice=todayCard.el;
+ /* 오늘의 연습 (home step 2, 2026-11-27): ONE card for today's goals (필수 미션), the set's steps (a bar and a row of
+  * tiles) and the free timer (design-system/practice-card-html.js; data and actions from the app). It takes the place
+  * of the "지금 할 것" card and of the former 오늘 연습 card. */
+ const todayCard=createPracticeCard(opts.todayCard||{}),practice=todayCard.el;
  host.updateToday=model=>todayCard.update(model);
  host.tickToday=state=>todayCard.tick(state);
  host.updateToday(opts.todayModel||null);
- /** Bring 오늘 연습 into view (the former 보컬 트레이닝 addresses and "연습은 오늘 탭에서 해요" lead here). */
+ /** Bring 오늘의 연습 into view (the former 보컬 트레이닝 addresses and "연습은 오늘 탭에서 해요" lead here). */
  host.showPractice=()=>todayCard.show();
  const summary=el("section",null,"vz-card vz-summary");summary.setAttribute("aria-label","요약");
  const recentWrap=el("section",null,"vz-recent");recentWrap.setAttribute("aria-label","최근 곡");
- // The approved markup's 오늘의 목표 card only marks the place: 오늘 연습 holds the goals now.
+ // The approved markup's 오늘의 목표 card only marks the place: 오늘의 연습 holds the goals now.
  const goalsCard=q(".vz-goals");goalsCard.after(summary,recentWrap);
- // Two columns on wide screens (tablet landscape, desktop): 지금 할 것 + 오늘 연습 | 요약 + 최근 곡. On phones the
+ // Two columns on wide screens (tablet landscape, desktop): 오늘의 연습 | 요약 + 최근 곡. On phones the
  // columns are display:contents, so the order and spacing stay exactly as before.
  const mainColumn=el("div",null,"vz-col vz-col-main"),sideColumn=el("div",null,"vz-col vz-col-side");
- section.before(mainColumn);mainColumn.append(section,practice);goalsCard.remove();mainColumn.after(sideColumn);sideColumn.append(summary,weekCard,recentWrap);
+ section.before(mainColumn);mainColumn.append(practice);section.remove();goalsCard.remove();mainColumn.after(sideColumn);sideColumn.append(summary,weekCard,recentWrap);
  const glyph=g=>{const i=el("i",g,"vz-ui-icon");i.setAttribute("aria-hidden","true");return i;};
  let summaryRows=Array.isArray(opts.summary)?opts.summary:[];
  /** One line per row: icon · label · value · trailing badge · chevron. A row without an action is not a button. */
@@ -573,7 +490,7 @@ export async function createFloatingHome(opts={}){
   // Semantic icons share the same Phosphor Regular weight as the practice timer.
  // Chevrons, add controls, status marks, logo, play and record icons keep their own rules.
  swap(".vz-header-actions button:first-child svg","\ue0ce");swap(".vz-header-actions button:last-child svg","\ue272");
- swap(".vz-event .vz-art-front svg","\ue34c");swap(".vz-week .vz-title > svg:not(.vz-chevron)","\ue150");
+ swap(".vz-week .vz-title > svg:not(.vz-chevron)","\ue150");
  q(".vz-floating-record").onclick=event=>opts.onRecord?.(event.currentTarget);
  const routes=["home","songs","calendar","vocal-growth"];
  [...root.querySelectorAll(".vz-nav-item")].forEach((button,i)=>{button.dataset.nav=routes[i];button.onclick=()=>opts.onNavigate?.(routes[i]);});

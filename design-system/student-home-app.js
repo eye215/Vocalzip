@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=top1-20261127';
+import {createFloatingHome} from './student-home-html.js?v=prac1-20261127';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -37,52 +37,13 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  window.addEventListener('hashchange',applyTheme);
  const greeting=()=>new Date().getHours()<12?'좋은 아침이에요':new Date().getHours()<18?'좋은 오후예요':'좋은 저녁이에요';
  const displayName=()=>String(V.db.profile?.displayName||V.db.settings?.displayName||'');
- /* v4 home: one "지금 할 것" card. Today's lesson first, then open homework, then carrying on with the latest song,
-  * then the next lesson; with nothing at all, setting today's goals.
-  * 다음 연습 하나로 (2026-11-26): where the card recommends something (the homework, the suggestion) it is the first item
-  * of the ONE 다음 연습 list (VZ.nextPractice, app/next-practice.js) — the list 성장 › 나 and #/next-practice show —
-  * with "다음 연습 n개 더" under it. `next` is that list, computed once per drawing of home. */
  const dday=date=>{const n=V.daysBetween(today(),date);return n===0?'D-day':n>0?'D-'+n:'';};
- /** 다음 연습 for home: once per drawing, from the recordings home already holds. null without the list. */
- const nextList=files=>{try{return V.nextPractice?.({media:files})||null;}catch(error){console.error(error);return null;}};
- const withMore=(card,open,fromList)=>{const n=open.length-(fromList?1:0);return n>0?{...card,more:{count:n,text:'다음 연습 '+n+'개'+(fromList?' 더':''),action:()=>nav('#/next-practice')}}:card;};
- function nowCard(s,songs,next){
-  const card=pick(s,songs,next);
-  return next&&card?withMore(card,next.items.filter(x=>!x.doneToday),card.fromList):card;
- }
- function pick(s,songs,next){
-  const l=s.lesson,lessonToday=l&&V.daysBetween(today(),l.date)===0,doneToday=new Set((V.db.practices||[]).filter(p=>p&&p.date===today()&&!(V.db.deleted?.practices||[]).includes(p.id)).flatMap(p=>Array.isArray(p.completed)?p.completed:[]));
-  // The open part of 다음 연습 (done today goes last there, so it is not offered again first); without the list, the model's homework.
-  const open=next?next.items.filter(x=>!x.doneToday):null,first=open?.[0];
-  const homework=open?(first?.source==='homework'?first:null):s.recommendationCandidates.find(t=>t.source==='homework'&&!doneToday.has(t.sourceId)); // a homework already done today is not "오늘 해 볼 숙제" (1.0 점검)
-  const lessonCard=title=>({kind:'lesson',title:title+(l.title||'보컬 레슨'),badge:lessonToday?(l.startTime||'오늘'):dday(l.date),line:lessonToday?[l.place,l.teacher].filter(Boolean).join(' · ')||'레슨 준비하기':lessonDay(l.date)+(l.startTime?' '+l.startTime:''),label:'다음 레슨 보기',action:()=>nav('#/lesson/'+encodeURIComponent(l.id))});
-  if(lessonToday)return lessonCard('오늘 ');
-  if(homework)return {kind:'homework',fromList:!!open,title:homework.title,badge:'숙제',line:'오늘 해 볼 숙제예요',label:'숙제 '+homework.title+' 보기',action:()=>nav('#/homework')};
-  // A new student with no song yet: adding the first song comes first (UI 정리 3차) — recordings, lessons and homework
-  // are kept by song, so everything after is easier.
-  if(!(V.db.songs||[]).some(x=>x&&!(V.db.deleted?.songs||[]).includes(x.id)))return {kind:'first-song',title:'첫 곡 추가하기',badge:'시작',line:'곡마다 녹음·레슨·숙제가 모여요',label:'첫 곡 추가하기',action:()=>{if(V.songSheet)V.songSheet(null,id=>nav('#/song/'+encodeURIComponent(id)));else nav('#/songs');}};
-  if(songs[0])return {kind:'practice',title:'이어서 연습하기',badge:'',line:songs[0].title,label:songs[0].title+' 이어서 연습하기',action:()=>nav('#/record?song='+encodeURIComponent(songs[0].id))};
-  if(l)return lessonCard('');
-  // No lesson coming either: the first take (1.0 점검 P1 #3: a new student's home pointed to a breathing exercise, not to singing the song just
-  // added): songs, but nothing practised or recorded yet — record the newest song. Recording is all it does; nothing is saved.
-  const firstSong=!songs[0]&&!(V.db.practices||[]).length&&!(V.media?.cached?.()||[]).length&&V.songsNewest?.().find(x=>x&&!(V.db.deleted?.songs||[]).includes(x.id));
-  if(firstSong)return {kind:'first-take',title:'첫 녹음하기',badge:'시작',line:firstSong.title+' · 지금 목소리를 남겨 두면 나중에 비교돼요',label:firstSong.title+' 첫 녹음하기',action:()=>nav('#/record?song='+encodeURIComponent(firstSong.id))};
-  // Nothing scheduled or practised: suggest one practice (done in 오늘의 연습) instead of a second "오늘의 목표 정하기" (the
-  // empty goal list below already offers that). A suggestion already in today's goals is not repeated; then simply record.
-  if(open){
-   const rec=open.find(x=>!x.inGoals);
-   if(rec)return {kind:'recommend',fromList:true,title:rec.title,badge:V.nextPractice.label(rec.source)||'추천',line:rec.why||'',label:'다음 연습 '+rec.title,action:()=>nav(rec.go?.href||'#/next-practice')};
-  }else{
-   const rec=s.recommendationCandidates.find(c=>c.source==='recommendation'&&!(s.goals||[]).some(g=>g.source===c.source&&g.sourceId===c.sourceId));
-   if(rec)return {kind:'recommend',title:rec.title,badge:'추천',line:'오늘의 연습에서 해요',label:'다음 연습 '+rec.title,action:()=>nav('#/practice-set')};
-  }
-  return {kind:'record',title:'지금 녹음하기',badge:'',line:'짧게라도 한 번 불러 봐요',label:'지금 녹음하기',action:()=>nav('#/record')};
- }
- /* Home summary rows: next lesson (unless it is already the 지금 할 것 card) and next stage. What needs a check is in the
-  * bell (attentionItems), not here, so it is not shown twice. Today and this week are the ring and the days at the top. */
- function summaryRows(s,current){
+ /* Home summary rows: next lesson and next stage (the "지금 할 것" card that could show the lesson left home in step 2,
+  * 2026-11-27). What needs a check is in the bell (attentionItems), not here, so it is not shown twice. Today and this
+  * week are the ring and the days at the top. */
+ function summaryRows(s){
   const rows=[],l=s.lesson,st=s.stage;
-  if(l&&current?.kind!=='lesson')rows.push({key:'lesson',icon:'\ue34c',label:'다음 레슨',value:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),badge:dday(l.date),action:()=>nav('#/lesson/'+encodeURIComponent(l.id))});
+  if(l)rows.push({key:'lesson',icon:'\ue34c',label:'다음 레슨',value:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),badge:dday(l.date),action:()=>nav('#/lesson/'+encodeURIComponent(l.id))});
   if(st)rows.push({key:'stage',icon:'\ue490',label:({performance:'공연',audition:'오디션'})[st.kind]||'무대',value:st.title,badge:dday(st.date),action:()=>nav('#/show/'+encodeURIComponent(st.id))});
   const weekly=V.weeklySummaryHomeRow?.();if(weekly)rows.push(weekly); // 지난주 요약 (app/weekly-summary.js), Mon–Wed only
   return rows;
@@ -100,106 +61,37 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   if(s.recent?.song?.id)ids.unshift(s.recent.song.id);
   return [...new Set(ids)].filter(id=>V.song(id)).slice(0,3).map(id=>({id,title:V.song(id).title}));
  }
- /* 오늘 연습 (owner's design, 2026-11-26): ONE card for today's goals (계획) and today's practice records (추가), with
-  * 오늘의 연습 and 타이머만 켜기 and small rows for 매일 보이스 체크 · 내 로드맵 · 주간 돌아보기. What is listed is
-  * app/today-card.js; the card is design-system/today-card-html.js. Everything opens inside the card: no sheet, no
-  * result popup (today against the target is always on the card). Writes go through VZ.change, the record shape is
-  * 연습 기록 시트's (VZ.writePractice), goals keep their own rules (setGoal, perform, routines). */
- const T=window.VzipTodayCard,TP=window.VzipTodayPractice,R=window.VzipGoalRoutines;
+ /* 오늘의 연습 (home step 2, 2026-11-27): ONE card — today's goals as 필수 미션 boxes, the set's steps as a bar and a row
+  * of tiles, the free timer in its head (design-system/practice-card-html.js). The goals are app/today-card.js's 계획
+  * list; the set is VZ.practiceSetEntry (app/practice-set.js); the timer VZ.freeTimer (app/free-timer.js). Every write
+  * is an existing action through VZ.change: the goal toggle (M.setGoal), the set's own start/save (VZ.dailySet.go) and the
+  * timer's save on 멈추기. 직접 적기 is in 기록, 내 로드맵 · 주간 돌아보기 in 성장; 매일 보이스 체크 is the set's first step
+  * (app/daily-set-model.js VOICE) whenever it is not done today. */
+ const T=window.VzipTodayCard;
  const songTitle=id=>V.songTitle?.(id)||'';
- const liveSongs=()=>(V.db.songs||[]).filter(x=>x&&!(V.db.deleted?.songs||[]).includes(x.id)&&!x.archived).map(x=>({id:x.id,title:x.title||'곡'}));
- const categoryNames=()=>[...new Set([...(T?.CATEGORIES||[]),...(V.db.categories||[]).map(c=>String(c?.name||'').trim()).filter(Boolean)])];
- /** The 분류 by name: the record's own one when it is unchanged, an existing one, or a new one (added on save, as the
-  * practice sheet adds a new 분류). */
- const categoryFor=(name,p=null)=>{
-  name=String(name||'').trim();if(!name)return {id:'',name:''};
-  if(p&&p.categoryId&&String(p.categoryLabel||'').trim()===name)return {id:p.categoryId,name};
-  const c=(V.db.categories||[]).find(x=>x&&String(x.name||'').trim()===name);
-  return c?{id:c.id,name:c.name}:{id:V.uid(),name};
- };
- /** Check on a copy first (an Error says why), then write for real. */
- const write=(mutate,fail='저장하지 못했어요. 다시 시도해 주세요.')=>{mutate(structuredClone(V.db));if(!V.change(mutate,{silent:true}))throw Error(fail);return true;};
- function linkRows(){
-  const rows=[],check=V.voiceCheck?.status?.();
-  // Not done yet: straight into the 30-second check, as the home card did. Done: the page with today's result and the last 30 days.
-  if(check)rows.push({key:'voice-check',icon:'',title:'매일 보이스 체크',state:check.line,tone:check.done?'done':'',
-   label:'매일 보이스 체크, '+check.line+(check.done?', 결과 보기':', 30초 체크 시작하기'),action:()=>V.voiceCheck.status().done?nav('#/voice-check'):V.voiceCheck.open()});
-  // 내 로드맵: a plain link. What it says to fix is in 다음 연습 and in 오늘의 연습 (다음 연습 하나로, 2026-11-26).
-  if(V.roadmap)rows.push({key:'roadmap',icon:'',title:'내 로드맵',state:'',label:'내 로드맵 보기',action:()=>nav('#/roadmap')});
-  rows.push({key:'weekly-review',icon:'',title:'주간 돌아보기',state:'다음 목표 추천',label:'주간 돌아보기 · 다음 목표 추천',action:()=>nav('#/practice-review')});
-  return rows;
- }
- /** Everything the 오늘 연습 card shows. Reading it writes nothing. */
- function todayModel(files=V.media.cached()){
+ /** Everything the 오늘의 연습 card shows. Reading it writes nothing. */
+ function todayModel(){
   if(!T)return null;
   const date=today();let data;
   try{data=T.build(V.db,{today:date,songTitle});}catch(error){console.error(error);return null;}
-  const x=V.todayPractice?.()||{minutes:0,targetMinutes:null};
-  let days=[],hint=null,set=null;
-  try{days=TP?TP.recent(V.db,{date,today:date,defaultDailyTargetMinutes:dailyTarget(),timeEntries:V.timeEntries(files)}).map(d=>({date:d.date,label:d.label,minutes:d.minutes,met:d.met,today:d.today})):[];}catch(error){console.error(error);}
-  try{hint=T.repeatHint(V.db,{today:date,songTitle});}catch(error){console.error(error);}
-  const entry=V.practiceSetEntry?.();
-  // 오늘의 연습: its button says the estimated time before starting ("시작하기 · 약 18분"); otherwise as the set says.
-  if(entry)set={...entry,button:entry.state==='new'?'시작하기 · 약 '+entry.minutes+'분':entry.button};
-  const goal=id=>(V.db.dailyGoals||[]).find(g=>g?.id===id);
-  return {today:date,counts:data.counts,minutes:x.minutes,target:x.targetMinutes,days,
-   // 녹음하기: the recorder carries the goal (and its song), as the goal row's mic did.
-   plan:data.plan.map(g=>{const sid=goal(g.id)?.songId;return {...g,suggest:R?.suggestMinutes?.(V.db,goal(g.id))?.minutes??null,
-    record:'#/record?goal='+encodeURIComponent(g.id)+(sid&&V.song(sid)?'&song='+encodeURIComponent(sid):'')};}),extra:data.extra,open:data.open,hint,set,
-   groups:(window.VzipDailySet?.GROUPS||[]).map(g=>g.title),timer:V.freeTimer?.state()||null,timerBlocked:!V.freeTimer||!!V.freeTimer.blocked(),note:V.freeTimer?.note?.()||null,
-   links:linkRows(),chips:V.PRACTICE_MINUTE_CHIPS||[5,10,20,30,60],songs:liveSongs(),categories:categoryNames()};
+  let blocked='';try{blocked=V.freeTimer?.blocked?.()||'';}catch(error){console.error(error);}
+  return {today:date,counts:data.counts,plan:data.plan.map(g=>({id:g.id,title:g.title,done:g.done,source:g.source,tag:g.tag})),set:V.practiceSetEntry?.()||null,
+   timer:V.freeTimer?.state()||null,timerOff:!V.freeTimer,timerBlocked:blocked,note:V.freeTimer?.note?.()||null};
  }
  function todayActions(refresh){
   return {
-   homeworkFor:date=>(V.db.assignments||[]).filter(t=>t&&!(V.db.deleted?.assignments||[]).includes(t.id)&&(V.taskInPeriod?V.taskInPeriod(t,date):t.status!=='done')).map(t=>({id:t.id,title:t.title||'숙제'})),
-   // The circle only checks (or unchecks). No time sheet, no popup: the time is a choice in the row (시간 적고 체크).
+   // A 필수 미션 box only checks (or unchecks) its goal, as the goal row's circle did.
    onToggle:async(id,completed)=>{
     const ok=V.change(db=>{if(!M.setGoal(db,id,completed))throw Error('이 목표가 변경됐어요. 화면을 새로 열어주세요.');},{silent:true});
     if(!ok)throw Error('체크를 저장하지 못했어요. 다시 시도해 주세요.');
     refresh();
    },
-   // 오늘 기록 연결: the record names the goal and the goal is checked; no row is added, so no minute counts twice.
-   onLink:(goalId,practiceId)=>write(db=>{T.link(db,{goalId,practiceId});},'기록을 연결하지 못했어요. 다시 시도해 주세요.'),
-   // 시간 적고 체크: the goal's own practice row, as the time sheet always wrote it (one row per goal, saved again = replaced).
-   onTimeCheck:(goalId,minutes)=>write(db=>{if(!M.setGoal(db,goalId,true))throw Error('이 목표가 변경됐어요. 화면을 새로 열어주세요.');R.perform(db,goalId,{minutes});}),
    onSetGo:()=>{if(V.dailySet?.go)V.dailySet.go();else nav('#/practice-set');},
-   onSetPick:()=>V.dailySet?.pick?.(),
+   onSetPick:()=>V.dailySet?.pick?V.dailySet.pick():nav('#/practice-set'),
    onAddPlan:()=>planSheet(),
-   // + 직접 적기: one practice record exactly as 연습 기록 시트 writes it; a chosen 계획 is linked to it, a homework gets
-   // "했어요" (one 회) as the sheet records it — the homework itself is not marked done.
-   onDirect:({minutes,date,goalId,homeworkId,songId,category,memo})=>{
-    if(!(Number(minutes)>=1&&Number(minutes)<=1440))throw Error('연습 시간을 1분 이상 입력해 주세요.');
-    if(!V.parseYmd(date))throw Error('날짜를 골라 주세요.');
-    const id=V.uid(),created=Date.now(),cat=categoryFor(category),song=songId&&V.song(songId)?songId:'';
-    write(db=>{
-     V.writePractice(db,{date,minutes:Number(minutes),mode:song?'song':'training',songId:song,catId:cat.id,catName:cat.name,memo,
-      completed:homeworkId?[homeworkId]:[],assignmentReps:homeworkId?{[homeworkId]:1}:{},assignmentNotes:{}},null,{id,created});
-     if(goalId&&date===today())T.link(db,{goalId,practiceId:id});
-    });
-    window.dispatchEvent(new Event('vzip:practice-saved'));
-    V.toast(date===today()?'연습 기록을 저장했어요.':V.dateLabel(date)+' 연습 기록을 저장했어요.');
-    return true;
-   },
-   // A 추가 row's 곡 · 분류 · 메모, written back through the same save code (the record keeps its minutes and the rest).
-   onEditExtra:(id,{songId,category,memo})=>{
-    const p=(V.db.practices||[]).find(x=>x?.id===id);
-    if(!p||!T.own(p))throw Error('이 기록은 여기서 고칠 수 없어요. 연습 기록에서 고쳐 주세요.');
-    const song=songId&&V.song(songId)?songId:'',cat=categoryFor(category,p),same=cat.id&&cat.id===p.categoryId;
-    if(song===(p.songId||'')&&cat.id===(p.categoryId||'')&&String(memo??'')===String(p.memo||''))return true;
-    return write(db=>{V.writePractice(db,{date:p.date,minutes:V.practiceMinutes(p),mode:song?'song':'training',songId:song,catId:cat.id,catName:cat.name,
-     detail:same?p.detail||'':'',detail2:same?p.detail2||'':'',recommendation:same&&p.recommendationSource?{source:p.recommendationSource,sourceId:p.recommendationSourceId}:null,
-     rating:p.rating||0,memo:String(memo??''),completed:p.completed||[],assignmentReps:p.assignmentReps||{},assignmentNotes:p.assignmentNotes||{},
-     mediaIds:p.mediaIds||[],mediaSeconds:p.mediaSeconds||0},p);});
-   },
    onTimerStart:()=>V.freeTimer?.start(),
    onTimerStop:()=>V.freeTimer?.stop(),
-   onTimerAway:choice=>V.freeTimer?.resolveAway(choice),
-   // 반복 계획으로 넣기: a routine goal through the routine code (7 days from today, as the goal picker offers).
-   onHint:()=>{
-    const h=T.repeatHint(V.db,{today:today(),songTitle});if(!h)return true;
-    write(db=>{R.create(db,{titles:[h.title],days:7,today:today(),uid:V.uid});});
-    V.toast('오늘부터 7일 동안 매일 반복해요.');return true;
-   }
+   onTimerAway:choice=>V.freeTimer?.resolveAway(choice)
   };
  }
  /** 큰 단계 chip at the top (app/levels.js): "Lv 3 · 이름" and how far to the next level. Read-only. */
@@ -207,7 +99,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  /** The eight 기본기 chips beside it, in the states 단계 shows (아직 · 기준 맞추는 중 · n단계). Read-only. */
  const levelAreas=()=>V.levels?.areas?.()||[];
  /* The bell (화면 지도 정리, 2026-11-26): only what needs the person's attention. 다음 레슨 · 다음 무대 · 숙제 are already in
-  * 요약 and 지금 할 것. Counts are the server analysis ones (app/server-analysis.js); there is no kept count of failed
+  * 요약 and 오늘의 연습. Counts are the server analysis ones (app/server-analysis.js); there is no kept count of failed
   * uploads (the import hub counts them per batch only), so they are not listed. */
  function attentionItems(){
   const c=V.serverAnalysisCounts?.(),review=c?.song?.review||0,failed=c?(c.vocal.fail+c.song.fail):0;
@@ -317,10 +209,10 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   async mount(main){
    const host=main.querySelector('[data-approved-home-host]');if(!host)return;
    let files=V.media.cached(),root;
-   const s=state(files,selectedWeekStart),songs=recentSongs(s,files),current=nowCard(s,songs,nextList(files));
+   const s=state(files,selectedWeekStart);
    const refreshWeek=()=>{root?.updateWeek(state(files,selectedWeekStart).week);root?.updateThisWeek?.(state(files).week,V.todayPractice?.());};
    try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,todayPractice:V.todayPractice?.()||null,
-    todayModel:todayModel(files),todayCard:todayActions(()=>{refreshWeek();delete main.dataset.dirty;}),onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),alerts:attentionItems(),recentSongs:todayPicks(s,files),
+    todayModel:todayModel(),todayCard:todayActions(()=>{refreshWeek();delete main.dataset.dirty;}),onWeekSummary:weekSheet,week:s.week,summary:summaryRows(s),alerts:attentionItems(),recentSongs:todayPicks(s,files),
     onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),
     onRandomSong:()=>{if(V.songRoulette)return V.songRoulette();const one=window.VzipSongPick?.random?.(V.db,{today:today(),media:(V.media.cached()||[]).map(m=>({songId:m?.songId,date:V.media?.dateOf?.(m)||''}))});if(!one)return;V.toast('오늘은 '+one.title+'!');nav('#/record?song='+encodeURIComponent(one.songId));},onWeek:()=>nav('#/calendar'),onDay:calendar,onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
     level:levelLine(),levelAreas:levelAreas(),onLevel:()=>nav('#/levels'),onLevelArea:id=>nav('#/levels/'+encodeURIComponent(id)),onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
@@ -334,19 +226,19 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    }
    if(!host.isConnected)return;
    host.replaceChildren(root);applyTheme();
-   // 오늘 연습 asked for (V.homeShow): once now that home is drawn, and again after the recordings are read (the cards
+   // 오늘의 연습 asked for (V.homeShow): once now that home is drawn, and again after the recordings are read (the cards
    // above may have changed height meanwhile).
    const wanted=practiceWanted();
    if(wanted)requestAnimationFrame(()=>{if(root.isConnected)root.showPractice();});
    // A check, a record, a submission or a set saved while home is open: the card, today and the week follow without
    // drawing home again.
-   const practiceChanged=()=>{if(root.isConnected){root.updateToday?.(todayModel(files));refreshWeek();root.updateLevel?.(levelLine(),levelAreas());}};
-   // 타이머만 켜기: its second only changes the time on the card; starting, stopping or a long gap draws the card again.
+   const practiceChanged=()=>{if(root.isConnected){root.updateToday?.(todayModel());refreshWeek();root.updateLevel?.(levelLine(),levelAreas());}};
+   // The free timer: its second only changes the time on the card; starting, stopping or a long gap draws the card again.
    let timerShape='';
    const timerChanged=()=>{
     if(!root.isConnected)return;
     const st=V.freeTimer?.state()||null,shape=st?(st.away?'away':'run'):'off';
-    if(shape!==timerShape){timerShape=shape;root.updateToday?.(todayModel(files));}else root.tickToday?.(st);
+    if(shape!==timerShape){timerShape=shape;root.updateToday?.(todayModel());}else root.tickToday?.(st);
    };
    timerShape=(st=>st?(st.away?'away':'run'):'off')(V.freeTimer?.state()||null);
    const unwatchTimer=V.freeTimer?.watch?.(timerChanged)||(()=>{});
@@ -356,11 +248,11 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     const media=await V.media.list().catch(()=>files);
     if(!root.isConnected||generation!==mediaGeneration)return;
     files=media;refreshWeek();
-    // 발성 정밀 측정 results (this device) are part of 다음 연습: read them once here, as 성장 › 나 does.
+    // 발성 정밀 측정 results (this device) are part of 다음 연습 (the goal sheet's suggestions): read them once here, as 성장 › 나 does.
     await V.nextPractice?.loadPrecision?.();
     if(!root.isConnected||generation!==mediaGeneration)return;
-    const fresh=state(files),list=recentSongs(fresh,media),next=nowCard(fresh,list,nextList(media));
-    root.updateRecent(todayPicks(fresh,media));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updateAlerts?.(attentionItems());root.updateToday?.(todayModel(media));root.updateLevel?.(levelLine(),levelAreas());
+    const fresh=state(files);
+    root.updateRecent(todayPicks(fresh,media));root.updateSummary(summaryRows(fresh));root.updateAlerts?.(attentionItems());root.updateToday?.(todayModel());root.updateLevel?.(levelLine(),levelAreas());
    };
    const checkDate=()=>{if(root.isConnected&&today()!==lastDate){lastDate=today();V.softRender();}};
    const visible=()=>{if(document.visibilityState==='visible'){checkDate();if(root.isConnected)refreshMedia();}};

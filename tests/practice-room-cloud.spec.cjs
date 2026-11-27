@@ -13,7 +13,7 @@ test('노래 연습실: no row on 오늘 any more — its submissions open from 
  await expect(page.locator('[data-settings-group="practice"]')).toBeVisible();
  await expect(page.locator('.vz-settings a[href="#/practice-room"]')).toHaveCount(0);
  await page.evaluate(()=>{location.hash='#/home';});
- await expect(page.locator('.vz-student-home [data-home-practice] [data-row="roadmap"]')).toBeVisible();
+ await expect(page.locator('.vz-student-home [data-home-practice]')).toBeVisible(); // 내 로드맵 is in 성장 (home step 2), opened below by its address
  await expect(page.locator('.vz-student-home [data-home-practice] [data-row="practice-room"]')).toHaveCount(0);
  await page.evaluate(()=>VZ.change(d=>{d.practices.push({id:'practice-room:r1',date:'2026-11-01',minutes:5,practiceMode:'training',categoryLabel:'노래 연습실',practiceRoom:{task:'melody',chapterId:'pitch-rhythm'},created:1});},{silent:true}));
  await page.evaluate(()=>{location.hash='#/roadmap';});

@@ -82,7 +82,7 @@ test('shadow home shares tokens and its local variables no longer mask changes',
     const host=page.locator('.vz-student-home');
     await expect(host.locator('.vz-phone')).toBeVisible();
     await expect(host.locator('.vz-phone')).toHaveCSS('padding-left','12px');
-    await expect(host.locator('.vz-card').first()).toHaveCSS('padding','16px');
+    await expect(host.locator('.vz-card.vz-week')).toHaveCSS('padding','16px'); // the shared card padding (오늘의 연습, .vz-pc, has its own 18px: home step 2)
     await expect(host.locator('.vz-nav')).toHaveCSS('height','70px');
     await expect(host.locator('.vz-nav')).toHaveCSS('background-color','rgba(255, 255, 255, 0.58)');
     await expect(host.locator('.vz-nav')).toHaveCSS('backdrop-filter','blur(24px)');
