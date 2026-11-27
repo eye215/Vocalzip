@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=prac1-20261127';
+import {createFloatingHome} from './student-home-html.js?v=bottom2-20261127';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -38,16 +38,31 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const greeting=()=>new Date().getHours()<12?'좋은 아침이에요':new Date().getHours()<18?'좋은 오후예요':'좋은 저녁이에요';
  const displayName=()=>String(V.db.profile?.displayName||V.db.settings?.displayName||'');
  const dday=date=>{const n=V.daysBetween(today(),date);return n===0?'D-day':n>0?'D-'+n:'';};
- /* Home summary rows: next lesson and next stage (the "지금 할 것" card that could show the lesson left home in step 2,
-  * 2026-11-27). What needs a check is in the bell (attentionItems), not here, so it is not shown twice. Today and this
-  * week are the ring and the days at the top. */
- function summaryRows(s){
-  const rows=[],l=s.lesson,st=s.stage;
-  if(l)rows.push({key:'lesson',icon:'\ue34c',label:'다음 레슨',value:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),badge:dday(l.date),action:()=>nav('#/lesson/'+encodeURIComponent(l.id))});
-  if(st)rows.push({key:'stage',icon:'\ue490',label:({performance:'공연',audition:'오디션'})[st.kind]||'무대',value:st.title,badge:dday(st.date),action:()=>nav('#/show/'+encodeURIComponent(st.id))});
-  const weekly=V.weeklySummaryHomeRow?.();if(weekly)rows.push(weekly); // 지난주 요약 (app/weekly-summary.js), Mon–Wed only
-  return rows;
+ /* 다가오는 일 (home step 3, 2026-11-27): the next lesson and the next stage as date cards (they were the summary rows).
+  * What needs a check is in the bell (attentionItems), not here, so it is not shown twice. Today and this week are the
+  * ring and the days at the top. Reading them writes nothing. */
+ /** Open homework to do by that lesson: not done, running today, and linked to it or due by its date (or no due date). */
+ function lessonHomework(l){
+  const gone=new Set(V.db.deleted?.assignments||[]),d=today(),lessons=t=>V.taskLessons?V.taskLessons(t):(t.lessonIds||(t.lessonId?[t.lessonId]:[]));
+  const open=t=>V.taskInPeriod?V.taskInPeriod(t,d):t.status!=='done';
+  return (V.db.assignments||[]).filter(t=>t&&!gone.has(t.id)&&open(t)&&(lessons(t).includes(l.id)||!t.dueDate||t.dueDate<=l.date)).length;
  }
+ function upcomingCards(s){
+  const cards=[],l=s.lesson,st=s.stage;
+  if(l){
+   const time=l.startTime||'',n=lessonHomework(l),work=n?'숙제 '+n+'개':'';
+   cards.push({key:'lesson',date:l.date,label:'레슨',badge:dday(l.date),line:[time,work||l.place||l.teacher||''].filter(Boolean).join(' · ')||lessonDay(l.date),
+    aria:['다음 레슨',lessonDay(l.date)+(time?' '+time:''),dday(l.date),work].filter(Boolean).join(', '),action:()=>nav('#/lesson/'+encodeURIComponent(l.id))});
+  }
+  if(st){
+   const label=({performance:'공연',audition:'오디션'})[st.kind]||'무대';
+   cards.push({key:'stage',date:st.date,label,badge:dday(st.date),line:st.title||'',
+    aria:[label,st.title,lessonDay(st.date)+(st.time?' '+st.time:''),dday(st.date)].filter(Boolean).join(', '),action:()=>nav('#/show/'+encodeURIComponent(st.id))});
+  }
+  return cards;
+ }
+ /** 지난주 요약 (app/weekly-summary.js): Mon–Wed only, until it is opened. */
+ const weeklyRow=()=>{try{return V.weeklySummaryHomeRow?.()||null;}catch(error){console.error(error);return null;}};
  /** Up to three recent songs: the latest practised song first, then by recording activity. */
  /* 오늘 부를 곡 (app/song-pick-model.js) in the 최근 곡 place: up to three of my songs with the reason for today. Without
   * the model (an old cached script) the recent songs stay. */
@@ -212,7 +227,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const s=state(files,selectedWeekStart);
    const refreshWeek=()=>{root?.updateWeek(state(files,selectedWeekStart).week);root?.updateThisWeek?.(state(files).week,V.todayPractice?.());};
    try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,todayPractice:V.todayPractice?.()||null,
-    todayModel:todayModel(),todayCard:todayActions(()=>{refreshWeek();delete main.dataset.dirty;}),onWeekSummary:weekSheet,week:s.week,summary:summaryRows(s),alerts:attentionItems(),recentSongs:todayPicks(s,files),
+    todayModel:todayModel(),todayCard:todayActions(()=>{refreshWeek();delete main.dataset.dirty;}),onWeekSummary:weekSheet,week:s.week,upcoming:upcomingCards(s),weekly:weeklyRow(),alerts:attentionItems(),recentSongs:todayPicks(s,files),
     onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),
     onRandomSong:()=>{if(V.songRoulette)return V.songRoulette();const one=window.VzipSongPick?.random?.(V.db,{today:today(),media:(V.media.cached()||[]).map(m=>({songId:m?.songId,date:V.media?.dateOf?.(m)||''}))});if(!one)return;V.toast('오늘은 '+one.title+'!');nav('#/record?song='+encodeURIComponent(one.songId));},onWeek:()=>nav('#/calendar'),onDay:calendar,onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
     level:levelLine(),levelAreas:levelAreas(),onLevel:()=>nav('#/levels'),onLevelArea:id=>nav('#/levels/'+encodeURIComponent(id)),onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
@@ -252,7 +267,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     await V.nextPractice?.loadPrecision?.();
     if(!root.isConnected||generation!==mediaGeneration)return;
     const fresh=state(files);
-    root.updateRecent(todayPicks(fresh,media));root.updateSummary(summaryRows(fresh));root.updateAlerts?.(attentionItems());root.updateToday?.(todayModel());root.updateLevel?.(levelLine(),levelAreas());
+    root.updateRecent(todayPicks(fresh,media));root.updateUpcoming(upcomingCards(fresh),weeklyRow());root.updateAlerts?.(attentionItems());root.updateToday?.(todayModel());root.updateLevel?.(levelLine(),levelAreas());
    };
    const checkDate=()=>{if(root.isConnected&&today()!==lastDate){lastDate=today();V.softRender();}};
    const visible=()=>{if(document.visibilityState==='visible'){checkDate();if(root.isConnected)refreshMedia();}};

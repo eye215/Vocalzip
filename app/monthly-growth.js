@@ -195,6 +195,7 @@ function listeningEvidence(month){
 
 
 let monthlyAiBusy=false;
+let drawn=null;
 function monthlyAiEvidence(month,rows,items){
  const observations=(V.db.practices||[]).filter(p=>songListeningEntry(p,month))
   .slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,5)
@@ -349,7 +350,7 @@ async function mount(host,{kind='month',month='',onMonth=null}={}){
       // A different month can be selected while the model is generating.
       // Never replace the currently displayed month's card with the old result.
       if(my===request&&visibleSerial===renderSerial&&selected===month)render();
-      else if(my!==request||!host.isConnected)V.softRender?.(); // drawn again meanwhile: draw once more with the saved report
+      else if(drawn&&drawn.my===request&&drawn.month()===month)drawn.render(); // drawn again meanwhile: the newest drawing shows it
       V.toast('월간 AI 리포트를 저장했어요.');
     }catch(err){if(state?.isConnected)state.textContent=err.message||'AI 리포트 생성에 실패했어요.';V.toast('월간 분석에 실패했어요. 기존 기록은 유지돼요.','error');}
     finally{monthlyAiBusy=false;if(aiButton.isConnected){aiButton.disabled=false;aiButton.textContent='AI 월간 종합 분석하기';}}
@@ -378,6 +379,7 @@ async function mount(host,{kind='month',month='',onMonth=null}={}){
    // 지난 기록's months: that month in 나 (its ‹ › and address follow).
    host.querySelectorAll('[data-month]').forEach(b=>b.onclick=()=>{if(onMonth)onMonth(b.dataset.month);else{selected=b.dataset.month;render();}window.scrollTo({top:0,behavior:'smooth'});});
   };
+  drawn={my,render,month:()=>selected}; // the latest drawing, for a result that arrives after a redraw
   render();
  }catch(err){if(my===request)host.innerHTML='<div class="empty"><p>녹음 목록을 불러오지 못했어요.</p><p class="small muted">'+e(err.message)+'</p></div>';}
 }
