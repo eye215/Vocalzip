@@ -47,19 +47,21 @@ async function runCheck(page,{type='테너',rating=4,tag='피곤',shots=false}={
  await expect(page.locator('.vc-done .vc-result')).toBeVisible({timeout:30000});
 }
 
-test('daily check: 오늘 › 연습하기 row → 30-second check saved as training with its tag, analysed, the row says 오늘 완료',async({page})=>{
+test('daily check: 오늘 › 오늘의 연습 step ① → 30-second check saved as training with its tag, analysed; then the step is done',async({page})=>{
  test.setTimeout(90000);
  await boot(page);
  await fakeMic(page);
- const card=page.locator('.vz-student-home [data-row="voice-check"]');
+ // Not a row or a card of its own any more (home step 2): step ① of 오늘의 연습 whenever no check is saved today.
+ const card=page.locator('.vz-student-home [data-home-practice] .vz-pc-tile[data-step="voice-check"]');
  await expect(card).toBeVisible();
- // One row of the 연습하기 section (not a card of its own any more), with today's state.
- await expect(page.locator('.vz-student-home [data-home-practice] [data-row="voice-check"]')).toHaveCount(1);
+ await expect(page.locator('.vz-student-home [data-row="voice-check"]')).toHaveCount(0);
  await expect(page.locator('.vz-student-home [data-voice-check-card]')).toHaveCount(0);
- await expect(card).toContainText('매일 보이스 체크');await expect(card).toContainText('오늘 아직 · 30초');
+ await expect(card).toContainText('보이스 체크 30초');await expect(card).toHaveAttribute('data-look','now');
  expect((await card.boundingBox()).height).toBeGreaterThanOrEqual(44);
  await page.screenshot({path:test.info().outputPath('home.png')});
  await card.click();
+ await expect(page.locator('[data-pset-run]')).toBeVisible();
+ await page.locator('[data-pset-run] [data-run-primary]').click();
  await expect(page).toHaveURL(/#\/voice-check\/run$/);
  await runCheck(page,{shots:true});
  await expect(page.locator('.vc-done')).toContainText('지속음 흔들림');
@@ -92,11 +94,14 @@ test('daily check: 오늘 › 연습하기 row → 30-second check saved as trai
  await page.evaluate(()=>window.VZ.nav('#/growth-flow?period=all'));
  await expect(page.locator('[data-overall-body]')).toBeVisible();
  await expect(page.locator('.vc-entry')).toHaveCount(0);
- // 오늘: the row stays and says today's check is done; now it opens the page with the result and the last 30 days.
+ // 오늘: back in the set the step is done, so it leaves the row of tiles; the check's own page has today's result.
+ await page.evaluate(()=>window.VZ.nav('#/practice-set'));
+ await expect(page.locator('[data-pset-run]')).toBeVisible();
  await page.evaluate(()=>window.VZ.nav('#/home'));
  await expect(page.locator('.vz-student-home [data-home-ring]')).toBeVisible();
- await expect(card).toHaveCount(1);await expect(card).toContainText('오늘 완료 · 연속 1일');
- await card.click();
+ await expect(page.locator('.vz-student-home [data-set-bar] > i[data-seg="voice-check"]')).toHaveAttribute('data-state','done');
+ await expect(card).toHaveCount(0);
+ await page.evaluate(()=>window.VZ.nav('#/voice-check'));
  await expect(page).toHaveURL(/#\/voice-check$/);
  await expect(page.locator('.vc-today-state')).toHaveText('완료');
  await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current','page');

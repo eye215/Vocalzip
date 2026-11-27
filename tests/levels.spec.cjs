@@ -66,10 +66,10 @@ test('오늘: the "Lv · 이름" chip leads the 단계 chips and opens 단계; t
     expect(box.x + box.width).toBeLessThanOrEqual(width);
     // No two targets overlap: its box does not intersect the bell, the settings button, the week's days or any card of the home.
     const hits = await page.evaluate(() => { const root = document.querySelector('.vz-student-home').shadowRoot, c = root.querySelector('[data-home-level]').getBoundingClientRect();
-      const others = [...root.querySelectorAll('[aria-label="알림"],[aria-label="설정"],.vz-week-strip,.vz-event,.vz-card,.vz-summary,.vz-schedule')].filter(e => e.getClientRects().length);
-      return {checked:others.length, first:!!root.querySelector('.vz-event')?.getClientRects().length,
+      const others = [...root.querySelectorAll('[aria-label="알림"],[aria-label="설정"],.vz-week-strip,.vz-card,.vz-summary')].filter(e => e.getClientRects().length);
+      return {checked:others.length, first:!!root.querySelector('[data-home-practice]')?.getClientRects().length,
         over:others.filter(e => { const r = e.getBoundingClientRect(); return r.left < c.right - .5 && r.right > c.left + .5 && r.top < c.bottom - .5 && r.bottom > c.top + .5; }).map(e => e.getAttribute('aria-label') || e.className)}; });
-    expect(hits.checked).toBeGreaterThanOrEqual(5); expect(hits.first).toBe(true); expect(hits.over).toEqual([]);
+    expect(hits.checked).toBeGreaterThanOrEqual(4); expect(hits.first).toBe(true); expect(hits.over).toEqual([]);
     await noOverflow(page);
   }
   await page.setViewportSize({width:390, height:844});

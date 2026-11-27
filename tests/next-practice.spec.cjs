@@ -1,5 +1,5 @@
-// 다음 연습 하나로 (2026-11-26): ONE 다음 연습 list (VZ.nextPractice, app/next-practice.js) — 홈's 지금 할 것 shows its
-// first item once with "다음 연습 n개 더", #/next-practice shows the whole list (rank, every source, 담김, 오늘 한 것), and
+// 다음 연습 하나로 (2026-11-26): ONE 다음 연습 list (VZ.nextPractice, app/next-practice.js) — the goal sheet (+ 미션 on 홈)
+// offers its top items and links to it (홈's "지금 할 것" card left in home step 2), #/next-practice shows the whole list (rank, every source, 담김, 오늘 한 것), and
 // "AI에게 하나 더 받기" asks before anything is sent. Fake data only; the AI server is a stub.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test, {approvedHome:true});
@@ -85,37 +85,19 @@ test('#/next-practice: one ranked list — every source on one row, 담김, 목�
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
-test('home shows 다음 연습 item #1 once — 지금 할 것 with "n개 더"; no 따라 하기 row, no 손볼 곳 panel, no AI 오늘 추천 on the goals card', async ({page}) => {
+test('home has no "지금 할 것" card any more (home step 2): 다음 연습 item #1 is reached from + 미션; no 따라 하기 row, no 손볼 곳 panel, no AI 오늘 추천', async ({page}) => {
   await boot(page);
-  const now = page.locator('.vz-student-home .vz-event');
-  await expect(now).toHaveAttribute('data-kind', 'homework');
+  await expect(page.locator('.vz-student-home .vz-event')).toHaveCount(0);
+  await expect(page.locator('.vz-student-home [data-home-next-more]')).toHaveCount(0);
   const first = await page.evaluate(() => VZ.nextPractice().items[0]);
   expect(first.id).toBe('homework:hwA');
-  await expect(now.locator('h2')).toHaveText(first.title);
-  const more = page.locator('.vz-student-home [data-home-next-more]');
-  const open = await page.evaluate(() => VZ.nextPractice().open);
-  await expect(more.locator('span')).toHaveText('다음 연습 ' + (open - 1) + '개 더');
-  await expect(more).toHaveAccessibleName('다음 연습 ' + (open - 1) + '개 더 보기');
-  // Once as a recommendation on home. Not counted: the person's own goal list, 오늘의 연습 (the set's own steps, which
-  // start with 다음 연습's homework by design) and 오늘 부를 곡 (a song's reason may name its homework).
-  const count = await page.evaluate(title => {
-    const main = document.querySelector('.vz-student-home').shadowRoot.querySelector('main').cloneNode(true);
-    main.querySelectorAll('.vz-today-list,.vz-set-card,.vz-recent').forEach(n => n.remove());
-    return main.textContent.split(title).length - 1;
-  }, first.title);
-  expect(count).toBe(1);
   await expect(page.locator('.vz-student-home .vz-guided-item, .vz-student-home .vz-guided-recs')).toHaveCount(0);
-  // 내 로드맵 stays as a plain link, without what it says to fix (that is in 다음 연습 now).
-  const road = page.locator('.vz-student-home [data-home-practice] [data-row="roadmap"]');
-  await expect(road).toBeVisible();
-  await expect(road).not.toContainText('손볼 곳');
-  await expect(road).toHaveAccessibleName('내 로드맵 보기');
-  // 오늘 연습 keeps 주간 돌아보기 and 계획 넣기; AI 오늘 추천 moved to the list.
+  await expect(page.locator('.vz-student-home [data-home-practice] [data-row="roadmap"]')).toHaveCount(0);
+  await expect(page.locator('.vz-student-home')).not.toContainText('손볼 곳');
   await expect(page.getByRole('button', {name:'AI로 오늘 할 일 추천받기'})).toHaveCount(0);
-  await expect(page.getByRole('button', {name:'주간 돌아보기 · 다음 목표 추천', exact:true})).toBeVisible();
-  await expect(page.getByRole('button', {name:'+ 계획 넣기', exact:true})).toBeVisible();
-  expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(44);
-  await more.click();
+  await page.getByRole('button', {name:'필수 미션 넣기', exact:true}).click();
+  const sheet = page.getByRole('dialog', {name:'오늘의 목표', exact:true});
+  await sheet.locator('[data-plan-next-all]').click();
   await expect(page).toHaveURL(/#\/next-practice$/);
   await expect(rows(page).first().locator('.np-title')).toHaveText(first.title);
   await page.locator('[data-back]').click();
@@ -124,9 +106,9 @@ test('home shows 다음 연습 item #1 once — 지금 할 것 with "n개 더"; 
 
 test('오늘의 목표 sheet offers the top three of 다음 연습 not yet 담김, and saves them as the list would', async ({page}) => {
   await boot(page);
-  await expect(page.locator('.vz-student-home .vz-event')).toBeVisible();
+  await expect(page.locator('.vz-student-home [data-home-practice]')).toBeVisible();
   const top = await page.evaluate(() => VZ.nextPractice().items.filter(x => !x.doneToday && !x.inGoals && x.canAdd).slice(0, 3).map(x => x.title));
-  await page.getByRole('button', {name:'+ 계획 넣기', exact:true}).click();
+  await page.getByRole('button', {name:'필수 미션 넣기', exact:true}).click();
   const sheet = page.getByRole('dialog', {name:'오늘의 목표', exact:true});
   await expect(sheet).toBeVisible();
   const offered = sheet.locator('.vz-plan-option:not(:has(input:checked)) .vz-plan-title');

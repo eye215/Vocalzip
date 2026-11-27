@@ -375,8 +375,8 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
       };
     }});
 };
-/** One practice record exactly as 연습 기록 시트 writes it — also 오늘 연습's 직접 적기, the 추가 row's 곡·분류·메모 and
- * 타이머만 켜기 (design-system/today-card-html.js, app/free-timer.js), so there is one shape and one save code.
+/** One practice record exactly as 연습 기록 시트 writes it — also the free timer's 멈추기 (오늘의 연습 card's timer,
+ * app/free-timer.js), so there is one shape and one save code.
  * Call inside VZ.change. fields: {date, minutes, mode ('song'|'training'), songId, catId, catName, detail, detail2,
  * recommendation ({source, sourceId|key}), rating, memo, completed, assignmentReps, assignmentNotes, mediaIds, mediaSeconds}.
  * A new 분류 / 세부 항목 is added to the lists (as the sheet always did). existing: the record to update, or null for a
