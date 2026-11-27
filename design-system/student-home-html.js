@@ -1,6 +1,6 @@
 /* Direct integration of the approved home HTML, including its circular quick action.
  * Demo scripts/dialogs stay inert; only root markup and style blocks are used. */
-import {createPracticeCard,PRACTICE_CARD_CSS} from './practice-card-html.js?v=bottom2-20261127';
+import {createPracticeCard,PRACTICE_CARD_CSS} from './practice-card-html.js?v=logo1-20261127';
 export const FLOATING_HOME_SOURCE = "4985592d5e93a09ba1300cf57ba4eee866db531b";
 const tokenAsset=new URL("./tokens.css?v=14",import.meta.url);
 const asset=new URL("./Vocalzip_Floating_Record_Home.html?v="+FLOATING_HOME_SOURCE.slice(0,12),import.meta.url);
@@ -36,7 +36,14 @@ const adaptations=String.raw`
 /* 오늘 위쪽 (home top, 2026-11-27): a ring of today's minutes with the date and one line beside it, the bell and the gear;
  * under a thin line the week's days (one button to the week sheet); then 큰 단계 and the eight 기본기 as chips. */
 #vocalzip-refined-preview .vz-header.vz-has-top{align-items:flex-start;gap:8px;min-height:0;margin:0;padding:8px 8px 14px;}
-#vocalzip-refined-preview .vz-top{display:flex;align-items:center;gap:14px;flex:1;min-width:0;}
+#vocalzip-refined-preview .vz-header.vz-has-top{flex-wrap:wrap;align-items:center;row-gap:6px;}
+#vocalzip-refined-preview .vz-brand{order:0;display:flex;align-items:center;gap:9px;flex:1;min-width:0;min-height:44px;}
+#vocalzip-refined-preview .vz-brand-icon{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:50%;background:#EFE8FC;}
+#vocalzip-refined-preview .vz-brand-icon svg{width:18px;height:18px;stroke:#7A32F5;stroke-width:2.6;}
+#vocalzip-refined-preview .vz-brand-word{font-size:19px;line-height:1;font-weight:800;letter-spacing:-.02em;color:var(--vz-color-ink,#101828);}
+#vocalzip-refined-preview .vz-brand-word b{font-weight:800;color:#7A32F5;}
+#vocalzip-refined-preview .vz-has-top .vz-header-actions{order:1;}
+#vocalzip-refined-preview .vz-top{order:2;flex:1 0 100%;display:flex;align-items:center;gap:14px;min-width:0;}
 #vocalzip-refined-preview .vz-ring{position:relative;flex:none;width:84px;height:84px;}
 #vocalzip-refined-preview .vz-ring-svg{display:block;width:84px;height:84px;overflow:visible;}
 #vocalzip-refined-preview .vz-ring-bar{transition:stroke-dashoffset .5s ease;}
@@ -306,6 +313,10 @@ export async function createFloatingHome(opts={}){
  const ringBar=ring.querySelector(".vz-ring-bar"),ringNum=ring.querySelector(".vz-ring-num");
  let say=el("p",null,"vz-top-say");
  words.append(dateLine,say);top.append(ring,words);header.prepend(top);
+ /* 로고 (2026-11-27, 안 E): 연보라 동그라미 속 보라 파형 + "Vocalzip"(zip만 보라), 알림·설정 버튼과 같은 높이의 맨 윗줄. */
+ const brand=el("div",null,"vz-brand");brand.setAttribute("role","img");brand.setAttribute("aria-label","Vocalzip");
+ brand.innerHTML='<span class="vz-brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#7A32F5" stroke-linecap="round"><path d="M4 10v4"/><path d="M8 7v10"/><path d="M12 4v16"/><path d="M16 8v8"/><path d="M20 10v4"/></svg></span><span class="vz-brand-word" aria-hidden="true">Vocal<b>zip</b></span>';
+ header.prepend(brand);
  /** Today's minutes against today's target (null: no target, an empty ring and the way to set one). */
  const paintRing=(raw,dayTarget)=>{
   const mine=Math.round(raw),ratio=dayTarget?Math.min(1,raw/dayTarget):0,met=!!dayTarget&&raw>=dayTarget;
