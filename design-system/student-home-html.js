@@ -1,6 +1,6 @@
 /* Direct integration of the approved home HTML, including its circular quick action.
  * Demo scripts/dialogs stay inert; only root markup and style blocks are used. */
-import {createPracticeCard,PRACTICE_CARD_CSS} from './practice-card-html.js?v=bottom1-20261127';
+import {createPracticeCard,PRACTICE_CARD_CSS} from './practice-card-html.js?v=bottom2-20261127';
 export const FLOATING_HOME_SOURCE = "4985592d5e93a09ba1300cf57ba4eee866db531b";
 const tokenAsset=new URL("./tokens.css?v=14",import.meta.url);
 const asset=new URL("./Vocalzip_Floating_Record_Home.html?v="+FLOATING_HOME_SOURCE.slice(0,12),import.meta.url);
