@@ -98,19 +98,39 @@ test('First screen of a song on a phone: tabs are visible, 레퍼토리 is one c
   await expect(page.locator('[data-rep=status]')).toBeVisible();
   await summary.click();
   await expect(page.locator('[data-rep-detail]')).toBeHidden();
-  // Nothing is chosen for analysis by itself: no 보컬 분석하기 bar, 선택 0개, and the lab link is always there.
+  // Nothing is chosen for analysis by itself: no 보컬 분석하기 bar, no boxes at all until 선택, and the 곡 분석 link is
+  // always there.
   await expect(rows(page)).toHaveCount(4);
-  await expect(page.locator('[data-selected-count]')).toHaveText('선택 0개');
-  await expect(page.getByRole('checkbox', {name:'녹음 전체선택'})).not.toBeChecked();
+  await expect(page.locator('[data-select-row]')).toBeHidden();
+  await expect(rows(page).locator('.vz-media-select').first()).toBeHidden();
   await expect(page.locator('.vz-media-selection')).toHaveCount(0);
   await expect(rows(page).locator('.vz-media-select[aria-pressed=true]')).toHaveCount(0);
-  await expect(page.locator('.vz-song-lab')).toHaveAttribute('href', '#/vocal-lab/s1');
-  await expectTargets(page.locator('.vz-song-lab'));
-  // Choosing a recording brings 보컬 분석하기.
+  await expect(page.locator('.vz-song-lab')).toHaveAttribute('href', '#/growth-song/s1');
+  await expect(page.locator('.vz-song-lab')).toHaveText('곡 분석');
+  await expectTargets(page.locator('.vz-song-lab, [data-select-mode]'));
+  // 선택 → 선택 모드: 전체선택 with 선택 0개 and a box on every row.
+  await page.locator('[data-select-mode]').click();
+  await expect(page.locator('[data-select-mode]')).toHaveText('완료');
+  await expect(page.locator('[data-selected-count]')).toHaveText('선택 0개');
+  await expect(page.getByRole('checkbox', {name:'녹음 전체선택'})).not.toBeChecked();
+  await expect(rows(page).locator('.vz-media-select')).toHaveCount(4);
+  for (const box of await rows(page).locator('.vz-media-select').all()) await expect(box).toBeVisible();
+  // Choosing a recording brings 보컬 분석하기; in 선택 모드 the row itself ticks too (it does not open the recording).
   await rows(page).first().locator('.vz-media-select').click();
   await expect(page.locator('[data-selected-count]')).toHaveText('선택 1개');
   await expect(page.getByRole('button', {name:'보컬 분석하기'})).toBeVisible();
+  await rows(page).nth(1).locator('[data-toggle]').click();
+  await expect(page).toHaveURL(/#\/song\/s1$/);
+  await expect(page.locator('[data-selected-count]')).toHaveText('선택 2개');
   expect(await pageWidth(page)).toBeLessThanOrEqual(376);
+  // 완료 leaves 선택 모드: the choice is cleared, the boxes and the bar are gone, a row opens its recording again.
+  await page.locator('[data-select-mode]').click();
+  await expect(page.locator('[data-select-mode]')).toHaveText('선택');
+  await expect(page.locator('[data-select-row]')).toBeHidden();
+  await expect(page.locator('.vz-media-selection')).toHaveCount(0);
+  await expect(rows(page).locator('.vz-media-select').first()).toBeHidden();
+  await rows(page).first().locator('[data-toggle]').click();
+  await expect(page).toHaveURL(/#\/take\/m0$/);
 });
 
 test('레퍼토리 메모 is edited where it is shown; an unreadable 대표 테이크 says its choice is kept', async ({page}) => {
@@ -331,6 +351,7 @@ test('A song with 1,223 recordings draws 50 rows once, adds 50 at a time and kee
   await expect(page.locator('[data-summary]')).toContainText('녹음 1223개');
   const more = page.locator('[data-more-rows]'), all = page.locator('[data-all]'), count = page.locator('[data-selected-count]');
   await expect(more).toHaveText('더 보기 (1,173개 남음)');
+  await page.locator('[data-select-mode]').click(); // 선택 모드: 전체선택 and the row boxes
   await expect(page.locator('[data-all-label]')).toHaveText('보이는 50개 선택');
   // A change that does not touch what is shown (another song renamed on another device) leaves the rows alone.
   await page.evaluate(() => { document.querySelector('[data-song-media] > [data-media]').__kept = true; });
@@ -364,12 +385,25 @@ test('A song with 1,223 recordings draws 50 rows once, adds 50 at a time and kee
   await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
   await expect(rows(page)).toHaveCount(200);
   await expect(count).toHaveText('선택 150개');
-  // Leaving the tab and coming back starts from 50 rows again.
+  // Leaving the tab and coming back starts from 50 rows again, out of 선택 모드.
   await page.evaluate(() => scrollTo(0, 0));
   await page.locator('[data-tab=lyrics]').click();
   await page.locator('[data-tab=media]').click();
   await expect(rows(page)).toHaveCount(50);
   await expect(count).toHaveText('선택 0개');
+  await expect(page.locator('[data-select-row]')).toBeHidden();
+  // A recording far down the list opens its 녹음 screen; 뒤로 comes back to the same rows at the same place.
+  await more.evaluate(el => el.click());
+  await expect(rows(page)).toHaveCount(100);
+  const far = rows(page).nth(80);
+  await far.scrollIntoViewIfNeeded();
+  const id = await far.getAttribute('data-media'), at = await page.evaluate(() => scrollY);
+  await far.locator('[data-toggle]').click();
+  await expect(page).toHaveURL(new RegExp('#/take/' + id + '$'));
+  await page.locator('#top [data-back]').click();
+  await expect(rows(page)).toHaveCount(100);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(at - 40);
+  expect(Math.abs(await page.evaluate(() => scrollY) - at)).toBeLessThanOrEqual(40);
 });
 
 test('곡별 목록: no 최근 연습곡 card (home has 오늘 부를 곡), an unset status shows nothing, no emoji, and the sort is kept on return', async ({page}) => {
@@ -403,30 +437,42 @@ test('곡별 목록: no 최근 연습곡 card (home has 오늘 부를 곡), an u
   await expect(page.locator('[data-filter-sort]')).toContainText('이름순');
 });
 
-test('곡 상세: 작품 in the header card, recording rows without the repeated title, a chip says 기록 only when a record is linked', async ({page}) => {
+test('곡 상세: 작품 in the header card, recording rows say their kind (not the repeated title or date), a chip says 기록 only when a record is linked', async ({page}) => {
   await open(page);
   await openSong(page, 's1');
   // 곡 상세 is said once (the page title); the card shows the title and 작품 / 아티스트.
   await expect(page.getByText('곡 상세', {exact:true})).toHaveCount(1);
   await expect(page.locator('.vz-song-detail-hero')).toContainText('지킬 앤 하이드');
   const row = id => page.locator('[data-song-media] > [data-media="' + id + '"]');
-  await expect(row('m0').locator('.vz-record-name')).toHaveText('2026-11-10');
-  await expect(row('m1').locator('.vz-record-name')).toHaveText('2026-11-09 2');
-  await expect(row('m2').locator('.vz-record-name')).toHaveText('갈라 리허설');       // its own name
-  await expect(row('m3').locator('.vz-record-name')).toHaveText('This Is the Moment'); // nothing else to show
-  // m0 belongs to a practice record: "연습 기록", and the chip opens it. m1 and m3 are plain recordings: the chip only
-  // says the 녹음 유형 (곡 녹음) and is not a button. m2 is 공연.
+  // The title is the 녹음 유형 and the recording's own short name: never the song title again, and a name that is only
+  // the date (the line under it says the date) is left out — a second take of the day keeps its number.
+  await expect(row('m0').locator('.vz-record-name')).toHaveText('곡 녹음');
+  await expect(row('m1').locator('.vz-record-name')).toHaveText('곡 녹음 2');
+  await expect(row('m2').locator('.vz-record-name')).toHaveText('곡 녹음 · 갈라 리허설'); // its own name
+  await expect(row('m3').locator('.vz-record-name')).toHaveText('곡 녹음');                // nothing else to show
+  await expect(row('m0').locator('.item-sub')).toHaveText(/^11월 10일 \(화\) · 1:00/);       // the date line as before
+  await expect(row('m0').locator('.item-sub')).not.toContainText('곡 녹음');
+  // m0 belongs to a practice record: a "연습 기록" chip (not a button of its own: the row opens the recording, which
+  // opens the record). m1 and m3 are plain recordings: no chip. m2 is 공연. Chips are purple.
   const chip = row('m0').locator('.vz-song-kind');
   await expect(chip).toHaveText('연습 기록');
-  await expect(chip).toHaveAttribute('role', 'button');
-  for (const id of ['m1', 'm3']) { await expect(row(id).locator('.vz-song-kind')).toHaveText('곡 녹음'); await expect(row(id).locator('.vz-song-kind')).not.toHaveAttribute('role', 'button'); }
+  await expect(chip).not.toHaveAttribute('role', 'button');
+  for (const id of ['m1', 'm3']) await expect(row(id).locator('.vz-song-kind')).toHaveCount(0);
   await expect(row('m2').locator('.vz-song-kind.performance')).toHaveText('공연');
-  await expect(row('m2').locator('.vz-song-kind')).not.toHaveAttribute('role', 'button');
-  // The chip is small to look at, 44px to touch.
-  expect(await chip.evaluate(el => { const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2; return [-20, 0, 20].map(d => !!document.elementFromPoint(x, y + d)?.closest('[data-linked-record]')); })).toEqual([true, true, true]);
-  await chip.click();
-  await expect(page.getByRole('dialog', {name:'연습 기록'})).toContainText('2절 고음 연습');
-  await page.locator('.sheet [data-close]').click();
+  for (const c of [chip, row('m2').locator('.vz-song-kind')]) {
+    const [r, g, b] = (await c.evaluate(el => getComputedStyle(el).color)).match(/\d+/g).map(Number);
+    expect(b > r && b > g && r > g, 'purple chip text').toBe(true);
+  }
+  // The row opens the 녹음 screen; its 연습 기록 row opens the practice record (edit · delete there).
+  await row('m0').locator('[data-toggle]').click();
+  await expect(page).toHaveURL(/#\/take\/m0$/);
+  await expect(page.locator('[data-recd-linked]')).toHaveText('연습 기록 연결됨');
+  await page.locator('[data-recd-practice]').click();
+  const sheet = page.getByRole('dialog', {name:/연습$/});
+  await expect(sheet).toContainText('2절 고음 연습');
+  await expect(sheet.getByRole('button', {name:'수정'})).toBeVisible();
+  await expect(sheet.getByRole('button', {name:'삭제'})).toBeVisible();
+  await page.locator('.sheet [data-close]').first().click();
   // A song without 작품 shows no empty line.
   await openSong(page, 's2', {media:false});
   await expect(page.locator('[data-song-show]')).toBeHidden();

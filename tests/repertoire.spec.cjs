@@ -95,7 +95,7 @@ test('Lyrics cards preview saved text and edit each field on a form page',async(
  await expect(page.locator('[data-lyric=lyrics]')).toContainText('첫 줄 가사 둘째 줄 가사');
  await expect(page.locator('[data-lyric=translation]')).toContainText('한글 해석이 길어질 때');
  expect(await page.locator('[data-lyric=translation]').evaluate(card=>{const preview=card.querySelector('.vz-lyric-preview'),box=card.getBoundingClientRect();return getComputedStyle(preview).textOverflow==='ellipsis'&&getComputedStyle(preview).whiteSpace==='nowrap'&&preview.scrollWidth>preview.clientWidth&&box.right<=innerWidth})).toBe(true);
- await expect(page.locator('[data-lyric=lyricNotes]')).toContainText('입력한 내용이 없습니다');
+ await expect(page.locator('[data-lyric=lyricNotes]')).toContainText('아직 적은 내용이 없어요');
  await page.locator('[data-lyric=lyricNotes]').click();await page.getByRole('textbox',{name:'발음 / 호흡 / 감정 메모'}).fill('후렴 전에 숨쉬기');
  await page.getByRole('dialog',{name:'발음 / 호흡 / 감정 메모'}).getByRole('button',{name:'저장'}).click();await expect(page.locator('[data-lyric=lyricNotes]')).toContainText('후렴 전에 숨쉬기');
  expect((await db(page)).songs[0].lyrics).toBe('첫 줄 가사\n둘째 줄 가사');expect((await db(page)).songs[0].lyricNotes).toBe('후렴 전에 숨쉬기');

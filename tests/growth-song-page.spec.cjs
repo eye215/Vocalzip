@@ -117,12 +117,12 @@ test('기간 chips: 이번 달 and 지난달 say that month against the take bef
   await expect(page.locator('[data-song-month-detail="2026-11"]')).toBeVisible();
 });
 
-test('곡 상세: the growth of the song is ONE line — its 한마디 · 성장 보기 › — leading to the song screen', async ({page}) => {
+test('곡 상세: the growth of the song is ONE line — its 한마디 · 곡 분석 › — leading to the song screen', async ({page}) => {
   await boot(page);
   await page.evaluate(() => { location.hash = '#/song/s2'; });
   const link = page.locator('[data-song-hero-growth]');
   const word = await page.evaluate(async () => VZ.growthSong.of(await VZ.media.list(), 's2').now.word);
-  await expect(link).toHaveText(word + ' · 성장 보기');
+  await expect(link).toHaveText(word + ' · 곡 분석');
   await expect(link).toHaveAttribute('href', '#/growth-song/s2');
   const box = await link.boundingBox();
   expect(box.height).toBeGreaterThanOrEqual(44);
