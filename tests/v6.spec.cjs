@@ -304,7 +304,7 @@ test('Vocal lab shows a compact recommendation list and opens the chosen practic
    return VZ.nextPractice({songId:'s1',media:all,tips:VZ.practiceTips(song,{songId:'s1'}),tipsSongId:'s1'}).items.filter(x=>!x.doneToday&&x.action?.ref?.kind!=='ai-exercise').slice(0,5).map(x=>x.id);});
  expect(shared.length).toBeGreaterThan(0);
  expect(await rows.evaluateAll(els=>els.map(e=>e.dataset.npItem))).toEqual(shared);
- await expect(page.locator('.vl-recommend [data-vl-next-all]')).toHaveAttribute('href','#/next-practice');
+ await expect(page.locator('[data-vl-next-all]')).toHaveAttribute('href','#/next-practice');
  // 따라 하기 opens the tip as a set of one step for this song; 목표에 담기 puts it in today's goals once (담김).
  const first=rows.first();
  const tip=await page.evaluate(id=>VZ.nextPractice({songId:'s1',tips:VZ.practiceTips(VZ.media.cached().filter(m=>m.songId==='s1'),{songId:'s1'}),tipsSongId:'s1'}).items.find(x=>x.id===id).action.tipKey,shared[0]);
