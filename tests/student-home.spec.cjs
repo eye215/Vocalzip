@@ -695,11 +695,13 @@ for(const width of [320,375])test('the top at '+width+'px: ring, date, line and 
  // Everything inside the screen, nothing clipped; the ring and the buttons do not overlap; the days row is a 44px target.
  const box=await page.locator('.vz-student-home').evaluate(host=>{
   const r=host.shadowRoot,rect=e=>{const b=e.getBoundingClientRect();return {left:b.left,right:b.right,top:b.top,bottom:b.bottom,height:b.height,width:b.width};};
-  return {ring:rect(r.querySelector('.vz-ring')),words:rect(r.querySelector('.vz-top-words')),actions:rect(r.querySelector('.vz-header-actions')),strip:rect(r.querySelector('.vz-week-strip')),
+  return {brand:rect(r.querySelector('.vz-brand')),ring:rect(r.querySelector('.vz-ring')),words:rect(r.querySelector('.vz-top-words')),actions:rect(r.querySelector('.vz-header-actions')),strip:rect(r.querySelector('.vz-week-strip')),
    text:rect(r.querySelector('.vz-week-strip-text')),dots:rect(r.querySelector('.vz-week-dots')),
    clipped:[...r.querySelectorAll('.vz-top-date,.vz-top-say,.vz-week-strip-text')].filter(e=>e.scrollWidth>e.clientWidth+1).length};
  });
- expect(box.ring.left).toBeGreaterThanOrEqual(12);expect(box.words.left).toBeGreaterThanOrEqual(box.ring.right);expect(box.words.right).toBeLessThanOrEqual(box.actions.left+1);
+ expect(box.ring.left).toBeGreaterThanOrEqual(12);expect(box.words.left).toBeGreaterThanOrEqual(box.ring.right);// The logo shares the first line with the bell and the gear; the ring and its words sit on the line below them.
+ expect(box.brand.left).toBeGreaterThanOrEqual(12);expect(box.brand.right).toBeLessThanOrEqual(box.actions.left+1);expect(box.brand.height).toBeGreaterThanOrEqual(44);
+ expect(box.ring.top).toBeGreaterThanOrEqual(box.actions.bottom-1);expect(box.words.right).toBeLessThanOrEqual(width);
  expect(box.actions.right).toBeLessThanOrEqual(width);expect(box.dots.right).toBeLessThanOrEqual(box.strip.right+1);expect(box.text.right).toBeLessThanOrEqual(box.dots.left);
  expect(box.strip.height).toBeGreaterThanOrEqual(44);expect(box.clipped).toBe(0);
  await noOverflow(page);

@@ -126,10 +126,10 @@ export const PRACTICE_CARD_CSS=String.raw`
 #vocalzip-refined-preview .vz-pc-tile[data-look="done"] .vz-pc-ic{background:#7A32F5;color:#fff;}
 #vocalzip-refined-preview .vz-pc-tile[data-look="done"] .vz-pc-title,#vocalzip-refined-preview .vz-pc-tile[data-look="done"] .vz-pc-meta,#vocalzip-refined-preview .vz-pc-done-word{color:#5B1FC2;}
 #vocalzip-refined-preview .vz-pc-done-word{font-size:13px;font-weight:900;white-space:nowrap;}
-#vocalzip-refined-preview .vz-pc-tile[data-look="now"]{width:152px;border:0;background:var(--vz-gradient-primary,linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%));color:#fff;box-shadow:0 8px 18px rgba(122,50,245,.3);}
+#vocalzip-refined-preview .vz-pc-tile[data-look="now"]{width:176px;border:0;background:var(--vz-gradient-primary,linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%));color:#fff;box-shadow:0 8px 18px rgba(122,50,245,.3);}
 #vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-ic{background:rgba(255,255,255,.2);color:#fff;}
 #vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-title{font-size:15px;font-weight:800;color:#fff;}
-#vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-meta{padding-right:36px;} /* the ▶ sits beside the second line only, so the title keeps the full width */
+#vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-words{padding-right:30px;} /* the ▶ sits beside the second line only, so the title keeps the full width */
 #vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-meta{color:rgba(255,255,255,.88);}
 #vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-pill{background:#fff;color:#5B1FC2;}
 #vocalzip-refined-preview .vz-pc-tile[data-look="soft"]{width:140px;border:0;background:#F1ECFF;}
