@@ -1,5 +1,5 @@
 /* 단계 (#/levels, #/levels/<area>) — the viewing screens (light) of app/levels-model.js, and what the rest of the app
- * asks of it (VZ.levels): the line on 오늘 (design-system/student-home-app.js), and the step-up / level-up notice on
+ * asks of it (VZ.levels): the chips on 오늘 (design-system/student-home-app.js), and the step-up / level-up notice on
  * the completion summary of 오늘의 연습 (app/practice-set.js).
  *   큰 단계 (Lv + 이름)  꾸준함 only; points are derived from the records each time, nothing about them is stored
  *   기본기 단계          8 areas × 5 steps from what the voice-only exercises of 오늘의 연습 measured
@@ -38,6 +38,12 @@ V.levels={
   home(){
     try{const x=now();return {level:x.level,name:x.name,percent:x.percent,toNext:x.toNext,
       label:'큰 단계 Lv '+x.level+', '+x.name+(x.next==null?'':', 다음 단계까지 '+x.toNext+'점')+', 단계 보기'};}
+    catch(error){console.error(error);return null;}
+  },
+  /** The eight 기본기 for the chips on 오늘, as 단계 shows them: [{id, title, sub, state, step, estimate, day}]. Reading
+   * them writes nothing. */
+  areas(){
+    try{return L.skills(V.db,env()).map(a=>({id:a.id,title:a.title,sub:a.sub,state:a.state,step:a.step,estimate:a.estimate,day:a.day}));}
     catch(error){console.error(error);return null;}
   },
   /** A level was passed since it was last kept: keep it, so the level shown never drops when a record is deleted. */

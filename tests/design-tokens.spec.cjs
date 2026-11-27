@@ -88,7 +88,7 @@ test('shadow home shares tokens and its local variables no longer mask changes',
     await expect(host.locator('.vz-nav')).toHaveCSS('backdrop-filter','blur(24px)');
     await expect(host.locator('.vz-floating-record')).toHaveCSS('width','56px');
     await host.locator('.vz-phone').evaluate(e=>e.style.setProperty('--vz-color-accent','#123456'));
-    await expect(host.locator('.vz-logo svg')).toHaveCSS('color','rgb(18, 52, 86)');
+    await expect(host.locator('.vz-nav-item.vz-active i')).toHaveCSS('color','rgb(18, 52, 86)'); // the wordmark left the home top (2026-11-27)
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
 });

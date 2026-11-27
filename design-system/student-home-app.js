@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=mic2-20261127';
+import {createFloatingHome} from './student-home-html.js?v=top1-20261127';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -79,7 +79,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   return {kind:'record',title:'지금 녹음하기',badge:'',line:'짧게라도 한 번 불러 봐요',label:'지금 녹음하기',action:()=>nav('#/record')};
  }
  /* Home summary rows: next lesson (unless it is already the 지금 할 것 card) and next stage. What needs a check is in the
-  * bell (attentionItems), not here, so it is not shown twice. The 이번 주 row is painted by the home from the week data. */
+  * bell (attentionItems), not here, so it is not shown twice. Today and this week are the ring and the days at the top. */
  function summaryRows(s,current){
   const rows=[],l=s.lesson,st=s.stage;
   if(l&&current?.kind!=='lesson')rows.push({key:'lesson',icon:'\ue34c',label:'다음 레슨',value:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),badge:dday(l.date),action:()=>nav('#/lesson/'+encodeURIComponent(l.id))});
@@ -202,8 +202,10 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    }
   };
  }
- /** 큰 단계 next to the streak (app/levels.js): "Lv 3 · 이름" and how far to the next level. Read-only. */
+ /** 큰 단계 chip at the top (app/levels.js): "Lv 3 · 이름" and how far to the next level. Read-only. */
  const levelLine=()=>V.levels?.home?.()||null;
+ /** The eight 기본기 chips beside it, in the states 단계 shows (아직 · 기준 맞추는 중 · n단계). Read-only. */
+ const levelAreas=()=>V.levels?.areas?.()||[];
  /* The bell (화면 지도 정리, 2026-11-26): only what needs the person's attention. 다음 레슨 · 다음 무대 · 숙제 are already in
   * 요약 and 지금 할 것. Counts are the server analysis ones (app/server-analysis.js); there is no kept count of failed
   * uploads (the import hub counts them per batch only), so they are not listed. */
@@ -215,8 +217,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   const items=attentionItems();
   V.sheet({title:'확인할 것',body:items.length?'<div class="list">'+items.map(i=>'<a class="item" href="'+i.href+'" data-attention="'+i.key+'"><span>'+esc(i.label)+' '+i.count+'건</span><i class="ph ph-caret-right" aria-hidden="true"></i></a>').join('')+'</div>':'<p class="muted" data-attention-empty>확인할 게 없어요</p>'});
  }
- /* 오늘 · 이번 주 row → a short sheet: today and this week against their targets, where the week target comes from
-  * (with the way to change it) and the calendar. The numbers are the same ones the row shows. */
+ /* The week's days at the top of home → a short sheet: today and this week against their targets, where the week target
+  * comes from (with the way to change it) and the calendar. Today's numbers are the ones the ring shows. */
  function weekSheet(){
   const w=state().week,x=V.todayPractice?.()||{minutes:w.days.find(d=>d.today)?.minutes||0,targetMinutes:null,percent:null};
   const target=Number(w.targetMinutes)>0?Number(w.targetMinutes):null,percent=target?Math.round(w.actualMinutes/target*100):null,daily=w.dailyTargetMinutes;
@@ -321,7 +323,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     todayModel:todayModel(files),todayCard:todayActions(()=>{refreshWeek();delete main.dataset.dirty;}),onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),alerts:attentionItems(),recentSongs:todayPicks(s,files),
     onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),
     onRandomSong:()=>{if(V.songRoulette)return V.songRoulette();const one=window.VzipSongPick?.random?.(V.db,{today:today(),media:(V.media.cached()||[]).map(m=>({songId:m?.songId,date:V.media?.dateOf?.(m)||''}))});if(!one)return;V.toast('오늘은 '+one.title+'!');nav('#/record?song='+encodeURIComponent(one.songId));},onWeek:()=>nav('#/calendar'),onDay:calendar,onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
-    level:levelLine(),onLevel:()=>nav('#/levels'),onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
+    level:levelLine(),levelAreas:levelAreas(),onLevel:()=>nav('#/levels'),onLevelArea:id=>nav('#/levels/'+encodeURIComponent(id)),onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
     onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet()});
@@ -338,7 +340,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    if(wanted)requestAnimationFrame(()=>{if(root.isConnected)root.showPractice();});
    // A check, a record, a submission or a set saved while home is open: the card, today and the week follow without
    // drawing home again.
-   const practiceChanged=()=>{if(root.isConnected){root.updateToday?.(todayModel(files));refreshWeek();root.updateLevel?.(levelLine());}};
+   const practiceChanged=()=>{if(root.isConnected){root.updateToday?.(todayModel(files));refreshWeek();root.updateLevel?.(levelLine(),levelAreas());}};
    // 타이머만 켜기: its second only changes the time on the card; starting, stopping or a long gap draws the card again.
    let timerShape='';
    const timerChanged=()=>{
@@ -358,7 +360,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     await V.nextPractice?.loadPrecision?.();
     if(!root.isConnected||generation!==mediaGeneration)return;
     const fresh=state(files),list=recentSongs(fresh,media),next=nowCard(fresh,list,nextList(media));
-    root.updateRecent(todayPicks(fresh,media));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updateAlerts?.(attentionItems());root.updateToday?.(todayModel(media));root.updateLevel?.(levelLine());
+    root.updateRecent(todayPicks(fresh,media));root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updateAlerts?.(attentionItems());root.updateToday?.(todayModel(media));root.updateLevel?.(levelLine(),levelAreas());
    };
    const checkDate=()=>{if(root.isConnected&&today()!==lastDate){lastDate=today();V.softRender();}};
    const visible=()=>{if(document.visibilityState==='visible'){checkDate();if(root.isConnected)refreshMedia();}};
