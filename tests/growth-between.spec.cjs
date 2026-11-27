@@ -92,7 +92,9 @@ const BANNED = /덕분|때문에 좋아|효과|향상|악화|개선|좋아졌|�
 test('그 사이에 한 것: under a song pair and a verdict, closed; what was recorded between the two takes, or that nothing was', async ({page}) => {
   await boot(page, between());
   // The lists it reads (결과 리포트 itself keeps its monthly summaries; those are not this line's).
-  const read = async () => { const d = await data(page); return JSON.stringify(['lessons', 'practices', 'dailyGoals', 'assignments', 'deleted', 'comparisonReports'].map(k => d[k])); };
+  // The automatic 녹음 시간 rows ('rec-time:…', app/recording-time) arrive on their own once the recordings are listed —
+  // sometimes after the first read — so they are left out: this line is about what 그 사이에 한 것 itself writes (nothing).
+  const read = async () => { const d = await data(page); d.practices = (d.practices || []).filter(p => !String(p?.id || '').startsWith('rec-time:')); return JSON.stringify(['lessons', 'practices', 'dailyGoals', 'assignments', 'deleted', 'comparisonReports'].map(k => d[k])); };
   const stored = await read();
   await report(page);
   // Under the song pair Memory 2025-08-02 → 2026-11-16.
