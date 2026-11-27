@@ -16,6 +16,9 @@
  *   oneLine({better, worse, practice, kind, fallback}) 이 달 한마디: one or two short sentences from the measures that
  *                            changed and the practice change; the fallback (달라진 한 줄) when nothing moved
  *   stats(values, direction) 처음 · 평균 · 최고 (the best in the measure's own direction) · 개수
+ *   buckets(points, kind)    the flow of a measure said as averages, so many takes read as one line: 주 → one point a
+ *                            day, 월 → one a week (from Monday), 전체 → one a month (one a quarter past 18 months).
+ *                            points [{date, value}] → [{key, from, label, value (the average), count}], oldest first
  * Numbers are observations, never a verdict on the voice. */
 (function(root,factory){
   const node=typeof module==='object'&&module.exports;
@@ -119,5 +122,26 @@ function stats(values,direction=1){
   if(!v.length)return {count:0,first:null,avg:null,best:null,last:null};
   return {count:v.length,first:v[0],last:v.at(-1),avg:v.reduce((a,b)=>a+b,0)/v.length,best:direction===-1?Math.min(...v):Math.max(...v)};
 }
-return {SPARK,AGAINST,RATINGS,lv,tiles,spark,changeLine,daysOf,practice,condition,mix,josa,oneLine,stats};
+const DAY=864e5,num=d=>Date.parse(d+'T00:00:00Z'),iso=t=>new Date(t).toISOString().slice(0,10);
+const mondayOf=d=>{const t=num(d),w=(new Date(t).getUTCDay()+6)%7;return iso(t-w*DAY);};
+const md=d=>Number(d.slice(5,7))+'/'+Number(d.slice(8,10));
+/** What one point of the flow stands for in this kind of period: 'day' · 'week' · 'month' · 'quarter'. */
+function bucketUnit(kind,first='',last=''){
+  if(kind==='week')return 'day';
+  if(kind==='month')return 'week';
+  return first&&last&&(num(last)-num(first))/DAY>548?'quarter':'month';
+}
+const UNIT_WORD={day:'하루',week:'주',month:'월',quarter:'분기'};
+function buckets(points,kind='month'){
+  const pts=list(points).filter(p=>p&&/^\d{4}-\d{2}-\d{2}$/.test(p.date)&&Number.isFinite(p.value)).slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  if(!pts.length)return [];
+  const unit=bucketUnit(kind,pts[0].date,pts.at(-1).date),years=new Set(pts.map(p=>p.date.slice(0,4))).size>1;
+  const keyOf=d=>unit==='day'?d:unit==='week'?mondayOf(d):unit==='month'?d.slice(0,7):d.slice(0,4)+'-Q'+(Math.floor((Number(d.slice(5,7))-1)/3)+1);
+  const fromOf=(k,d)=>unit==='day'||unit==='week'?k:unit==='month'?k+'-01':k.slice(0,4)+'-'+String((Number(k.slice(-1))-1)*3+1).padStart(2,'0')+'-01';
+  const labelOf=from=>unit==='day'?md(from):unit==='week'?md(from)+'주':unit==='month'?(years?from.slice(2,4)+'.':'')+Number(from.slice(5,7))+'월':from.slice(2,4)+'년 '+((Number(from.slice(5,7))-1)/3+1)+'분기';
+  const out=new Map();
+  for(const p of pts){const k=keyOf(p.date);let b=out.get(k);if(!b)out.set(k,b={key:k,from:fromOf(k,p.date),sum:0,count:0});b.sum+=p.value;b.count++;}
+  return [...out.values()].map(b=>({key:b.key,from:b.from,date:b.from,label:labelOf(b.from),value:b.sum/b.count,count:b.count,unit}));
+}
+return {SPARK,AGAINST,RATINGS,UNIT_WORD,lv,tiles,spark,changeLine,daysOf,practice,condition,mix,josa,oneLine,stats,bucketUnit,buckets};
 });

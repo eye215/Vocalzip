@@ -484,6 +484,7 @@ test('나 (새 디자인): 보관함 in the header, tab pills, the period pill, 
   await expect(flow.locator('[data-gm-mx-glow]')).toHaveCount(1);
   await expect(flow.locator('.gm-stars i')).toHaveCount(3);
   await expect(flow.locator('[data-gm-mx-stats]')).toHaveText(/^처음 .+평균 .+최고 .+녹음 \d+개$/);
+  await expect(flow.locator('[data-gm-mx-unit]')).toHaveText('점 하나 = 주 평균');
   await tiles.nth(2).click();
   await expect(tiles.nth(2)).toHaveAttribute('aria-pressed', 'true');
   await expect(tiles.first()).toHaveAttribute('aria-pressed', 'false');
