@@ -173,7 +173,7 @@ test('기간 chips (흐름): 이번 달 and 지난달 say that month against the
   await expect(page.locator('[data-song-month-detail="2026-11"]')).toBeVisible();
 });
 
-test('분석한 녹음이 둘 미만: 머리가 말하고, 카드 하나와 줄 셋 — 탭의 빈 상자는 없다', async ({page}) => {
+test('분석한 녹음이 둘 미만: 머리가 말하고, 카드 하나와 줄 넷 — 탭의 빈 상자는 없다', async ({page}) => {
   await boot(page);
   // 새 곡 (s4) without its two analysed videos: two recordings, none analysed.
   await page.evaluate(rows => { window.vzipReadMedia = async () => rows.map(r => ({...r})); VZ.media.invalidate(); }, MEDIA.filter(m => !['dv', 'dc'].includes(m.id)));
@@ -189,7 +189,7 @@ test('분석한 녹음이 둘 미만: 머리가 말하고, 카드 하나와 줄 
   await expect(card.locator('[data-sa-analyse]')).toHaveText('녹음 2개 분석하기');
   await expect(page.locator('[data-song-section="changes"]')).toBeHidden();
   expect(await page.locator('[data-lab]').evaluate(el => (el.innerText.match(/아직 없어요/g) || []).length)).toBe(1);
-  await expect(page.locator('.sa-rows .sa-row')).toHaveText([/녹음 2개\s*들어 보기/, /듣고 고르기/, /레슨 지적\s*이 곡 지적 0개/]);
+  await expect(page.locator('.sa-rows .sa-row')).toHaveText([/녹음 2개\s*들어 보기/, /듣고 고르기/, /레슨 지적\s*이 곡 지적 0개/, /깊이 보기\s*정밀 리포트/]);
   // 녹음 분석하기: the existing on-device analysis of each take, saved; then the screen is the whole one.
   await page.evaluate(() => { VZ.analyzeRecording = async m => { const a = (await VZ.media.list()).find(x => x.id === 'e1').analysis; await VZ.media.update(m, {analysis:a}, {quiet:true}); return {summary:a}; }; });
   // 녹음 2개 · 들어 보기 opens 녹음별 with the tabs.

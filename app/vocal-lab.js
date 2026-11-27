@@ -793,9 +793,13 @@ function paintEmpty(s){
     '<nav class="sa-card sa-rows" aria-label="이 곡의 다른 곳">'+
     (n?'<button type="button" class="sa-row" data-sa-go="takes"><span><strong>녹음 '+n+'개</strong><small>들어 보기</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>':'')+
     (V.listenSession&&n>=2?'<a class="sa-row" href="#/listen?song='+encodeURIComponent(s.song.id)+'" data-sa-listen><span><strong>듣고 고르기</strong><small>두 녹음 중 더 나은 쪽</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>':'')+
-    '<button type="button" class="sa-row" data-sa-go="weak"><span><strong>레슨 지적</strong><small>이 곡 지적 '+points+'개</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button></nav>';
+    '<button type="button" class="sa-row" data-sa-go="weak"><span><strong>레슨 지적</strong><small>이 곡 지적 '+points+'개</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>'+
+    '<button type="button" class="sa-row" data-sa-deep><span><strong>깊이 보기</strong><small>정밀 리포트 · 리포트 보관함</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button></nav>';
   intro.querySelector('[data-sa-analyse]')?.addEventListener('click',()=>analyseMany(s));
   intro.querySelectorAll('[data-sa-go]').forEach(b=>b.onclick=()=>{s.explored=true;setTab(s,b.dataset.saGo,{focus:true});});
+  // 깊이 보기 lives in 녹음별: open that tab with the fold open, so the tools stay reachable before any take is analysed.
+  intro.querySelector('[data-sa-deep]')?.addEventListener('click',()=>{s.explored=true;setTab(s,'takes');
+    const d=host.querySelector('[data-song-section="deep"]');if(d){d.open=true;d.querySelector('summary')?.focus();d.scrollIntoView({block:'start'});}});
 }
 /** The takes this screen can analyse now (audio the device can open, not analysed yet), oldest first. */
 const toAnalyse=s=>audible(s).filter(m=>!analysis(m)).reverse();
