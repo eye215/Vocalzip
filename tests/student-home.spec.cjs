@@ -1221,7 +1221,8 @@ test('shared colors, type hierarchy, cards and four-item dock (v4 IA) apply to r
 test('the top: the week\'s days show practised days and today, say the streak plainly and keep their height',async({page})=>{
  await boot(page);
  const strip=weekStrip(page),text=strip.locator('.vz-week-strip-text'),dots=strip.locator('.vz-week-dots>span');
- await expect(page.locator('.vz-logo')).toHaveCount(0);await expect(page.locator('.vz-header')).not.toContainText('Vocalzip');
+ await expect(page.locator('.vz-logo')).toHaveCount(0);// The old wordmark is gone; the new logo (연보라 동그라미 + Vocalzip) leads the header's first line.
+ await expect(page.locator('.vz-header .vz-brand')).toHaveAccessibleName('Vocalzip');await expect(page.locator('.vz-header .vz-brand-word')).toHaveText('Vocalzip');
  await expect(page.locator('.vz-header .vz-top-date')).toHaveText('11월 4일 수요일');
  await expect(text).toHaveText('이번 주 연속 1일');await expect(text.locator('b')).toHaveText('연속 1일');await expect(text.locator('b')).toHaveCSS('color','rgb(91, 31, 194)');
  // Monday first, as the week model counts: 수 is today and practised (filled, ringed); the other days are pale.
