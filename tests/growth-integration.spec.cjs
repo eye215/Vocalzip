@@ -69,7 +69,7 @@ test('current month stays available without recordings, and AI completion respec
  assert.match(js,/let selected=\/\^\\d\{4\}-\\d\{2\}\$\/\.test\(month\)\?month:currentKey/);
  // ‹ › while it runs: the result is still saved for its own month, and drawn only if that report is still the one shown.
  assert.match(js,/my===request&&visibleSerial===renderSerial&&selected===month/);
- assert.match(js,/if\(!host\.isConnected\|\|!window\.vzipCloudSignedIn/);
+ assert.match(js,/if\(!stillHere\(\)\|\|!window\.vzipCloudSignedIn/);
  assert.doesNotMatch(js,/btn\.onclick=\(\)=>\{selected=month;render\(\)/);
 });
 

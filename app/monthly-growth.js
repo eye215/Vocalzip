@@ -321,7 +321,10 @@ async function mount(host,{kind='month',month='',onMonth=null}={}){
     monthlyAiBusy=true;aiButton.disabled=true;
     const ok=await V.confirm('AI 월간 종합 받기',monthlySendText(evidence),{ok:'보내기'});
     monthlyAiBusy=false;aiButton.disabled=false;
-    if(!ok||my!==request||!host.isConnected)return;
+    // The report can be drawn again while the question is open (a sync or the recordings arriving, even into a new
+    // host): 보내기 still sends for the month that was asked about. Only leaving 성장's 월 report drops it.
+    const stillHere=()=>host.isConnected||!!document.querySelector('[data-gm-report="month"]');
+    if(!ok||!stillHere())return;
     const month=selected,owner=window.vzipCloudUserId?.(),origin=window.vzipCloudSessionId?.();
     const state=host.querySelector('[data-monthly-ai-state]');
     monthlyAiBusy=true;aiButton.disabled=true;aiButton.textContent='AI 분석 중…';
@@ -330,7 +333,7 @@ async function mount(host,{kind='month',month='',onMonth=null}={}){
       const response=await window.vzipCloudCoach(evidence);
       // ‹ › to another period while it runs (a new report in the same host) keeps the result for its own month; leaving
       // 성장 (host gone) or another account does not.
-      if(!host.isConnected||!window.vzipCloudSignedIn?.()||owner!==window.vzipCloudUserId?.()||
+      if(!stillHere()||!window.vzipCloudSignedIn?.()||owner!==window.vzipCloudUserId?.()||
           origin!==window.vzipCloudSessionId?.()||response?.mode!=='monthly'||response.month!==month)
         throw Error('화면이나 계정이 변경되어 결과를 저장하지 않았어요.');
       const note=String(response.note||'').trim().slice(0,1800);
@@ -346,6 +349,7 @@ async function mount(host,{kind='month',month='',onMonth=null}={}){
       // A different month can be selected while the model is generating.
       // Never replace the currently displayed month's card with the old result.
       if(my===request&&visibleSerial===renderSerial&&selected===month)render();
+      else if(my!==request||!host.isConnected)V.softRender?.(); // drawn again meanwhile: draw once more with the saved report
       V.toast('월간 AI 리포트를 저장했어요.');
     }catch(err){if(state?.isConnected)state.textContent=err.message||'AI 리포트 생성에 실패했어요.';V.toast('월간 분석에 실패했어요. 기존 기록은 유지돼요.','error');}
     finally{monthlyAiBusy=false;if(aiButton.isConnected){aiButton.disabled=false;aiButton.textContent='AI 월간 종합 분석하기';}}
