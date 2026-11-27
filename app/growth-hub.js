@@ -25,12 +25,15 @@ if (!V || !M) return;
 const e = V.esc, G = window.VzipGrowthMetrics;
 // 성장 v2 (.kiro/specs/growth-v2): 나 · 곡 · 기록.
 const TABS = [['me', '나', '#/vocal-growth'], ['songs', '곡', '#/vocal-analysis'], ['lab', '기록', '#/growth-lab']];
-/** The three 성장 tabs; `active` is month | songs | lab. Links, so each tab has its own address. */
-V.growthTabs = active => '<nav class="growth-top-tabs" aria-label="성장 메뉴">' + TABS.map(([key, label, href]) =>
-  '<a href="' + href + '" data-growth-tab="' + key + '" data-growth-replace' + (key === active ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';
+/** The three 성장 tabs; `active` is me | songs | lab. Links, so each tab has its own address. Only the chosen one is a
+ * pill (no track behind them); `side` sits at the right end of the row (나's period pill). */
+V.growthTabs = (active, side = '') => '<div class="growth-tabbar"><nav class="growth-top-tabs" aria-label="성장 메뉴">' + TABS.map(([key, label, href]) =>
+  '<a href="' + href + '" data-growth-tab="' + key + '" data-growth-replace' + (key === active ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>' + side + '</div>';
+/** 보관함 (리포트 보관함, #/lab-reports) in the header of the three tabs, beside the gear. */
+const archive = () => '<a class="growth-top-pill" href="#/lab-reports" data-growth-archive>보관함</a>';
 /** Move between the tabs / periods of 성장 without adding a history entry. */
 const go = hash => { if (location.hash !== hash) location.replace(hash); };
-V.growthHub = {tabs:TABS.map(([key, , href]) => ({key, href})), go};
+V.growthHub = {tabs:TABS.map(([key, , href]) => ({key, href})), go, archive};
 /** The 성장 period (주간 · 월별 · 전체) kept on this device: 'week' | 'month' (default) | 'all'. Not part of the library. */
 const PERIOD_KEY = 'vzip:growth-period', PERIODS = ['week', 'month', 'all'];
 V.growthPeriod = {
@@ -211,7 +214,7 @@ async function mountAnalysis(host) {
   const sw = host.querySelector('[data-hub-practice]');
   if (sw) sw.onchange = async () => { V.growthSong.setPractice(sw.checked); await mountAnalysis(host); host.querySelector('[data-hub-practice]')?.focus({preventScroll:true}); };
 }
-V.route('vocal-analysis', {title:'성장', tab:'growth', noAutoRefresh:true,
+V.route('vocal-analysis', {title:'성장', tab:'growth', noAutoRefresh:true, actions:archive,
   render:() => V.growthTabs('songs') + (V.listenSession ? '<a class="ls-entry" href="#/listen" data-listen-entry><i class="ph-fill ph-headphones" aria-hidden="true"></i><span><strong>듣고 고르기</strong><small>예전과 요즘 녹음을 이어 듣고 어느 쪽이 나은지 골라요. 화면을 꺼도 계속 나와요.</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>' : '') + '<div data-sc-notice></div><div class="growth-hub" data-growth-analysis></div>',
   mount(main) {
     mountAnalysis(main.querySelector('[data-growth-analysis]'));

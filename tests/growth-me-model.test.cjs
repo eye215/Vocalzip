@@ -35,3 +35,52 @@ test('changeLine: the latest song pair with a real change, else a listening verd
   assert.equal(G.changeLine({songs:[]}), null);
   assert.equal(G.changeLine(null), null);
 });
+
+/* ---------- the period overview of 나 (성장 새 디자인, 2026-11-27) ---------- */
+const SPAN = {from:'2026-11-01', to:'2026-11-30', today:'2026-11-04'}, PREV = {from:'2026-10-01', to:'2026-10-31'};
+test('practice: entered minutes a day over the elapsed days, a running average, against the previous span', () => {
+  const db = {practices:[{id:'a', date:'2026-11-02', minutes:30}, {id:'b', date:'2026-11-03', manualMinutes:10, minutes:99}, {id:'c', date:'2026-11-05', minutes:60},
+    {id:'d', date:'2026-10-10', minutes:62}, {id:'x', date:'2026-11-02', minutes:40, practiceTimeSource:'unconfirmed'}, {id:'g', date:'2026-11-03', minutes:20}], deleted:{practices:['g']}};
+  const p = G.practice(db, SPAN, PREV);
+  assert.equal(p.days, 4);                                   // 1–4 November: a later day does not count yet
+  assert.equal(p.total, 40);                                 // manual minutes first; unconfirmed and deleted rows add nothing
+  assert.equal(p.practised, 2);
+  assert.deepEqual(p.line.map(x => x.avg), [0, 15, 40 / 3, 10]);
+  assert.equal(p.before.avg, 2);
+  assert.deepEqual([p.delta, p.trend], [8, 'up']);
+  assert.equal(G.practice(db, SPAN, null).trend, null);    // 전체: nothing to hold it against
+  assert.equal(G.practice({practices:[]}, SPAN, PREV).trend, 'same');
+});
+
+test('condition: one dot a day with the day\'s last 보이스 체크 rating; a check without a rating is a checked day', () => {
+  const vc = (id, date, rating, created) => ({id, date, minutes:.5, practiceMode:'training', created, voiceCheck:{v:1, ...(rating ? {selfRating:rating} : {})}});
+  const db = {practices:[vc('v1', '2026-11-01', 2, 1), vc('v2', '2026-11-01', 4, 2), vc('v3', '2026-11-03', 0, 3), vc('v4', '2026-11-09', 5, 4)]};
+  const c = G.condition(db, [{date:'2026-11-02', voiceCheck:true}, {date:'2026-11-04', voiceCheck:false}], SPAN);
+  assert.deepEqual(c.dots.map(d => [d.rating, d.checked]), [[4, true], [null, true], [null, true], [null, false]]);
+  assert.deepEqual([c.avg, c.rated, c.checkedDays, c.word], [4, 1, 3, '좋음']);
+  const none = G.condition({practices:[]}, [], SPAN);
+  assert.deepEqual([none.avg, none.word, none.checkedDays], [null, '', 0]);
+});
+
+test('mix: 곡 and 기본기 from entered minutes, 녹음 from the recordings\' length, only inside the elapsed span', () => {
+  const db = {practices:[{id:'a', date:'2026-11-02', minutes:30, songId:'s1'}, {id:'b', date:'2026-11-03', minutes:12, practiceMode:'training'}, {id:'c', date:'2026-10-30', minutes:50}]};
+  const m = G.mix(db, [{date:'2026-11-02', seconds:120}, {date:'2026-11-03', seconds:'x'}, {date:'2026-11-20', seconds:600}], SPAN);
+  assert.deepEqual(m, {song:30, basic:12, rec:2, total:44});
+});
+
+test('oneLine: the measures that changed and the practice change, in plain Korean; the change line when nothing moved', () => {
+  assert.equal(G.oneLine({better:['음정 정확도'], worse:['고음 안정성'], practice:'up'}), '음정 정확도가 좋아지고 연습도 늘었어요. 고음 안정성은 다시 살펴봐요.');
+  assert.equal(G.oneLine({better:['호흡 유지', '음정 안정성'], practice:'down', kind:'week'}), '호흡 유지·음정 안정성이 좋아졌어요. 연습은 줄었어요.');
+  assert.equal(G.oneLine({practice:'up', kind:'week'}), '지난주보다 연습이 늘었어요.');
+  assert.equal(G.oneLine({practice:'same', fallback:'Home · 흔들림이 줄었어요'}), 'Home · 흔들림이 줄었어요');
+  assert.equal(G.oneLine({practice:'up', fallback:'Home · 흔들림이 줄었어요'}), 'Home · 흔들림이 줄었어요 지난달보다 연습이 늘었어요.');
+  assert.equal(G.oneLine({practice:'same'}), '연습량은 지난달과 비슷해요.');
+  assert.match(G.oneLine({kind:'all'}), /^아직 견줄 녹음이 부족해요/);
+  assert.deepEqual([G.josa('음정 안정성', '은', '는'), G.josa('호흡 유지', '은', '는'), G.josa('F5', '이', '가')], ['은', '는', '가']);
+});
+
+test('stats: first, mean, the best in the measure\'s own direction, count', () => {
+  assert.deepEqual(G.stats([30, 20, 25], -1), {count:3, first:30, last:25, avg:25, best:20});
+  assert.equal(G.stats([3, 4.2, 3.4], 1).best, 4.2);
+  assert.equal(G.stats([], 1).count, 0);
+});

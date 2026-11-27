@@ -12,6 +12,7 @@
 // WebKit: never page.goto() to the address the page is already on (it reloads and the in-page fixtures vanish) — the
 // address is changed through location.hash (go()).
 const {test, expect} = require('@playwright/test');
+const {period} = require('./growth-me-helpers.cjs');
 const fs = require('node:fs');
 require('./legacy-session-mode.cjs')(test);
 const {NOW, MEDIA, DB} = require('./growth-characterization.fixture.cjs');
@@ -175,7 +176,7 @@ test('판정은 이번 달과 같다: 같은 곡의 처음·최근 줄과 지난
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/vocal-growth\?period=all&changes=1$/);
   // 월별 › 곡별 Home: the song screen at this month's chip, with that month's line (지난 기간 vs 이번 기간).
-  await page.locator('[data-gm-period="month"]').click();
+  await period(page, 'month');
   await expect(page.locator('[data-gm-section="changes"] [data-gc-song="s5"] .gc-basis')).toContainText('지난 기간 마지막 녹음과 이번 기간');
   const monthLine = await line(page, '[data-gm-section="changes"]', 's5');
   await page.locator('[data-gm-scope="song"]').click();

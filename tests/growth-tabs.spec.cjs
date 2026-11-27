@@ -6,6 +6,7 @@
 // result). Fake data only.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
+const {period, openReport} = require('./growth-me-helpers.cjs');
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
@@ -77,15 +78,16 @@ test('성장 opens on 이번 달 with three tabs; the period control stays a sep
   await expect(tabs(page)).toHaveText(['나', '곡', '기록']);
   await expect(current(page)).toHaveText('나');
   await expect(page.locator('[data-gm-period="month"]')).toHaveAttribute('aria-pressed', 'true');   // 월별 by default
-  await page.locator('[data-gm-period="week"]').click();
+  await period(page, 'week');
   await expect(page.locator('[data-gm-section="done"] h2')).toHaveText('이번 주에 한 것');
   await expect(current(page)).toHaveText('나');           // changing the period redraws the content, not the tabs
   expect(await page.evaluate(() => { const t = document.querySelector('.growth-top-tabs').getBoundingClientRect(), p = document.querySelector('.growth-view-tabs').getBoundingClientRect(); return t.bottom <= p.top; })).toBe(true);
   for (const a of await tabs(page).all()) expect((await a.boundingBox()).height).toBeGreaterThanOrEqual(44);
-  // The former 결과 리포트 (전체 · 월별 · 주간) is the report of the period, right here (큰 정리 3번).
+  // The former 결과 리포트 (전체 · 월별 · 주간) is the report of the period, its own row right here (큰 정리 3번).
+  await openReport(page);
   await expect(page.locator('[data-gm-report="week"]')).toBeVisible();
   await expect(page.locator('[data-gm-flow]')).toHaveCount(0);
-  await page.locator('[data-gm-period="all"]').click();
+  await period(page, 'all');
   await expect(page.locator('[data-gm-report="all"] [data-overall-body]')).toBeVisible();
   await expect(page.locator('.v-nav a[data-nav="growth"]')).toHaveAttribute('aria-current', 'page');
   // The period is kept on the device: 곡 and back to 나 open 전체 again.
@@ -308,9 +310,9 @@ test('empty account: each tab says what is missing instead of showing numbers', 
   await expect(current(page)).toHaveText('나');
   await expect(page.locator('[data-gm-tile="minutes"] strong')).toHaveText('0분');
   await expect(page.locator('[data-gm-section="next"] [data-gm-chip="숙제"]')).toHaveCount(0);   // nothing made up
-  // 나 says there is nothing to compare yet; 달라진 것 자세히 says which part is missing.
-  await expect(page.locator('[data-gme-line-empty]')).toBeVisible();
+  // 나 says there is nothing to compare yet (under 곡마다 자세히, with the part that is missing).
   await page.locator('[data-gme-changes]').click();
+  await expect(page.locator('[data-gme-line-empty]')).toBeVisible();
   await expect(page.locator('[data-growth-changes] [data-gc-empty="songs"]')).toBeVisible();
   expect(page.__errors).toEqual([]);
 });

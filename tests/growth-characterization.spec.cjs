@@ -103,7 +103,7 @@ async function collect(page, monthKeys) {
   // 월별 리포트 (성장 › 나 › 월, ‹ › to each month the report used to offer), with the plans and their outcome previews.
   out.monthly = {};
   for (const month of monthKeys) {
-    await go(page, '#/vocal-growth?period=month&month=' + month, '[data-gm-label]');
+    await go(page, '#/vocal-growth?period=month&month=' + month, '[data-gm-section="word"]');
     await expect(page.locator('[data-gm-label]')).toContainText(month.slice(0, 4) + '년 ' + Number(month.slice(5)) + '월');
     await expect(page.locator('[data-gm-report="month"] [data-month-section="history"]')).toBeAttached();
     out.monthly[month] = await page.locator('[data-gm-report="month"]').evaluate(texts());

@@ -41,10 +41,10 @@
 .gm-next-main small{font-size:12px;line-height:17px;color:var(--vz-color-ink-muted,#667085)}
 .gm-chips{display:flex;flex-wrap:wrap;gap:4px;margin:0}
 .gm-chip{padding:1px 8px;border-radius:99px;background:#fff;color:var(--vz-color-accent,#7A32F5);font-size:11px;line-height:16px;font-weight:700}
-.gm-chip[data-gm-chip="숙제"]{background:#FFF3DC;color:#8A5A00}
-.gm-chip[data-gm-chip="레슨 지적"]{background:#FDE8EC;color:#A3263F}
-.gm-chip[data-gm-chip="측정"]{background:#E3F4EC;color:#147D56}
-.gm-chip[data-gm-chip="AI"]{background:#EEF0F4;color:#475467}
+.gm-chip[data-gm-chip="숙제"]{background:#5B1FC2;color:#fff}
+.gm-chip[data-gm-chip="레슨 지적"]{background:#EFE8FC;color:#5B1FC2}
+.gm-chip[data-gm-chip="측정"]{background:#fff;color:#7A32F5;box-shadow:inset 0 0 0 1px #E3D6FB}
+.gm-chip[data-gm-chip="AI"]{background:#F2F4F7;color:#667085}
 .gm-next-actions{flex:none;display:flex;gap:6px;max-width:100%}
 .gm-act{background:#fff}
 .gm-act[disabled]{opacity:.6;cursor:default}
@@ -75,25 +75,18 @@
 @media (prefers-reduced-motion:reduce){.gm-switch input,.gm-switch input::after{transition:none}}
 /* 성장 v2 · 나 (app/growth-month.js meHtml / lineHtml): 단계 in ONE row (the level card and the eight 기본기 areas live
  * on 단계, #/levels), and ONE sentence of what changed. Light canvas, accent #7A32F5, 44px targets. */
-.gme-me{display:block;padding:0;background:transparent;box-shadow:none;border:0;}
-.gme-lv{display:flex;align-items:center;gap:10px;min-height:48px;padding:10px 14px;border-radius:16px;background:#fff;color:#101828;text-decoration:none;box-shadow:0 0 0 1px #EFE9F8;}
-.gme-lv:active{background:#F8F5FD;}
-.gme-lv:focus-visible{outline:2px solid #7A32F5;outline-offset:2px;}
-.gme-lv-icon{flex:none;color:#7A32F5;font-size:18px;}
-.gme-lv-text{flex:1;min-width:0;font-size:14px;line-height:20px;font-weight:600;word-break:keep-all;font-variant-numeric:tabular-nums;}
-.gme-lv-go{flex:none;color:#98A2B3;font-size:16px;}
 .gme-h{margin:0 0 4px;font-size:17px;line-height:24px;font-weight:700;}
 .gme-line-text{margin:0 0 2px;font-size:16px;line-height:23px;font-weight:600;color:#101828;word-break:keep-all;}
 .gme-line .gm-act{margin-top:8px;}
 /* 성장 v2 · 곡 카드 (app/growth-hub.js): a card per analysed song — word, one line, ▶ 처음 · 최근, count and day. */
 .gs-cards{display:grid;gap:10px;}
-.gs-card{border-radius:18px;background:#fff;box-shadow:0 0 0 1px #EFE9F8;overflow:hidden;}
+.gs-card{border-radius:22px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.05),0 8px 24px rgba(59,15,140,.06);overflow:hidden;}
 .gs-card[hidden]{display:none;}
 .gs-main{border:0!important;background:transparent!important;}
 .gs-line{display:block;margin:2px 0;color:#101828;font-size:14px;line-height:20px;font-weight:600;word-break:keep-all;}
-.gs-card[data-state=better] .gs-line{color:#5B21C7;}
+.gs-card[data-state=better] .gs-line{color:#5B1FC2;}
 .gs-plays{display:flex;gap:8px;padding:0 12px 12px;}
-.gs-play{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 10px;border:0;border-radius:12px;background:#F3ECFF;color:#5B21C7;font:inherit;font-size:13px;font-weight:600;cursor:pointer;}
+.gs-play{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 10px;border:0;border-radius:12px;background:#EFE8FC;color:#5B1FC2;font:inherit;font-size:13px;font-weight:600;cursor:pointer;}
 .gs-play i{font-size:14px;}
 .gs-player:not(:empty){padding:0 12px 12px;}
 @media (min-width:760px){.gs-cards{grid-template-columns:repeat(2,minmax(0,1fr));}}
@@ -113,3 +106,122 @@
 .gme-more .gm-changes{margin-top:12px}
 .gm-report{min-width:0}
 .gm-report:empty{display:none}
+/* 성장 › 나 — new design (2026-11-27, owner-approved "합친 안"): the period pill beside the tabs, 이 달 한마디 (the only
+ * background gradient of the page), 연습량 · 목 상태, 지표 6가지 with the chosen measure's flow, 연습 구성, one white list
+ * of rows, and the period's report as its own row. White cards R22, purple only, 44px targets. */
+.gm-period-slot{flex:none;min-width:0}
+.gm-period-pill{position:relative;z-index:0;display:inline-flex;align-items:center;gap:6px;min-height:44px;max-width:100%;padding:0 14px;border:0;background:none;color:#5B1FC2;font:inherit;font-size:14px;line-height:18px;font-weight:800;white-space:nowrap;cursor:pointer}
+.gm-period-pill::before{content:"";position:absolute;inset:5px 0;z-index:-1;border-radius:99px;background:#EFE8FC}
+.gm-period-pill span{overflow:hidden;text-overflow:ellipsis}
+.gm-period-pill .gm-chev{flex:none;transition:transform .15s}
+.gm-period-pill[aria-expanded="true"] .gm-chev{transform:rotate(180deg)}
+.gm-period-pill:focus-visible{outline:2px solid #7A32F5;outline-offset:2px;border-radius:99px}
+.gm-period-panel{padding:8px;border-radius:22px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.05),0 8px 24px rgba(59,15,140,.06)}
+.gm-period-panel[hidden]{display:none}
+.gm-period-panel .gm-step-btn{border-color:#EFE8FC}
+.gm-period-panel .growth-view-tabs.growth-range button.active{background:#EFE8FC;color:#5B1FC2;font-weight:800}
+/* 이 달 한마디 */
+.gm-word{min-width:0;padding:16px;border-radius:22px;background:linear-gradient(180deg,#F1EAFF 0%,#FFFFFF 100%);border:1px solid #EDE5FB;box-shadow:0 4px 14px rgba(59,15,140,.06)}
+.gm-word-title{margin:0;font-size:13px;line-height:18px;font-weight:800;color:#5B1FC2}
+.gm-word-text{margin:6px 0 2px;color:#101828;font-size:15px;line-height:1.55;font-weight:600;word-break:keep-all}
+.gm-word-basis{margin:0;color:#7D8597;font-size:13px;line-height:18px}
+.gm-word-acts{display:flex;gap:8px;margin-top:12px;min-width:0}
+.gm-word-acts .gm-pill-line{flex:0 1 auto}
+.gm-word-acts .gm-pill-text{flex:none}
+.gm-pill{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%;min-height:44px;padding:0 14px;border:0;border-radius:99px;background:none;color:#5B1FC2;font:inherit;font-size:13px;line-height:18px;font-weight:800;text-decoration:none;white-space:nowrap;cursor:pointer}
+.gm-pill-line{background:#fff;box-shadow:inset 0 0 0 1px #E3D6FB}
+.gm-pill-text{background:rgba(255,255,255,.85)}
+.gm-pill-t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.gm-pill span:not(.gm-pill-t){flex:none}
+.gm-pill i{margin-right:4px;font-size:15px}
+.gm-pill[disabled]{opacity:.6;cursor:default}
+.gm-pill:focus-visible{outline:2px solid #7A32F5;outline-offset:2px}
+/* White cards */
+.gm-card,.gm-tile2,.gm-rows,.gm-report-fold>summary{background:#fff;border-radius:22px;box-shadow:0 1px 2px rgba(59,15,140,.05),0 8px 24px rgba(59,15,140,.06)}
+.gm-card{display:grid;gap:12px;min-width:0;padding:16px}
+.gm-card-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 8px;min-width:0}
+.gm-card-head h2{margin:0;color:#101828;font-size:17px;line-height:24px;font-weight:800;letter-spacing:-.02em}
+.gm-card-head>span{color:#667085;font-size:13px;line-height:18px;font-variant-numeric:tabular-nums}
+/* 연습량 · 목 상태 */
+.gm-tiles2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-width:0}
+.gm-tile2{display:flex;flex-direction:column;gap:8px;min-width:0;padding:14px;color:#101828;text-decoration:none}
+.gm-tile2:focus-visible{outline:2px solid #7A32F5;outline-offset:2px}
+.gm-tile2-head{display:flex;align-items:center;justify-content:space-between;color:#667085;font-size:13px;line-height:18px;font-weight:600}
+.gm-tile2-head .gm-chev{flex:none;width:14px;height:14px;color:#D0D5DD}
+.gm-spark{display:block;width:100%;height:58px}
+.gm-dots{display:grid;grid-template-columns:repeat(var(--gm-cols,14),minmax(0,1fr));gap:3px;align-content:center;height:58px}
+.gm-dots i{display:block;aspect-ratio:1;border-radius:99px;background:#F3EEFC}
+.gm-dots i[data-dot="checked"]{background:#fff;box-shadow:inset 0 0 0 1.5px #B994FF}
+.gm-dots i[data-dot="later"]{background:#F7F5FB}
+.gm-tile2-num{line-height:30px;font-variant-numeric:tabular-nums}
+.gm-tile2-num b{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.gm-tile2-num small{color:#667085;font-size:13px;font-weight:600}
+.gm-tile2-foot{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:0 6px;font-size:13px;line-height:18px}
+.gm-tile2-foot strong{font-weight:800}
+.gm-tile2-foot span{color:#667085;font-weight:700;font-variant-numeric:tabular-nums}
+/* 지표 6가지 */
+.gm-mx-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;min-width:0}
+.gm-mx-tile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;min-height:44px;padding:9px 10px;border:0;border-radius:14px;background:#F7F5FB;color:#101828;font:inherit;text-align:left;cursor:pointer}
+.gm-mx-tile span,.gm-mx-tile b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gm-mx-tile span{color:#667085;font-size:13px;line-height:18px;font-weight:600}
+.gm-mx-tile b{font-size:15px;line-height:20px;font-weight:800;font-variant-numeric:tabular-nums}
+.gm-mx-tile b small{color:#667085;font-size:13px;font-weight:700}
+.gm-mx-tile[aria-pressed="true"]{background:#EFE8FC}
+.gm-mx-tile[aria-pressed="true"] :is(span,b,small){color:#5B1FC2}
+.gm-mx-tile[aria-pressed="true"] span{font-weight:800}
+.gm-mx-tile:focus-visible{outline:2px solid #7A32F5;outline-offset:2px}
+.gm-mx-rule{height:1px;background:#F3EEFC}
+.gm-mx-flow{display:grid;gap:10px;min-width:0}
+.gm-mx-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;min-width:0}
+.gm-mx-name,.gm-mx-state{font-size:15px;line-height:22px;font-weight:800}
+.gm-mx-big{font-size:24px;line-height:30px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.gm-mx-vs{margin-left:auto;color:#667085;font-size:13px;line-height:18px;font-variant-numeric:tabular-nums}
+.gm-mx-vs b{color:#101828;white-space:nowrap}
+.gm-mx-empty{margin:0;padding:12px 14px;border-radius:14px;background:#F7F5FB;color:#667085;font-size:13px;line-height:20px}
+.gm-flow{position:relative;min-width:0}
+.gm-flow-svg{display:block;width:100%;height:auto;overflow:visible}
+.gm-stars{position:absolute;width:0;height:0;pointer-events:none}
+.gm-stars i{position:absolute;left:var(--x);top:var(--y);width:var(--s);height:var(--s);opacity:0;animation:gmTwinkle var(--d) ease-in-out var(--w) infinite}
+.gm-stars svg{display:block;width:100%;height:100%;fill:#B892FF}
+@keyframes gmTwinkle{0%,100%{opacity:0;transform:scale(.2) rotate(0deg)}45%{opacity:.55;transform:scale(1) rotate(30deg)}60%{opacity:.45;transform:scale(.85) rotate(40deg)}}
+.gm-mx-stats{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;margin:0;color:#667085;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums}
+.gm-mx-stats b{color:#101828}
+/* 연습 구성 */
+.gm-mix-row{display:flex;align-items:center;gap:10px;min-width:0}
+.gm-mix-bar{position:relative;flex:1;min-width:0;height:30px;border-radius:10px;background:#F3EEFC;overflow:hidden}
+.gm-mix-bar i{display:block;height:100%;border-radius:10px}
+[data-gm-mix="song"] .gm-mix-bar i{background:linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%)}
+[data-gm-mix="basic"] .gm-mix-bar i{background:linear-gradient(135deg,#B892FF 0%,#9A5BFF 100%)}
+[data-gm-mix="rec"] .gm-mix-bar i{background:linear-gradient(135deg,#D9C6FF 0%,#BFA0FF 100%)}
+.gm-mix-bar span{position:absolute;left:10px;top:0;color:#5B1FC2;font-size:13px;line-height:30px;font-weight:800;white-space:nowrap}
+.gm-mix-bar span.on{color:#fff}
+.gm-mix-row>b{flex:none;min-width:72px;text-align:right;font-size:13px;line-height:18px;font-weight:700;font-variant-numeric:tabular-nums}
+.gm-mix-note{margin:0;color:#7D8597;font-size:12px;line-height:18px}
+/* The rows */
+.gm-rows{min-width:0;padding:2px 16px}
+.gm-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:52px;padding:12px 0;border:0;border-bottom:1px solid #F3EEFC;background:none;color:#101828;font:inherit;text-align:left;text-decoration:none;list-style:none;cursor:pointer}
+.gm-row::-webkit-details-marker{display:none}
+.gm-rows>:last-child.gm-row,.gm-rows>details:last-child:not([open])>.gm-row{border-bottom:0}
+.gm-row-text{flex:1;min-width:0;word-break:keep-all}
+.gm-row-text strong{font-size:15px;line-height:22px;font-weight:700}
+.gm-row-sub{color:#667085;font-size:13px;line-height:20px;font-variant-numeric:tabular-nums}
+.gm-row .gm-chev{flex:none;color:#7A32F5;transition:transform .15s}
+.gm-fold[open]>.gm-row .gm-chev{transform:rotate(90deg)}
+.gm-row:focus-visible{outline:2px solid #7A32F5;outline-offset:-2px;border-radius:12px}
+.gm-fold-body{display:grid;gap:12px;min-width:0;padding:4px 0 16px;border-bottom:1px solid #F3EEFC}
+.gm-rows>details:last-child>.gm-fold-body{border-bottom:0}
+.gm-fold-body .gm-section{padding:0;border:0;border-radius:0;background:none;box-shadow:none}
+.gm-fold-body .gm-head h2{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}   /* the row above says it */
+.gm-fold-body .gm-more-link{margin:4px 0 -4px}
+.gme-line{display:grid;gap:4px;min-width:0}
+.gme-line .gm-pill{justify-self:start;margin-top:4px}
+/* The period's report: its own white row; opened, its cards sit on the page. */
+.gm-report-fold>summary{padding:12px 16px;border-bottom:0}
+.gm-report-fold>.gm-fold-body{padding:12px 0 0;border-bottom:0}
+@media (max-width:350px){.gm-tile2{padding:12px}.gm-mx-tile{padding:8px}.gm-mx-tile b{font-size:14px}.gm-word,.gm-card{padding:14px 12px}.gm-rows{padding:2px 12px}}
+@media (min-width:768px){
+  .gm{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px;align-items:start}
+  .gm>:is(.gm-period-panel,.gm-word,.gm-report-fold,.growth-disclaimer,.growth-hub-note){grid-column:1/-1}
+  .gm>.gm-tiles2{grid-column:1}.gm>.gm-mix{grid-column:1}.gm>.gm-mx{grid-column:2;grid-row:span 2}.gm>.gm-rows{grid-column:1/-1}
+}
+@media (prefers-reduced-motion:reduce){.gm-stars{display:none}.gm-period-pill .gm-chev,.gm-row .gm-chev{transition:none}}

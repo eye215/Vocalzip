@@ -1,11 +1,22 @@
 /* 성장 통합 탭 (design guide §26). The three 성장 tabs reuse the screen-tab box of 곡 상세 (.seg: surface-2 box R14,
  * 44px items R10, selected #EDE1FF / #7A32F5) as links. The 전체·월별·주간 choice under 결과 리포트 is a period control,
  * not a second row of tabs: a small white box inside the content with a "기간" label and 13px items. */
-.growth-top-tabs{display:flex;gap:4px;padding:4px;margin:0 0 14px;border-radius:14px;background:var(--surface-2)}
-.growth-top-tabs a{flex:1 1 0;min-width:0;min-height:44px;display:flex;align-items:center;justify-content:center;padding:0 6px;border-radius:10px;color:var(--ink-2);font-size:14px;font-weight:600;line-height:1.2;text-align:center;text-decoration:none;white-space:nowrap}
-.growth-top-tabs a[aria-current="page"]{background:var(--vz-color-selected-bg);color:var(--vz-color-accent)}
-.growth-top-tabs a:focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:2px}
-@media (max-width:350px){.growth-top-tabs a{font-size:13px;padding:0 2px}}
+/* 성장 새 디자인 (2026-11-27): only the chosen tab is a light-purple pill (no track behind them); each a 44px target with the
+ * pill drawn inside it. The row has the period pill of 나 at its right end (app/growth-month.js). */
+.growth-tabbar{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;margin:0 0 12px}
+.growth-top-tabs{display:flex;gap:2px;min-width:0;margin:0;padding:0;background:none;border-radius:0}
+.growth-top-tabs a{position:relative;z-index:0;flex:none;display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0 14px;border-radius:99px;color:#667085;font-size:14px;font-weight:600;line-height:18px;text-align:center;text-decoration:none;white-space:nowrap}
+.growth-top-tabs a[aria-current="page"]{color:#5B1FC2;font-weight:800}
+.growth-top-tabs a[aria-current="page"]::before{content:"";position:absolute;inset:5px 0;z-index:-1;border-radius:99px;background:#EFE8FC}
+.growth-top-tabs a:focus-visible{outline:2px solid #7A32F5;outline-offset:2px}
+@media (max-width:350px){.growth-top-tabs a{padding:0 11px;font-size:13px}.growth-tabbar{gap:4px}}
+/* The header of the three tabs: 성장, 보관함 (리포트 보관함) and the gear as white pills. */
+body:is([data-vz-route="vocal-growth"],[data-vz-route="vocal-analysis"],[data-vz-route="growth-lab"]) #top h1{font-size:32px;line-height:40px;font-weight:900;letter-spacing:-.03em;color:#101828}
+body:is([data-vz-route="vocal-growth"],[data-vz-route="vocal-analysis"],[data-vz-route="growth-lab"]) #top .v-top-actions{align-items:center;gap:8px}
+body:is([data-vz-route="vocal-growth"],[data-vz-route="vocal-analysis"],[data-vz-route="growth-lab"]) #top .icon-btn{border-radius:99px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.04),0 6px 18px rgba(59,15,140,.06);color:#344054;font-size:20px}
+body:is([data-vz-route="vocal-growth"],[data-vz-route="vocal-analysis"],[data-vz-route="growth-lab"]) #top .icon-btn i{color:#344054}
+.growth-top-pill{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:99px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.04),0 6px 18px rgba(59,15,140,.06);color:#101828;font-size:14px;line-height:18px;font-weight:600;text-decoration:none;white-space:nowrap}
+.growth-top-pill:focus-visible{outline:2px solid #7A32F5;outline-offset:2px}
 /* 기간 선택 (결과 리포트 · 주간 요약). Each item is a 44px target; the chosen one is drawn 36px high inside it. */
 .growth-view-tabs.growth-range{display:flex;align-items:center;gap:0;width:max-content;max-width:100%;margin:0;padding:0 4px 0 0;border-radius:14px;background:var(--surface)}
 .growth-range-label{flex:none;padding:0 6px 0 14px;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px;font-weight:600}
@@ -30,9 +41,9 @@
 .growth-hub-list .item-sub{white-space:normal}
 /* 비교 가능 · 판정 보류 · 분석 전: a state word, never a score. */
 .growth-hub-chip{flex:none;padding:2px 8px;border-radius:99px;font-size:11px;line-height:16px;font-weight:600;white-space:nowrap}
-.growth-hub-chip[data-state="ok"]{background:#E3F4EC;color:#147D56}
-.growth-hub-chip[data-state="hold"]{background:#FFF3DC;color:#8A5A00}
-.growth-hub-chip[data-state="none"]{background:#F2EFF7;color:#475467}
+.growth-hub-chip[data-state="ok"]{background:#EFE8FC;color:#5B1FC2}
+.growth-hub-chip[data-state="hold"]{background:#F7F5FB;color:#667085;box-shadow:inset 0 0 0 1px #E3D6FB}
+.growth-hub-chip[data-state="none"]{background:#F2F4F7;color:#667085}
 .growth-hub-empty .btn{margin-top:12px}
 .growth-hub-caption{margin:0 4px}
 .growth-hub-hint{display:none;gap:10px;align-items:flex-start;margin:8px 0 0;padding:14px 16px;border-radius:16px;background:var(--vz-color-accent-soft);color:var(--ink-2);font-size:13px;line-height:20px}
@@ -62,12 +73,34 @@
   .growth-lab>.growth-lab-lead,.growth-lab>.growth-disclaimer{grid-column:1/-1}
 }
 /* 곡 (성장 개편 안 B, phase 3): one word per song from the shared verdict — a state, never a score. */
-.growth-hub-chip[data-state="better"]{background:#E3F4EC;color:#147D56}
-.growth-hub-chip[data-state="worse"]{background:#FDECEC;color:#B42318}
-.growth-hub-chip[data-state="mixed"]{background:#FFF3DC;color:#8A5A00}
-.growth-hub-chip[data-state="similar"],.growth-hub-chip[data-state="one"]{background:#F2EFF7;color:#475467}
+.growth-hub-chip[data-state="better"]{background:#EFE8FC;color:#5B1FC2}
+.growth-hub-chip[data-state="worse"]{background:#F2F4F7;color:#475467}
+.growth-hub-chip[data-state="mixed"]{background:#F7F5FB;color:#667085;box-shadow:inset 0 0 0 1px #E3D6FB}
+.growth-hub-chip[data-state="similar"],.growth-hub-chip[data-state="one"]{background:#F2F4F7;color:#667085}
 .growth-hub-tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;min-width:0}
 .growth-hub-search{flex:1 1 200px;min-width:0;margin:0}
 .growth-hub-switch{flex:none}
 .growth-hub-list [hidden]{display:none}
 .gm-song-link{margin-top:10px;text-decoration:none}
+/* 성장 새 디자인 (2026-11-27) · 곡 and 기록 in the same language as 나: white list cards R22 with a soft shadow, section
+ * titles 17px/800, rows of title + gray line + chevron, light-purple icon wells, purple-only state words. */
+.growth-hub .sec{margin:10px 2px 0;font-size:17px;line-height:24px;font-weight:800;letter-spacing:-.02em;color:#101828}
+.growth-hub .sec .small{font-size:13px}
+.growth-hub .growth-hub-list,.gs-card,.growth-hub-empty{border:0;border-radius:22px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.05),0 8px 24px rgba(59,15,140,.06)}
+.growth-hub .growth-hub-list{overflow:hidden}
+.growth-hub .growth-hub-list>*+*{border-top-color:#F3EEFC}
+.growth-hub .growth-hub-list .item>.ph:first-child{border-radius:12px;color:#7A32F5;background:#EFE8FC}
+.growth-hub .growth-hub-list .item-title,.gs-card .item-title{font-size:15px;font-weight:700;color:#101828}
+.growth-hub .growth-hub-list .item-sub,.gs-card .item-sub{color:#667085;font-size:13px}
+.growth-hub .growth-hub-list .chev,.gs-card .chev{color:#7A32F5}
+.gs-play{border-radius:99px;background:#EFE8FC;color:#5B1FC2;font-weight:700}
+/* 듣고 고르기 on 곡: a white card with a light-purple icon well (no solid purple square). */
+[data-vz-route="vocal-analysis"] .ls-entry{margin:0 0 12px;border-radius:22px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.05),0 8px 24px rgba(59,15,140,.06);color:#101828}
+[data-vz-route="vocal-analysis"] .ls-entry>i:first-child{border-radius:12px;background:#EFE8FC;color:#5B1FC2}
+[data-vz-route="vocal-analysis"] .ls-entry>i:last-child{width:auto;background:none;color:#7A32F5;font-size:16px}
+[data-vz-route="vocal-analysis"] .ls-entry small{color:#667085}
+.growth-hub-note,.growth-lab-rule{border-radius:16px;background:#F7F5FB;color:#667085}
+.growth-hub-more summary{color:#667085;font-weight:700}
+.growth-lab-lead{color:#667085}
+.growth-lab-lead a{color:#5B1FC2}
+.growth-lab-page .gc-ear-page,.growth-lab-excluded{border:0;border-radius:22px;box-shadow:0 1px 2px rgba(59,15,140,.05),0 8px 24px rgba(59,15,140,.06)}
