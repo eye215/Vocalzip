@@ -13,7 +13,9 @@
  * to have the message said in the card. Nothing here writes data. */
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const minutesText=n=>{n=Math.max(0,Math.round(Number(n)||0));return n>=60?Math.floor(n/60)+"시간"+(n%60?" "+n%60+"분":""):n+"분";};
-const svg=(body,{size=14,color="currentColor",width=2.2,fill="none"}={})=>'<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="'+fill+'" stroke="'+color+'" stroke-width="'+width+'" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+body+"</svg>";
+/* Size and stroke are also set inline: the approved home's sheet sizes every svg 20px with a 1.8 stroke
+ * (#vocalzip-refined-preview svg), which drew these icons too big and thin. */
+const svg=(body,{size=14,color="currentColor",width=2.2,fill="none"}={})=>'<svg width="'+size+'" height="'+size+'" style="width:'+size+'px;height:'+size+'px;stroke-width:'+width+'" viewBox="0 0 24 24" fill="'+fill+'" stroke="'+color+'" stroke-width="'+width+'" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+body+"</svg>";
 const ICON={
  flag:'<path d="M5 21V4h11l-2 4 2 4H5"/>',
  check:'<path d="M5 12.5 10 17 19 7.5"/>',
@@ -30,8 +32,8 @@ const ICON={
  save:'<path d="M5 12.5 10 17 19 7.5"/>',
  list:'<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>'
 };
-const PLAY='<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5.5v13l10.5-6.5z" fill="#5B1FC2"/></svg>';
-const STAR=(x,y,size,delay,duration)=>'<span class="vz-tw vz-pc-star" style="left:'+x+'px;top:'+y+'px;animation-delay:'+delay+'s;animation-duration:'+duration+'s"><svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 1.5c.6 5.4 3.1 9.9 10.5 10.5-7.4.6-9.9 5.1-10.5 10.5C11.4 17.1 8.9 12.6 1.5 12 8.9 11.4 11.4 6.9 12 1.5z" fill="#fff"/></svg></span>';
+const PLAY='<svg width="14" height="14" style="width:14px;height:14px" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5.5v13l10.5-6.5z" fill="#5B1FC2"/></svg>';
+const STAR=(x,y,size,delay,duration)=>'<span class="vz-tw vz-pc-star" style="left:'+x+'px;top:'+y+'px;animation-delay:'+delay+'s;animation-duration:'+duration+'s"><svg width="'+size+'" height="'+size+'" style="width:'+size+'px;height:'+size+'px" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 1.5c.6 5.4 3.1 9.9 10.5 10.5-7.4.6-9.9 5.1-10.5 10.5C11.4 17.1 8.9 12.6 1.5 12 8.9 11.4 11.4 6.9 12 1.5z" fill="#fff"/></svg></span>';
 const DOT=(x,y,size,delay,duration)=>'<span class="vz-pc-dot" style="left:'+x+'px;top:'+y+'px;width:'+size+'px;height:'+size+'px;animation-delay:'+delay+'s;animation-duration:'+duration+'s"></span>';
 /** Five tiny stars and five dots on the large tile (decoration only). */
 const SPARKLE='<span class="vz-pc-sparkle" aria-hidden="true">'+STAR(16,56,8,0,2.4)+STAR(66,20,6,.7,2)+STAR(104,60,7,1.3,2.8)+STAR(124,16,5,.3,1.9)+STAR(88,96,5,1.9,2.6)+
@@ -84,7 +86,8 @@ export const PRACTICE_CARD_CSS=String.raw`
 #vocalzip-refined-preview .vz-pc-count b{color:#5B1FC2;font-weight:900;}
 #vocalzip-refined-preview .vz-pc-count small{color:#7D8597;font-size:15px;font-weight:900;}
 #vocalzip-refined-preview .vz-pc-boxes{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;flex:1 1 auto;min-width:0;margin:0 -11px 0 0;}
-#vocalzip-refined-preview .vz-pc-box{position:relative;display:grid;place-items:center;flex:none;width:44px;height:44px;margin:0 -5px;padding:0;border:0;background:none;cursor:pointer;}
+/* 22px boxes 4px apart, each still a 44px target: the buttons overlap by 18px (the later one on top). */
+#vocalzip-refined-preview .vz-pc-box{position:relative;display:grid;place-items:center;flex:none;width:44px;height:44px;margin:0 -9px;padding:0;border:0;background:none;cursor:pointer;}
 #vocalzip-refined-preview .vz-pc-box:first-child{margin-left:0;}
 #vocalzip-refined-preview .vz-pc-box:last-child{margin-right:0;}
 #vocalzip-refined-preview .vz-pc-box>span{display:grid;place-items:center;box-sizing:border-box;width:22px;height:22px;border:2px solid #7A32F5;border-radius:7px;background:#fff;color:#5B1FC2;}
@@ -98,10 +101,10 @@ export const PRACTICE_CARD_CSS=String.raw`
 #vocalzip-refined-preview .vz-pc-empty b{color:#5B1FC2;font-weight:800;font-size:14px;}
 #vocalzip-refined-preview .vz-pc-empty>span{color:#7D8597;font-weight:600;font-size:14px;}
 #vocalzip-refined-preview .vz-pc-bar{display:flex;gap:4px;margin:12px 0 0;}
-#vocalzip-refined-preview .vz-pc-bar>i{display:block;min-width:4px;height:7px;border-radius:99px;background:#E6DDF6;}
+#vocalzip-refined-preview .vz-pc-bar>i{display:block;box-sizing:border-box;min-width:4px;height:7px;border-radius:99px;background:#E6DDF6;}
 #vocalzip-refined-preview .vz-pc-bar>i[data-look="done"]{background:var(--vz-gradient-primary,linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%));}
 #vocalzip-refined-preview .vz-pc-bar>i[data-look="next"]{background:#C9AEFB;}
-#vocalzip-refined-preview .vz-pc-flags{display:flex;gap:4px;height:12px;margin:5px 0 0;}
+#vocalzip-refined-preview .vz-pc-flags{display:flex;gap:4px;height:12px;margin:6px 0 0;}
 #vocalzip-refined-preview .vz-pc-flags>i{display:flex;justify-content:center;min-width:4px;line-height:0;}
 #vocalzip-refined-preview .vz-pc-flags svg{display:block;flex:none;}
 #vocalzip-refined-preview .vz-pc-line{margin:14px 0 0;font-size:14px;line-height:20px;font-weight:700;color:#5B1FC2;font-variant-numeric:tabular-nums;}
@@ -112,9 +115,9 @@ export const PRACTICE_CARD_CSS=String.raw`
 #vocalzip-refined-preview .vz-pc-tile-top{display:flex;align-items:center;justify-content:space-between;gap:4px;min-width:0;}
 #vocalzip-refined-preview .vz-pc-ic{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:50%;background:#F3EEFC;color:#667085;}
 #vocalzip-refined-preview .vz-pc-words{display:grid;grid-template-columns:minmax(0,1fr);min-width:0;}
-#vocalzip-refined-preview .vz-pc-title{display:-webkit-box;overflow:hidden;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:14px;line-height:19px;font-weight:600;color:#344054;word-break:keep-all;overflow-wrap:anywhere;}
+#vocalzip-refined-preview .vz-pc-title{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;line-height:21px;font-weight:800;color:#344054;}
 #vocalzip-refined-preview .vz-pc-meta{margin-top:2px;font-size:13px;line-height:18px;color:#7D8597;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-#vocalzip-refined-preview .vz-pc-pill{display:inline-flex;align-items:center;gap:3px;flex:none;padding:3px 7px;border-radius:99px;background:#7A32F5;color:#fff;font-size:13px;line-height:16px;font-weight:900;white-space:nowrap;}
+#vocalzip-refined-preview .vz-pc-pill{display:inline-flex;align-items:center;gap:3px;flex:none;padding:3px 7px;border-radius:99px;background:#7A32F5;color:#fff;font-size:11px;line-height:14px;font-weight:900;white-space:nowrap;}
 #vocalzip-refined-preview .vz-pc-tile[data-goal="true"]{border:2px solid #7A32F5;}
 #vocalzip-refined-preview .vz-pc-tile[data-goal="true"] .vz-pc-ic{background:#EFE8FC;color:#5B1FC2;}
 #vocalzip-refined-preview .vz-pc-tile[data-goal="true"] .vz-pc-title{font-size:15px;font-weight:800;color:var(--vz-color-ink,#101828);}
@@ -123,10 +126,10 @@ export const PRACTICE_CARD_CSS=String.raw`
 #vocalzip-refined-preview .vz-pc-tile[data-look="done"] .vz-pc-ic{background:#7A32F5;color:#fff;}
 #vocalzip-refined-preview .vz-pc-tile[data-look="done"] .vz-pc-title,#vocalzip-refined-preview .vz-pc-tile[data-look="done"] .vz-pc-meta,#vocalzip-refined-preview .vz-pc-done-word{color:#5B1FC2;}
 #vocalzip-refined-preview .vz-pc-done-word{font-size:13px;font-weight:900;white-space:nowrap;}
-#vocalzip-refined-preview .vz-pc-tile[data-look="now"]{width:168px;border:0;background:var(--vz-gradient-primary,linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%));color:#fff;box-shadow:0 8px 18px rgba(122,50,245,.3);}
+#vocalzip-refined-preview .vz-pc-tile[data-look="now"]{width:152px;border:0;background:var(--vz-gradient-primary,linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%));color:#fff;box-shadow:0 8px 18px rgba(122,50,245,.3);}
 #vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-ic{background:rgba(255,255,255,.2);color:#fff;}
 #vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-title{font-size:15px;font-weight:800;color:#fff;}
-#vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-words{padding-right:36px;}
+#vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-words{padding-right:30px;}
 #vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-meta{color:rgba(255,255,255,.88);}
 #vocalzip-refined-preview .vz-pc-tile[data-look="now"] .vz-pc-pill{background:#fff;color:#5B1FC2;}
 #vocalzip-refined-preview .vz-pc-tile[data-look="soft"]{width:140px;border:0;background:#F1ECFF;}
@@ -196,13 +199,15 @@ export function createPracticeCard(opts={}){
   let bar="";
   if(items.length){
    const set=model.set,flex=x=>Math.max(1,Number(x.minutes)||0);
+   // A short step still reads as a segment, not a dot (14px while the steps fit, narrower when there are many).
+   const least=items.length<=12?14:items.length<=16?8:4,grow=x=>"flex:"+flex(x)+";min-width:"+least+"px";
    const word=x=>look(x)==="done"?"완료":x.state==="skipped"?"건너뜀":x===current?"지금":"남음";
    const said=(set.line?set.line+". ":"")+items.map(x=>x.title+" "+timeOf(x)+" "+word(x)+(x.goal?" (필수 미션)":"")).join(", ");
-   bar='<div class="vz-pc-bar" data-set-bar role="img" aria-label="'+esc(said)+'">'+items.map(x=>'<i data-seg="'+esc(x.id)+'" data-look="'+look(x)+'" data-state="'+esc(x.state||"left")+'"'+(x.goal?' data-goal="true"':"")+' style="flex:'+flex(x)+'"></i>').join("")+"</div>"+
+   bar='<div class="vz-pc-bar" data-set-bar role="img" aria-label="'+esc(said)+'">'+items.map(x=>'<i data-seg="'+esc(x.id)+'" data-look="'+look(x)+'" data-state="'+esc(x.state||"left")+'"'+(x.goal?' data-goal="true"':"")+' style="'+grow(x)+'"></i>').join("")+"</div>"+
     (items.some(x=>x.goal)?'<div class="vz-pc-flags" data-set-flags aria-hidden="true">'+items.map(x=>{
-     if(!x.goal)return '<i style="flex:'+flex(x)+'"></i>';
+     if(!x.goal)return '<i style="'+grow(x)+'"></i>';
      const l=look(x),icon=l==="done"?svg(ICON.check,{size:12,width:3,color:"#7A32F5"}):svg(ICON.flag,{size:12,width:2.4,color:x===current?"#5B1FC2":"#B8A6DA"});
-     return '<i style="flex:'+flex(x)+'" data-flag="'+esc(x.id)+'" data-look="'+(l==="done"?"done":x===current?"next":"rest")+'">'+icon+"</i>";}).join("")+"</div>":"");
+     return '<i style="'+grow(x)+'" data-flag="'+esc(x.id)+'" data-look="'+(l==="done"?"done":x===current?"next":"rest")+'">'+icon+"</i>";}).join("")+"</div>":"");
   }
   return '<div class="vz-pc-mission" data-missions>'+top+bar+"</div>";
  }

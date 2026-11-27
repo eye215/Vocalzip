@@ -101,7 +101,8 @@ test.afterEach(async({page})=>expect(page.__errors||[]).toEqual([]));
 
 test('home shows 지난주 요약 on Monday and opens the seeded week; reading it writes nothing',async({page})=>{
   await boot(page);
-  const row = page.locator('.vz-summary-row[data-row=weekly]');
+  // On home it is a slim row of its own under 다가오는 일 (home step 3; it was the summary card's third row).
+  const row = page.locator('[data-home-weekly] [data-row=weekly]');
   await expect(row).toBeVisible();
   await expect(row).toContainText('지난주 요약');
   await expect(row).toContainText('연습 1시간 · 3일');
@@ -134,10 +135,11 @@ test('home shows 지난주 요약 on Monday and opens the seeded week; reading i
   expect(after).toEqual(before);
   // Opened once: the home row steps aside.
   await page.evaluate(() => {location.hash='#/home';});
-  // Home is drawn again (the ring at the top); with no lesson or stage either, the summary card has no rows and stays hidden.
+  // Home is drawn again (the ring at the top); with no lesson or stage either, 다가오는 일 and the 지난주 요약 row stay hidden.
   await expect(page.locator('.vz-student-home [data-home-ring]')).toBeVisible();
-  await expect(page.locator('.vz-summary-row[data-row=weekly]')).toHaveCount(0);
-  await expect(page.locator('.vz-summary')).toBeHidden();
+  await expect(page.locator('.vz-student-home [data-row=weekly]')).toHaveCount(0);
+  await expect(page.locator('[data-home-weekly]')).toBeHidden();
+  await expect(page.locator('[data-home-upcoming]')).toBeHidden();
 });
 
 test('previous / next week with the ‹ › of 나, empty week and the old addresses',async({page})=>{

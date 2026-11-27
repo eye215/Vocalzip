@@ -1,6 +1,6 @@
 /* Direct integration of the approved home HTML, including its circular quick action.
  * Demo scripts/dialogs stay inert; only root markup and style blocks are used. */
-import {createPracticeCard,PRACTICE_CARD_CSS} from './practice-card-html.js?v=prac1-20261127';
+import {createPracticeCard,PRACTICE_CARD_CSS} from './practice-card-html.js?v=bottom1-20261127';
 export const FLOATING_HOME_SOURCE = "4985592d5e93a09ba1300cf57ba4eee866db531b";
 const tokenAsset=new URL("./tokens.css?v=14",import.meta.url);
 const asset=new URL("./Vocalzip_Floating_Record_Home.html?v="+FLOATING_HOME_SOURCE.slice(0,12),import.meta.url);
@@ -20,6 +20,11 @@ async function source(){
 const num=value=>Number.isFinite(Number(value))?Math.max(0,Number(value)):0;
 const daysText=value=>value==null||typeof value==="boolean"||!Number.isFinite(Number(value))?"":Number(value)===0?"D-day":Number(value)>0?"D-"+value:"D+"+Math.abs(value);
 const duration=value=>{const n=Math.round(num(value));return n>=60?Math.floor(n/60)+"시간"+(n%60?" "+n%60+"분":""):n+"분";};
+/* Line icons drawn like the design's (24px grid, round caps); the 오늘 부를 곡 and 다가오는 일 blocks use them. */
+const ICON={chevron:'<path d="m9 5 7 7-7 7"/>',note:'<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+ dice:'<rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r="1.1" fill="currentColor"/><circle cx="15" cy="15" r="1.1" fill="currentColor"/><circle cx="15" cy="9" r="1.1" fill="currentColor"/><circle cx="9" cy="15" r="1.1" fill="currentColor"/>',
+ chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'};
+function icon(body,{size=16,width=2}={}){const t=document.createElement("template");t.innerHTML='<svg width="'+size+'" height="'+size+'" style="width:'+size+'px;height:'+size+'px;stroke-width:'+width+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+width+'" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+body+'</svg>';return t.content.firstChild;}
 function el(tag,text,className){const e=document.createElement(tag);if(text!=null)e.textContent=text;if(className)e.className=className;return e;}
 function action(element,label,fn){
  element.setAttribute("role","button");element.tabIndex=0;element.setAttribute("aria-label",label);
@@ -27,7 +32,7 @@ function action(element,label,fn){
  element.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();fn?.();}};
 }
 const adaptations=String.raw`
-/* v4 home (VOCALZIP_DESIGN_SYSTEM_V4_2026-11-12.md): Home summary rows, recent-song pills, goal limit. */
+/* v4 home (VOCALZIP_DESIGN_SYSTEM_V4_2026-11-12.md), redrawn in three steps (2026-11-27): the top, 오늘의 연습, 다가오는 일 · 오늘 부를 곡. */
 /* 오늘 위쪽 (home top, 2026-11-27): a ring of today's minutes with the date and one line beside it, the bell and the gear;
  * under a thin line the week's days (one button to the week sheet); then 큰 단계 and the eight 기본기 as chips. */
 #vocalzip-refined-preview .vz-header.vz-has-top{align-items:flex-start;gap:8px;min-height:0;margin:0;padding:8px 8px 14px;}
@@ -52,7 +57,7 @@ const adaptations=String.raw`
 #vocalzip-refined-preview button.vz-top-say:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;border-radius:8px;}
 #vocalzip-refined-preview .vz-has-top .vz-header-actions{flex:none;align-self:flex-start;gap:2px;margin:-3px -3px 0 0;}
 #vocalzip-refined-preview .vz-has-top .vz-header-actions button{isolation:isolate;color:#344054;}
-#vocalzip-refined-preview .vz-has-top .vz-header-actions button::before{content:"";position:absolute;z-index:-1;inset:3px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.04),0 6px 18px rgba(59,15,140,.06);}
+#vocalzip-refined-preview .vz-has-top .vz-header-actions button::before{content:"";position:absolute;z-index:-1;inset:2px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.04),0 6px 18px rgba(59,15,140,.06);}
 #vocalzip-refined-preview .vz-has-top .vz-header-actions .vz-ui-icon{width:19px;height:19px;font-size:19px;}
 #vocalzip-refined-preview .vz-week-strip{display:flex;align-items:center;justify-content:space-between;gap:10px;box-sizing:border-box;width:calc(100% - 16px);min-height:44px;margin:0 8px 5px;padding:12px 0 0;border:0;border-top:1px solid #ECE6F5;border-radius:0;background:none;color:var(--vz-color-ink-muted,#667085);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;}
 #vocalzip-refined-preview .vz-week-strip:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;border-radius:12px;}
@@ -83,49 +88,52 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-chip-seg i{display:block;width:6px;height:4px;border-radius:2px;background:#E6DDF6;}
 #vocalzip-refined-preview .vz-chip[data-state="calibrating"] .vz-chip-seg i{background:#D9C6FF;}
 #vocalzip-refined-preview .vz-chip-seg i.is-on{background:#7A32F5;}
-#vocalzip-refined-preview .vz-summary{display:block;margin:12px 0 0;padding:4px 12px 4px 16px;border-radius:20px;background:#fff;}
-#vocalzip-refined-preview .vz-summary[hidden],#vocalzip-refined-preview .vz-recent[hidden],#vocalzip-refined-preview .vz-schedule[hidden]{display:none;}
-#vocalzip-refined-preview .vz-summary-row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;margin:0;padding:0;border:0;background:none;color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;}
-#vocalzip-refined-preview div.vz-summary-row{cursor:default;}
-#vocalzip-refined-preview .vz-summary-row+.vz-summary-row{border-top:1px solid #F2EFF7;}
-#vocalzip-refined-preview .vz-summary-row>.vz-ui-icon:first-child{flex:none;width:20px;font-size:20px;color:var(--vz-color-accent,#7A32F5);}
-#vocalzip-refined-preview .vz-summary-row[data-row="stage"]>.vz-ui-icon:first-child{color:#8063B0;}
-#vocalzip-refined-preview .vz-summary-row[data-tone="attention"]>.vz-ui-icon:first-child,#vocalzip-refined-preview .vz-summary-row[data-tone="attention"] .vz-summary-badge{color:var(--vz-color-warning,#B26A00);}
-#vocalzip-refined-preview .vz-summary-copy{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0;}
-#vocalzip-refined-preview .vz-summary-copy strong{flex:none;font-size:14px;line-height:20px;font-weight:600;}
-#vocalzip-refined-preview .vz-summary-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px;font-weight:400;color:#475467;}
-#vocalzip-refined-preview .vz-summary-badge{flex:none;font-size:13px;line-height:18px;font-weight:700;color:var(--vz-color-accent,#7A32F5);}
-#vocalzip-refined-preview .vz-summary-row[data-tone="done"] .vz-summary-badge{color:var(--vz-color-success,#23855C);}
-#vocalzip-refined-preview .vz-summary-row>.vz-ui-icon:last-child:not(:first-child){flex:none;font-size:15px;color:#98A2B3;}
-#vocalzip-refined-preview .vz-summary-row:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;border-radius:12px;}
-/* 오늘 · 이번 주 row: two lines on phones (오늘 line, 이번 주 line). Numbers wrap as whole groups and are never cut:
- * at 320px the 이번 주 line breaks before "/ 목표 …" so the week percentage stays beside the whole row. */
-#vocalzip-refined-preview .vz-summary-row[data-lines="2"]{display:grid;grid-template-columns:20px minmax(0,1fr) auto auto;grid-template-areas:"icon line badge chev" "icon sub badge chev";gap:2px 12px;align-items:center;align-content:center;min-height:64px;padding:9px 0;}
-#vocalzip-refined-preview .vz-summary-row[data-lines="2"]>.vz-ui-icon:first-child{grid-area:icon;}
-#vocalzip-refined-preview .vz-summary-row[data-lines="2"]>.vz-summary-copy{display:contents;}
-#vocalzip-refined-preview .vz-summary-row[data-lines="2"] .vz-summary-line{grid-area:line;display:flex;align-items:baseline;gap:6px;min-width:0;}
-#vocalzip-refined-preview .vz-summary-row[data-lines="2"] .vz-summary-value{overflow:visible;white-space:nowrap;font-variant-numeric:tabular-nums;}
-#vocalzip-refined-preview .vz-summary-sep{display:none;}
-#vocalzip-refined-preview .vz-summary-sub{grid-area:sub;min-width:0;font-size:13px;line-height:18px;font-weight:400;color:var(--vz-color-ink-muted,#667085);font-variant-numeric:tabular-nums;}
-#vocalzip-refined-preview .vz-summary-sub>span{white-space:nowrap;}
-#vocalzip-refined-preview .vz-summary-row[data-lines="2"]>.vz-summary-badge{grid-area:badge;}
-#vocalzip-refined-preview .vz-summary-row[data-lines="2"]>.vz-ui-icon:last-child{grid-area:chev;}
-#vocalzip-refined-preview .vz-recent{margin:16px 0 12px;}
-#vocalzip-refined-preview .vz-recent-heading{margin:0 4px 8px;font-size:15px;line-height:21px;font-weight:600;color:var(--vz-color-ink,#101828);}
-#vocalzip-refined-preview .vz-recent-pills{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:0 0 2px;}
+/* 다가오는 일 · 오늘 부를 곡 (home step 3, 2026-11-27): the blocks under 오늘의 연습, on the card's 16px gutter (the page's
+ * 12px + 4px) with ~22px between sections. A section head is a 17px title with one light action on the right. */
+#vocalzip-refined-preview .vz-upcoming,#vocalzip-refined-preview .vz-weekly-line,#vocalzip-refined-preview .vz-recent{display:block;box-sizing:border-box;min-width:0;margin:22px 4px 0;}
+#vocalzip-refined-preview .vz-upcoming:not([hidden])+.vz-weekly-line{margin-top:10px;}
+#vocalzip-refined-preview .vz-upcoming[hidden],#vocalzip-refined-preview .vz-weekly-line[hidden],#vocalzip-refined-preview .vz-recent[hidden],#vocalzip-refined-preview .vz-schedule[hidden]{display:none;}
+#vocalzip-refined-preview .vz-sec-head,#vocalzip-refined-preview .vz-pick-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px;margin:0 0 10px;padding:0 0 0 4px;}
+#vocalzip-refined-preview .vz-sec-title,#vocalzip-refined-preview .vz-recent-heading{flex:1;min-width:0;margin:0;font-size:17px;line-height:24px;font-weight:800;letter-spacing:-.02em;color:var(--vz-color-ink,#101828);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* 44px targets that sit in a 24–30px line: the button is 44px tall, its negative margins keep the line's height. */
+#vocalzip-refined-preview .vz-sec-link{display:inline-flex;align-items:center;gap:2px;flex:none;min-height:44px;margin:-10px 0;padding:0 4px 0 10px;border:0;background:none;color:#7D8597;font:inherit;font-size:13px;line-height:18px;font-weight:500;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+#vocalzip-refined-preview .vz-sec-link svg{display:block;flex:none;}
+#vocalzip-refined-preview .vz-up-cards{display:flex;gap:10px;}
+#vocalzip-refined-preview .vz-up-card{display:flex;flex:1 1 0;align-items:center;gap:10px;box-sizing:border-box;min-width:0;min-height:68px;margin:0;padding:12px;border:0;border-radius:18px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.04),0 6px 18px rgba(59,15,140,.06);color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+#vocalzip-refined-preview .vz-up-date{display:flex;flex:none;flex-direction:column;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;background:#EFE8FC;color:#5B1FC2;}
+#vocalzip-refined-preview .vz-up-date small{font-size:12px;line-height:14px;font-weight:700;}
+#vocalzip-refined-preview .vz-up-date b{font-size:20px;line-height:22px;font-weight:900;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+#vocalzip-refined-preview .vz-up-words{display:flex;flex:1;flex-direction:column;gap:2px;min-width:0;}
+#vocalzip-refined-preview .vz-up-title{display:flex;align-items:baseline;gap:4px;min-width:0;font-size:14px;line-height:20px;font-weight:800;}
+#vocalzip-refined-preview .vz-up-title>span,#vocalzip-refined-preview .vz-up-line{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#vocalzip-refined-preview .vz-up-title>b{flex:none;color:#5B1FC2;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;}
+#vocalzip-refined-preview .vz-up-line{font-size:13px;line-height:18px;font-weight:400;color:var(--vz-color-ink-muted,#667085);}
+#vocalzip-refined-preview .vz-weekly-row{display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;min-height:52px;margin:0;padding:8px 12px 8px 10px;border:0;border-radius:16px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.04),0 4px 12px rgba(59,15,140,.06);color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+#vocalzip-refined-preview .vz-weekly-row>span:nth-child(2){display:flex;flex:1;align-items:baseline;gap:8px;min-width:0;}
+#vocalzip-refined-preview .vz-weekly-row strong{flex:none;font-size:14px;line-height:20px;font-weight:800;}
+#vocalzip-refined-preview .vz-weekly-row small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px;color:var(--vz-color-ink-muted,#667085);}
+#vocalzip-refined-preview .vz-weekly-row>svg:last-child{flex:none;color:#98A2B3;}
+#vocalzip-refined-preview .vz-round-icon{display:grid;flex:none;place-items:center;width:36px;height:36px;border-radius:99px;background:#EFE8FC;color:#5B1FC2;}
+#vocalzip-refined-preview .vz-round-icon svg{display:block;}
+#vocalzip-refined-preview .vz-pick-random{display:inline-flex;flex:none;align-items:center;min-height:44px;margin:-7px 0;padding:0;border:0;background:none;font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+#vocalzip-refined-preview .vz-pick-random>span{display:inline-flex;align-items:center;gap:5px;box-sizing:border-box;height:30px;padding:0 12px;border-radius:99px;background:#EFE8FC;color:#5B1FC2;font-size:13px;line-height:18px;font-weight:800;white-space:nowrap;}
+#vocalzip-refined-preview .vz-pick-random svg{display:block;flex:none;}
+/* The picks: a row that scrolls sideways edge to edge (its shadows are not cut), first chip on the gutter. */
+#vocalzip-refined-preview .vz-recent-pills{display:flex;gap:10px;margin:-2px -16px 0;padding:2px 16px 12px;overflow-x:auto;overscroll-behavior-x:contain;scroll-padding-inline:16px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
 #vocalzip-refined-preview .vz-recent-pills::-webkit-scrollbar{display:none;}
-#vocalzip-refined-preview .vz-recent-pill{display:inline-flex;align-items:center;gap:6px;flex:none;max-width:72%;min-height:44px;padding:0 16px 0 14px;border:0;border-radius:999px;background:#fff;color:var(--vz-color-ink,#101828);font:inherit;font-size:14px;line-height:20px;font-weight:600;cursor:pointer;}
-#vocalzip-refined-preview .vz-recent-pill span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-#vocalzip-refined-preview .vz-recent-pill .vz-ui-icon{flex:none;font-size:18px;color:var(--vz-color-accent,#7A32F5);}
-#vocalzip-refined-preview .vz-recent-pill:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;}
-#vocalzip-refined-preview .vz-pick-words{display:grid;min-width:0;text-align:left;}
-#vocalzip-refined-preview .vz-pick-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-#vocalzip-refined-preview .vz-pick-head .vz-recent-heading{flex:1;}
-#vocalzip-refined-preview .vz-pick-random{flex:none;min-height:36px;margin:0 0 8px;padding:0 14px;border:0;border-radius:999px;background:var(--vz-color-accent-soft,#F1EAFF);color:var(--vz-color-accent,#7A32F5);font:inherit;font-size:14px;font-weight:700;cursor:pointer;}
-#vocalzip-refined-preview .vz-pick-random::before{content:"🎲 ";}
-#vocalzip-refined-preview .vz-pick-words>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-#vocalzip-refined-preview .vz-pick-why{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:16px;font-weight:500;color:var(--vz-color-ink-muted,#667085);}
-#vocalzip-refined-preview .vz-recent-pill.vz-pick-pill{min-height:56px;border-radius:18px;padding:8px 16px 8px 14px;}
+#vocalzip-refined-preview .vz-recent-pills::after{content:"";flex:none;width:6px;}
+#vocalzip-refined-preview .vz-recent-pill{display:flex;flex:none;align-items:center;gap:10px;box-sizing:border-box;max-width:min(300px,82%);min-height:56px;margin:0;padding:10px 14px 10px 10px;border:0;border-radius:16px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.04),0 4px 12px rgba(59,15,140,.06);color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+#vocalzip-refined-preview .vz-pick-words{display:grid;gap:1px;min-width:0;text-align:left;}
+#vocalzip-refined-preview .vz-pick-words>span,#vocalzip-refined-preview .vz-pick-why{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#vocalzip-refined-preview .vz-pick-words>span{font-size:15px;line-height:21px;font-weight:800;}
+#vocalzip-refined-preview .vz-pick-why{font-size:13px;line-height:18px;font-weight:400;color:var(--vz-color-ink-muted,#667085);}
+#vocalzip-refined-preview .vz-up-card:focus-visible,#vocalzip-refined-preview .vz-weekly-row:focus-visible,#vocalzip-refined-preview .vz-recent-pill:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;}
+#vocalzip-refined-preview .vz-sec-link:focus-visible,#vocalzip-refined-preview .vz-pick-random:focus-visible{outline:none;}
+#vocalzip-refined-preview .vz-sec-link:focus-visible{text-decoration:underline;color:#5B1FC2;}
+#vocalzip-refined-preview .vz-pick-random:focus-visible>span{outline:2px solid #DCC4FF;outline-offset:2px;}
+#vocalzip-refined-preview .vz-up-card:active,#vocalzip-refined-preview .vz-weekly-row:active,#vocalzip-refined-preview .vz-recent-pill:active{transform:scale(.98);}
+@media(prefers-reduced-motion:reduce){#vocalzip-refined-preview .vz-up-card:active,#vocalzip-refined-preview .vz-weekly-row:active,#vocalzip-refined-preview .vz-recent-pill:active{transform:none;}}
+@media(max-width:359px){#vocalzip-refined-preview .vz-up-cards{gap:8px;}#vocalzip-refined-preview .vz-up-card{gap:8px;padding:12px 10px;}}
 #vocalzip-refined-preview .vz-week{touch-action:pan-y;}
 #vocalzip-refined-preview .vz-week .vz-time[data-target-met="true"] b,#vocalzip-refined-preview .vz-week .vz-time[data-target-met="true"]>span{color:var(--vz-color-accent);}
 #vocalzip-refined-preview .vz-week-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;margin:12px 0 0;min-height:var(--vz-touch-min);background:transparent;}
@@ -177,7 +185,8 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-card{padding:16px;}
 #vocalzip-refined-preview .vz-song{background:linear-gradient(135deg,#E8D8FF 0%,#EFE3FF 52%,#F5EDFF 100%);}
 #vocalzip-refined-preview .vz-song h3{max-width:none;}
-#vocalzip-refined-preview main{padding-bottom:calc(var(--vz-page-bottom) + max(var(--vz-nav-bottom),env(safe-area-inset-bottom)));}
+/* The last block (오늘 부를 곡, else 다가오는 일) ends at least 12px above the floating record button when scrolled to the end. */
+#vocalzip-refined-preview main{padding-bottom:calc(var(--vz-page-bottom) + 16px + max(var(--vz-nav-bottom),env(safe-area-inset-bottom)));}
 #vocalzip-refined-preview .vz-nav-space{max-width:var(--vz-nav-max-width);}
 #vocalzip-refined-preview .vz-floating-record{right:max(var(--vz-nav-inset),calc((100vw - var(--vz-content-max))/2 + var(--vz-nav-inset)));}
 .vz-visually-hidden{position:absolute!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;border:0!important;clip:rect(0,0,0,0)!important;overflow:hidden!important;white-space:nowrap!important;}
@@ -204,21 +213,18 @@ const adaptations=String.raw`
  #vocalzip-refined-preview .vz-phone{max-width:min(1040px,100%);}
  #vocalzip-refined-preview main{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);column-gap:20px;align-items:start;}
  #vocalzip-refined-preview .vz-col{display:block;min-width:0;}
- #vocalzip-refined-preview .vz-col-side>.vz-summary{margin-top:0;}
- /* Tablets: the full 주간 연습 card (rings, arrows) beside the summary, and everything reads larger. */
+ /* Tablets: the full 주간 연습 card (rings, arrows) under 다가오는 일, and everything reads larger. */
  #vocalzip-refined-preview .vz-col-side>.vz-week{display:block;}
  #vocalzip-refined-preview .vz-col>.vz-card{margin-bottom:16px;padding:24px;border-radius:24px;}
  #vocalzip-refined-preview .vz-week h2{font-size:20px;line-height:28px;}
- #vocalzip-refined-preview .vz-summary{padding:8px 20px 8px 24px;}
- #vocalzip-refined-preview .vz-summary-row{min-height:64px;gap:14px;}
- #vocalzip-refined-preview .vz-summary-copy strong,#vocalzip-refined-preview .vz-summary-value{font-size:16px;line-height:24px;}
- #vocalzip-refined-preview .vz-summary-badge{font-size:15px;line-height:22px;}
- #vocalzip-refined-preview .vz-summary-row>.vz-ui-icon:first-child{width:24px;font-size:24px;}
- #vocalzip-refined-preview .vz-recent{margin-top:20px;}
- #vocalzip-refined-preview .vz-recent-heading{margin-bottom:10px;font-size:18px;line-height:26px;}
- #vocalzip-refined-preview .vz-recent-pills{flex-wrap:wrap;gap:10px;overflow:visible;}
- #vocalzip-refined-preview .vz-recent-pill{min-height:52px;max-width:100%;padding:0 20px 0 16px;font-size:16px;line-height:24px;}
- #vocalzip-refined-preview .vz-recent-pill .vz-ui-icon{font-size:20px;}
+ /* The side column: 다가오는 일, 지난주 요약, 주간 연습 and 오늘 부를 곡 one under another, 16px apart. */
+ #vocalzip-refined-preview .vz-col.vz-col-side{display:flex;flex-direction:column;gap:16px;}
+ #vocalzip-refined-preview .vz-col.vz-col-side>*{margin:0;}
+ #vocalzip-refined-preview .vz-col.vz-col-side>.vz-upcoming:not([hidden])+.vz-weekly-line{margin-top:-6px;} /* 10px under the date cards, as on phones */
+ #vocalzip-refined-preview .vz-sec-title,#vocalzip-refined-preview .vz-recent-heading{font-size:19px;line-height:26px;}
+ #vocalzip-refined-preview .vz-recent-pills{flex-wrap:wrap;margin:-2px 0 0;padding:2px 0 4px;overflow:visible;}
+ #vocalzip-refined-preview .vz-recent-pills::after{display:none;}
+ #vocalzip-refined-preview .vz-recent-pill{max-width:100%;}
  #vocalzip-refined-preview .vz-week .vz-time b{font-size:34px;line-height:38px;}
  #vocalzip-refined-preview .vz-week .vz-days{gap:6px;margin-top:22px;}
  #vocalzip-refined-preview .vz-week .vz-days>div>span:first-child{font-size:18px;line-height:24px;}
@@ -281,7 +287,7 @@ export async function createFloatingHome(opts={}){
  const settingsButton=q('[aria-label="프로필"]');settingsButton.setAttribute("aria-label","설정");settingsButton.title="설정";
  settingsButton.onclick=()=>opts.onProfile?.();
  /* v4 home (docs/design/VOCALZIP_DESIGN_SYSTEM_V4_2026-11-12.md, Home order): the top (today's ring, the week's days,
-  * the 단계 chips), ONE 오늘의 연습 card, one Home summary rows card (next schedule) and the songs for today as pills.
+  * the 단계 chips), ONE 오늘의 연습 card, 다가오는 일 (the next lesson and stage as date cards) and the songs for today as chips.
   * The approved markup still supplies the cards and dock; its "지금 할 것" event card and event rows, week rings and
   * recent-song/shortcut tiles leave home (home step 2, 2026-11-27: the event card went; 기록 and 성장 hold the rest). */
  const section=q(".vz-schedule");
@@ -292,7 +298,7 @@ export async function createFloatingHome(opts={}){
  const top=el("div",null,"vz-top"),ring=el("div",null,"vz-ring"),words=el("div",null,"vz-top-words"),dateLine=el("p",null,"vz-top-date");
  ring.dataset.homeRing="";ring.setAttribute("role","img");
  const R=37.5,C=2*Math.PI*R,gradient="vz-ring-grad-"+Math.random().toString(36).slice(2,8);
- const star=(x,y,size,color,delay,duration)=>'<span class="vz-tw" style="left:'+x+'px;top:'+y+'px;animation-delay:'+delay+'s;animation-duration:'+duration+'s"><svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24"><path d="M12 1.5c.6 5.4 3.1 9.9 10.5 10.5-7.4.6-9.9 5.1-10.5 10.5C11.4 17.1 8.9 12.6 1.5 12 8.9 11.4 11.4 6.9 12 1.5z" fill="'+color+'"/></svg></span>';
+ const star=(x,y,size,color,delay,duration)=>'<span class="vz-tw" style="left:'+x+'px;top:'+y+'px;animation-delay:'+delay+'s;animation-duration:'+duration+'s"><svg width="'+size+'" height="'+size+'" style="width:'+size+'px;height:'+size+'px" viewBox="0 0 24 24"><path d="M12 1.5c.6 5.4 3.1 9.9 10.5 10.5-7.4.6-9.9 5.1-10.5 10.5C11.4 17.1 8.9 12.6 1.5 12 8.9 11.4 11.4 6.9 12 1.5z" fill="'+color+'"/></svg></span>';
  ring.innerHTML='<svg class="vz-ring-svg" viewBox="0 0 84 84" aria-hidden="true"><defs><linearGradient id="'+gradient+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B07CFF"/><stop offset=".5" stop-color="#7A32F5"/><stop offset="1" stop-color="#4E17B0"/></linearGradient></defs>'+
   '<circle cx="42" cy="42" r="'+R+'" fill="none" stroke="#E9E0FB" stroke-width="7"/><circle class="vz-ring-bar" cx="42" cy="42" r="'+R+'" fill="none" stroke="url(#'+gradient+') #7A32F5" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+C.toFixed(2)+'" stroke-dashoffset="'+C.toFixed(2)+'" transform="rotate(-90 42 42)"/></svg>'+
   '<span class="vz-stars" aria-hidden="true">'+star(74,-6,9,"#B892FF",0,2.4)+star(86,35,6,"#C9AEFB",.8,2)+star(70,82,5,"#B892FF",1.5,2.2)+star(-8,50,7,"#C9AEFB",1.1,2.7)+star(4,-2,5,"#B892FF",1.9,2.1)+'</span>'+
@@ -354,39 +360,47 @@ export async function createFloatingHome(opts={}){
  host.updateToday(opts.todayModel||null);
  /** Bring 오늘의 연습 into view (the former 보컬 트레이닝 addresses and "연습은 오늘 탭에서 해요" lead here). */
  host.showPractice=()=>todayCard.show();
- const summary=el("section",null,"vz-card vz-summary");summary.setAttribute("aria-label","요약");
+ /* 다가오는 일 (home step 3, 2026-11-27): the next lesson and the next stage as two date cards side by side (a lone one
+  * takes the whole row, so its line has room), under "다가오는 일" and 캘린더 ›. Neither: the section is not shown.
+  * 지난주 요약 (app/weekly-summary.js, Mon–Wed until opened) is its own slim row under them. */
+ const upcoming=el("section",null,"vz-upcoming");upcoming.dataset.homeUpcoming="";upcoming.setAttribute("aria-labelledby","vz-upcoming-title");
+ const upHead=el("div",null,"vz-sec-head"),upTitle=el("h2","다가오는 일","vz-sec-title"),calLink=el("button",null,"vz-sec-link");
+ upTitle.id="vz-upcoming-title";calLink.type="button";calLink.dataset.homeCalendar="";calLink.setAttribute("aria-label","캘린더 보기");
+ calLink.append("캘린더",icon(ICON.chevron,{size:12,width:2.2}));calLink.onclick=()=>opts.onCalendar?.();
+ const upCards=el("div",null,"vz-up-cards");upHead.append(upTitle,calLink);upcoming.append(upHead,upCards);
+ const weeklyLine=el("section",null,"vz-weekly-line");weeklyLine.setAttribute("aria-label","지난주 요약");weeklyLine.dataset.homeWeekly="";
  const recentWrap=el("section",null,"vz-recent");recentWrap.setAttribute("aria-label","최근 곡");
  // The approved markup's 오늘의 목표 card only marks the place: 오늘의 연습 holds the goals now.
- const goalsCard=q(".vz-goals");goalsCard.after(summary,recentWrap);
- // Two columns on wide screens (tablet landscape, desktop): 오늘의 연습 | 요약 + 최근 곡. On phones the
+ const goalsCard=q(".vz-goals");goalsCard.after(upcoming,weeklyLine,recentWrap);
+ // Two columns on wide screens (tablet landscape, desktop): 오늘의 연습 | 다가오는 일 + 오늘 부를 곡. On phones the
  // columns are display:contents, so the order and spacing stay exactly as before.
  const mainColumn=el("div",null,"vz-col vz-col-main"),sideColumn=el("div",null,"vz-col vz-col-side");
- section.before(mainColumn);mainColumn.append(practice);section.remove();goalsCard.remove();mainColumn.after(sideColumn);sideColumn.append(summary,weekCard,recentWrap);
- const glyph=g=>{const i=el("i",g,"vz-ui-icon");i.setAttribute("aria-hidden","true");return i;};
- let summaryRows=Array.isArray(opts.summary)?opts.summary:[];
- /** One line per row: icon · label · value · trailing badge · chevron. A row without an action is not a button. */
- const paintSummary=()=>{
-  summary.replaceChildren();
-  for(const row of summaryRows){
-   const item=el(row.action?"button":"div",null,"vz-summary-row");if(row.action){item.type="button";item.onclick=()=>row.action();}
-   item.dataset.row=row.key||"";if(row.tone)item.dataset.tone=row.tone;item.setAttribute("aria-label",row.aria||[row.label,row.value,row.badge].filter(Boolean).join(", "));
-   const copy=el("span",null,"vz-summary-copy");
-   if(row.sub){
-    // Two-line row: "label value" / "sub" (sub = groups that wrap whole). The text still reads as one sentence.
-    item.dataset.lines="2";
-    const line=el("span",null,"vz-summary-line");line.append(el("strong",row.label||"")," ",el("span",row.value||"","vz-summary-value"));
-    const sub=el("span",null,"vz-summary-sub");row.sub.forEach((part,i)=>{if(i)sub.append(" ");sub.append(el("span",part));});
-    copy.append(line,el("span"," · ","vz-summary-sep"),sub);
-   }else copy.append(el("strong",row.label||""),el("span",row.value||"","vz-summary-value"));
-   item.append(glyph(row.icon||""),copy);
-   if(row.badge)item.append(el("b",row.badge,"vz-summary-badge"));
-   if(row.action)item.append(glyph(""));
-   summary.append(item);
-  }
-  summary.hidden=!summary.childElementCount;
+ section.before(mainColumn);mainColumn.append(practice);section.remove();goalsCard.remove();mainColumn.after(sideColumn);sideColumn.append(upcoming,weeklyLine,weekCard,recentWrap);
+ /** One date card: {key, date (YYYY-MM-DD), label, badge (D-n), line, aria, action}. */
+ const dateCard=item=>{
+  const card=el("button",null,"vz-up-card");card.type="button";card.dataset.row=item.key||"";
+  const d=new Date(String(item.date)+"T12:00:00"),ok=!Number.isNaN(d.getTime());
+  const square=el("span",null,"vz-up-date");square.setAttribute("aria-hidden","true");square.append(el("small",ok?"일월화수목금토"[d.getDay()]:""),el("b",ok?String(d.getDate()):""));
+  const words=el("span",null,"vz-up-words"),title=el("span",null,"vz-up-title");
+  title.append(el("span",item.label||""));if(item.badge)title.append(el("b",item.badge,"vz-up-dday"));
+  words.append(title);if(item.line)words.append(el("span",item.line,"vz-up-line"));
+  card.append(square,words);card.setAttribute("aria-label",item.aria||[item.label,item.line,item.badge].filter(Boolean).join(", "));
+  card.onclick=()=>item.action?.();return card;
  };
- host.updateSummary=rows=>{summaryRows=Array.isArray(rows)?rows:[];paintSummary();};
- paintSummary();
+ /** items: the date cards (lesson, stage); weekly: the 지난주 요약 row {label, value, aria, action} or null. */
+ host.updateUpcoming=(items,weekly)=>{
+  const list=(Array.isArray(items)?items:[]).filter(x=>x&&x.date).slice(0,2);
+  upCards.replaceChildren(...list.map(dateCard));upCards.dataset.count=String(list.length);upcoming.hidden=!list.length;
+  weeklyLine.replaceChildren();weeklyLine.hidden=!weekly;
+  if(weekly){
+   const row=el("button",null,"vz-weekly-row"),round=el("span",null,"vz-round-icon"),words=el("span");row.type="button";row.dataset.row="weekly";
+   round.setAttribute("aria-hidden","true");round.append(icon(ICON.chart,{size:16,width:2}));
+   words.append(el("strong",weekly.label||"지난주 요약"),el("small",weekly.value||""));
+   row.append(round,words,icon(ICON.chevron,{size:14,width:2}));
+   row.setAttribute("aria-label",weekly.aria||[weekly.label,weekly.value].filter(Boolean).join(", "));row.onclick=()=>weekly.action?.();weeklyLine.append(row);
+  }
+ };
+ host.updateUpcoming(opts.upcoming,opts.weekly||null);
  const shortDate=date=>{const parts=String(date||"").split("-");return parts.length===3?Number(parts[1])+"."+Number(parts[2]):"";};
 /* 주간 연습 card (week rings, arrows, swipe): the approved card, kept for tablets where there is room beside the
   * summary. Phones have the week's days at the top instead. */
@@ -472,16 +486,27 @@ export async function createFloatingHome(opts={}){
   weekStrip.setAttribute("aria-label",(lead+strong+tail).trim()+", 이번 주 연습 "+duration(actual)+(target?", 목표 "+duration(target)+", 달성률 "+percent+"%":", 목표 없음")+", 자세히 보기");
  };
  host.updateWeek(opts.week||{});if(opts.thisWeek)host.updateThisWeek(opts.thisWeek);
+ /* 오늘 부를 곡 (app/song-pick-model.js): up to three white chips (a note in a light circle, the title, why today) in a
+  * row that scrolls sideways; 랜덤 on the right of the head spins the roulette. Songs without a reason are the old 최근 곡. */
  host.updateRecent=(songs,onOpen=opts.onRecentSong)=>{
   const list=(Array.isArray(songs)?songs:[]).slice(0,3);recentWrap.replaceChildren();recentWrap.hidden=!list.length;if(!list.length)return;
-  // 오늘 부를 곡 (app/song-pick-model.js): each pill says why that song today; songs without a reason are the old 최근 곡.
   const picked=list.some(song=>song.reason);recentWrap.setAttribute("aria-label",picked?"오늘 부를 곡":"최근 곡");
-  const head=el("div",null,"vz-pick-head");head.append(el("h3",picked?"오늘 부를 곡":"최근 곡","vz-recent-heading"));
-  // 랜덤 (owner, 2026-11-25): one of my songs at random, straight to recording it.
-  if(picked&&opts.onRandomSong){const r=el("button","랜덤","vz-pick-random");r.type="button";r.setAttribute("aria-label","아무 곡이나 랜덤으로 고르기");r.onclick=()=>opts.onRandomSong();head.append(r);}
+  const head=el("div",null,"vz-pick-head");head.append(el("h2",picked?"오늘 부를 곡":"최근 곡","vz-recent-heading"));
+  // 랜덤 (owner, 2026-11-25): one of my songs at random (the roulette), straight to recording it.
+  if(picked&&opts.onRandomSong){
+   const r=el("button",null,"vz-pick-random"),face=el("span");r.type="button";r.setAttribute("aria-label","아무 곡이나 랜덤으로 고르기");
+   face.append(icon(ICON.dice,{size:14,width:2.2}),"랜덤");r.append(face);r.onclick=()=>opts.onRandomSong();head.append(r);
+  }
   recentWrap.append(head);
   const pills=el("div",null,"vz-recent-pills");
-  for(const song of list){const b=el("button",null,"vz-recent-pill"+(song.reason?" vz-pick-pill":""));b.type="button";const words=el("span",null,"vz-pick-words");words.append(el("span",song.title||"곡"));if(song.reason)words.append(el("small",song.reason+(song.extra?" · "+song.extra:""),"vz-pick-why"));b.append(glyph(""),words);b.setAttribute("aria-label",(song.title||"곡")+" 연습하기");if(song.reason){const why=words.lastChild;why.id="vz-pick-why-"+pills.childElementCount;b.setAttribute("aria-describedby",why.id);}b.onclick=()=>onOpen?.(song);pills.append(b);}
+  for(const song of list){
+   const b=el("button",null,"vz-recent-pill"+(song.reason?" vz-pick-pill":"")),round=el("span",null,"vz-round-icon"),words=el("span",null,"vz-pick-words");
+   b.type="button";round.setAttribute("aria-hidden","true");round.append(icon(ICON.note,{size:16,width:2}));
+   words.append(el("span",song.title||"곡"));if(song.reason)words.append(el("small",song.reason+(song.extra?" · "+song.extra:""),"vz-pick-why"));
+   b.append(round,words);b.setAttribute("aria-label",(song.title||"곡")+" 연습하기");
+   if(song.reason){const why=words.lastChild;why.id="vz-pick-why-"+pills.childElementCount;b.setAttribute("aria-describedby",why.id);}
+   b.onclick=()=>onOpen?.(song);pills.append(b);
+  }
   recentWrap.append(pills);
  };
  host.updateRecent(opts.recentSongs);

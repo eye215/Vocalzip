@@ -134,7 +134,7 @@ const reEsc = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const mission = (page, title) => page.locator('[data-home-today]').getByRole('button',{name:new RegExp('^필수 미션 '+reEsc(title)+', (완료|아직)$')});
 const done = (locator, yes = true) => expect(locator).toHaveAttribute('aria-pressed', String(yes));
 const addMission = page => page.getByRole('button',{name:'필수 미션 넣기',exact:true});
-// v4 home: Home summary rows (.vz-summary-row) and recent-song pills.
+// v4 home: 다가오는 일 (date cards, home step 3) and 오늘 부를 곡 chips.
 // 오늘 위쪽 (home top, 2026-11-27): today's minutes as a ring against the day target, and this week's days as one button to
 // the week sheet. They replace the one-line 오늘 · 이번 주 summary row (and the date/streak/level line above the cards).
 const ring = page => page.locator('[data-home-ring]');
@@ -176,12 +176,13 @@ test('literal floating HTML and app screenshots at 320/390/430',async({page},tes
  await boot(page);
  for(const width of widths){
   await page.setViewportSize({width,height:940});await noOverflow(page);
-  for(const selector of ['.vz-summary','[data-home-today]']){const card=await page.locator(selector).boundingBox();expect(card.x).toBeGreaterThanOrEqual(12);expect(card.x).toBeLessThanOrEqual(20);expect(Math.abs(card.width-(width-2*card.x))).toBeLessThanOrEqual(1);}
-  await expect(page.locator('.vz-summary')).toHaveCSS('padding-left','16px');await expect(page.locator('[data-home-today]')).toHaveCSS('padding-top','18px');
+  // 오늘의 연습, 다가오는 일 and 오늘 부를 곡 share one 16px gutter (home step 3: the old summary card sat at 12px).
+  for(const selector of ['[data-home-today]','[data-home-upcoming]','.vz-recent']){const card=await page.locator(selector).boundingBox();expect(Math.abs(card.x-16),selector).toBeLessThanOrEqual(.5);expect(Math.abs(card.width-(width-32)),selector).toBeLessThanOrEqual(1);}
+  await expect(page.locator('[data-home-today]')).toHaveCSS('padding-top','18px');
   const dock=await page.locator('.vz-nav-space').boundingBox();expect(Math.abs(dock.x-16)).toBeLessThanOrEqual(1);expect(Math.abs(dock.width-(width-32))).toBeLessThanOrEqual(1);
   const before=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(width-before.x-before.width-16)).toBeLessThanOrEqual(1);
   await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));const after=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(before.y-after.y)).toBeLessThanOrEqual(1);
-  // Recent-song pills are the last home block; they must clear the floating record button.
+  // 오늘 부를 곡 is the last home block; it must clear the floating record button.
   const last=await page.locator('.vz-recent').boundingBox();expect(last.y+last.height+12).toBeLessThanOrEqual(after.y);
   await page.evaluate(()=>scrollTo(0,0));await screenshot(page,testInfo,'student-home-after-'+width+'.png');
  }
@@ -250,7 +251,7 @@ test('empty state removes all sample data and connects songs and goal setup',asy
  // home in step 2; adding a song is 내 곡.) No summary rows (today and this week are the ring and the days at the top), no recent songs.
  await expect(goals(page)).toHaveCount(0);await expect(page.locator('[data-home-today] [data-mission-empty]')).toHaveText('필수 미션 없음 · + 미션');
  await expect(page.locator('.vz-event')).toHaveCount(0);
- await expect(page.locator('.vz-summary-row')).toHaveCount(0);await expect(page.locator('.vz-summary')).toBeHidden();await expectTop(page,'0분','30분','0분','3시간 30분');
+ await expect(page.locator('.vz-up-card')).toHaveCount(0);await expect(page.locator('[data-home-upcoming]')).toBeHidden();await expect(page.locator('[data-home-weekly]')).toBeHidden();await expectTop(page,'0분','30분','0분','3시간 30분');
  await expect(ringSay(page)).toHaveText('30분만 더 하면 오늘 목표');
  await expect(page.locator('.vz-recent')).toBeHidden();await expect(page.locator('.vz-recent-pill')).toHaveCount(0);
  await expect(weekStrip(page).locator('.vz-week-strip-text')).toHaveText('이번 주 0일 연습');await expect(weekStrip(page)).toHaveAttribute('data-streak','0');
@@ -424,33 +425,47 @@ test('the week\'s days follow the current week across Monday and reach today in 
  await expect(page.locator('[data-grid] [data-d="2026-11-09"]')).toHaveAttribute('aria-pressed','true');
  expect((await db(page)).practices).toEqual(value.practices);
 });
-test('summary rows, the top, recent songs and profile retain their real destinations',async({page})=>{
+test('다가오는 일, the top, 오늘 부를 곡 and profile retain their real destinations',async({page})=>{
  await boot(page);const before=await db(page);
- await expect(page.locator('.vz-summary-row')).toHaveCount(2);
- for(const [i,key] of ['lesson','stage'].entries())await expect(page.locator('.vz-summary-row').nth(i)).toHaveAttribute('data-row',key);
- for(const [name,route]of [['다음 레슨, 11.6 (금) 18:30, D-2','lesson/l1'],[/^(공연|오디션|무대), 가을 뮤지컬 오디션, D-4$/,'show/stage1'],['이번 주 연속 1일, 이번 주 연습 30분, 목표 3시간, 달성률 17%, 자세히 보기','calendar?date='+TODAY],
+ // 다가오는 일 (home step 3): the next lesson and the next stage as two date cards side by side, under 캘린더 ›.
+ const cards=page.locator('[data-home-upcoming] .vz-up-card');
+ await expect(page.locator('[data-home-upcoming] .vz-sec-title')).toHaveText('다가오는 일');
+ await expect(cards).toHaveCount(2);
+ for(const [i,key] of ['lesson','stage'].entries())await expect(cards.nth(i)).toHaveAttribute('data-row',key);
+ await expect(cards.locator('.vz-up-date')).toHaveText(['금6','일8']);
+ await expect(cards.locator('.vz-up-title>span')).toHaveText(['레슨','무대']);await expect(cards.locator('.vz-up-dday')).toHaveText(['D-2','D-4']);
+ // The lesson's line: its time and the open homework to do by it; the stage's: its title.
+ await expect(cards.locator('.vz-up-line')).toHaveText(['18:30 · 숙제 1개','가을 뮤지컬 오디션']);
+ const [a,b]=[await cards.nth(0).boundingBox(),await cards.nth(1).boundingBox()];expect(Math.abs(a.width-b.width)).toBeLessThanOrEqual(1);expect(Math.abs(a.y-b.y)).toBeLessThanOrEqual(.5);expect(b.x-a.x-a.width).toBeCloseTo(10,0);
+ for(const [name,route]of [['다음 레슨, 11.6 (금) 18:30, D-2, 숙제 1개','lesson/l1'],[/^(공연|오디션|무대), 가을 뮤지컬 오디션, 11\.8 \(일\) 14:00, D-4$/,'show/stage1'],['캘린더 보기','calendar?date='+TODAY],['이번 주 연속 1일, 이번 주 연습 30분, 목표 3시간, 달성률 17%, 자세히 보기','calendar?date='+TODAY],
   [/^큰 단계 Lv 1, 첫 소리, /,'levels'],['호흡, 아직, 자세히 보기','levels/breath'],['리듬, 아직, 자세히 보기','levels/rhythm'],['This Is the Moment 연습하기','record?song=s1'],['설정','settings']]){
   await page.goto('/#/home');await ready(page);await page.getByRole('button',{name,exact:typeof name==='string'}).click();
   // The week's days first show the numbers and where the target comes from; the calendar is one tap further.
-  if(route.startsWith('calendar'))await page.getByRole('dialog',{name:'이번 주 연습',exact:true}).getByRole('button',{name:'기록에서 보기',exact:true}).click();
+  if(String(name).startsWith('이번 주'))await page.getByRole('dialog',{name:'이번 주 연습',exact:true}).getByRole('button',{name:'기록에서 보기',exact:true}).click();
   await expect.poll(()=>new URL(page.url()).hash).toBe('#/'+route);
  }
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
-test('the next lesson stays a summary row on the day of the lesson too (the "지금 할 것" card that took it left home)',async({page})=>{
+test('the next lesson stays a date card on the day of the lesson too (the "지금 할 것" card that took it left home)',async({page})=>{
  await boot(page);const before=await db(page);
- const lessonRow=page.locator('.vz-summary-row[data-row=lesson]');
+ const lessonRow=page.locator('.vz-up-card[data-row=lesson]');
  await page.evaluate(date=>VZ.change(d=>{d.lessons[0].date=date;}),TODAY);
- await expect(lessonRow).toHaveCount(1);await expect(lessonRow).toHaveAccessibleName('다음 레슨, 11.4 (수) 18:30, D-day');
+ await expect(lessonRow).toHaveCount(1);await expect(lessonRow).toHaveAccessibleName('다음 레슨, 11.4 (수) 18:30, D-day, 숙제 1개');
+ await expect(lessonRow.locator('.vz-up-date')).toHaveText('수4');await expect(lessonRow.locator('.vz-up-dday')).toHaveText('D-day');
  await lessonRow.click();await expect.poll(()=>new URL(page.url()).hash).toBe('#/lesson/l1');await page.goto('/#/home');await ready(page);
  await page.evaluate(()=>VZ.change(d=>{d.lessons[0].date='2026-11-06';}));
- await expect(lessonRow).toHaveAccessibleName('다음 레슨, 11.6 (금) 18:30, D-2');
+ await expect(lessonRow).toHaveAccessibleName('다음 레슨, 11.6 (금) 18:30, D-2, 숙제 1개');
+ // Without open homework the line says where (place, else teacher); without a time, only that.
+ await page.evaluate(()=>VZ.change(d=>{d.assignments[0].status='done';}));
+ await expect(lessonRow.locator('.vz-up-line')).toHaveText('18:30 · 연습실');await expect(lessonRow).toHaveAccessibleName('다음 레슨, 11.6 (금) 18:30, D-2');
+ await page.evaluate(()=>VZ.change(d=>{d.lessons[0].startTime='';d.lessons[0].place='';}));
+ await expect(lessonRow.locator('.vz-up-line')).toHaveText('김선생');
  await expect(page.locator('.vz-student-home .vz-event')).toHaveCount(0);
  const after=await db(page);for(const key of ['songs','performances','dailyGoals','practicePlans','practices'])expect(after[key]).toEqual(before[key]);
 });
 test('the bell holds only what needs a check (곡 확인 · 분석 실패), with a dot when there is something; 요약 no longer repeats it',async({page})=>{
  await boot(page);const before=await db(page);
- const rows=page.locator('.vz-summary-row'),bell=page.locator('.vz-header-actions button').first(),dot=page.locator('.vz-bell-dot');
+ const rows=page.locator('[data-home-upcoming] .vz-up-card'),bell=page.locator('.vz-header-actions button').first(),dot=page.locator('.vz-bell-dot');
  const sheet=page.getByRole('dialog',{name:'확인할 것',exact:true});
  // Nothing to check: no dot, and the sheet says so (다음 레슨 · 무대 are in 요약 and 숙제 in 오늘의 연습, not here).
  await expect(rows).toHaveCount(2);await expect(dot).toBeHidden();await expect(bell).toHaveAttribute('aria-label','알림');
@@ -459,8 +474,8 @@ test('the bell holds only what needs a check (곡 확인 · 분석 실패), with
  await page.keyboard.press('Escape');await expect(sheet).toHaveCount(0);
  const counts=(review,songFail,vocalFail)=>({vocal:{done:0,wait:0,fail:vocalFail,total:vocalFail},song:{auto:0,review,wait:0,fail:songFail,total:review+songFail}});
  await page.evaluate(c=>{VZ.serverAnalysisCounts=()=>c;VZ.render();},counts(2,1,1));await ready(page);
- // The same counts the 확인 필요 summary row used: shown once, in the bell — the summary keeps its two rows.
- await expect(rows).toHaveCount(2);await expect(page.locator('.vz-summary-row[data-row=attention]')).toHaveCount(0);
+ // The same counts the 확인 필요 summary row used: shown once, in the bell — 다가오는 일 keeps its two cards.
+ await expect(rows).toHaveCount(2);await expect(page.locator('.vz-student-home [data-row=attention]')).toHaveCount(0);
  await expect(dot).toBeVisible();await expect(bell).toHaveAttribute('aria-label','알림, 확인할 것 4건');
  for(const [key,text,route] of [['review','곡 확인 2건','song-suggest'],['failed','분석 실패 2건','processing-log']]){
   await bell.click();await expect(sheet).toBeVisible();
@@ -1018,7 +1033,7 @@ test('large text and long user content remain operable and scroll above the floa
  for(const width of widths){
   await page.setViewportSize({width,height:940});await enlarge();await noOverflow(page);
   const pill=page.getByRole('button',{name:song+' 연습하기',exact:true}),bounds=await pill.boundingBox();expect(bounds.height).toBeGreaterThanOrEqual(44);expect(bounds.x+bounds.width).toBeLessThanOrEqual(width);
-  for(const row of await page.locator('.vz-summary-row').all()){const b=await row.boundingBox();expect(b.height).toBeGreaterThanOrEqual(44);expect(b.x+b.width).toBeLessThanOrEqual(width);}
+  for(const row of await page.locator('.vz-up-card,.vz-sec-link,.vz-pick-random').all()){const b=await row.boundingBox();expect(b.height).toBeGreaterThanOrEqual(44);expect(b.x+b.width).toBeLessThanOrEqual(width);}
   for(const tile of await page.locator('[data-home-today] .vz-pc-tile').all())expect((await tile.boundingBox()).height).toBeGreaterThanOrEqual(44);
   const box=await mission(page,title).boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x+box.width).toBeLessThanOrEqual(width);
   await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
@@ -1041,14 +1056,82 @@ test('six real schedule combinations never restore sample events',async({page},t
   await page.setViewportSize({width:390,height:940});
   await page.evaluate(data=>VZ.change(d=>{d.lessons=data.lessons;d.performances=data.performances;d.practices=data.practices||[];}),data);
   await expect(page.locator('.vz-student-home .vz-event')).toHaveCount(0);
-  await expect(page.locator('.vz-summary-row')).toHaveCount(rows.length);if(!rows.length)await expect(page.locator('.vz-summary')).toBeHidden();
-  for(const [i,key] of rows.entries())await expect(page.locator('.vz-summary-row').nth(i)).toHaveAttribute('data-row',key);
+  const cards=page.locator('[data-home-upcoming] .vz-up-card');
+  await expect(cards).toHaveCount(rows.length);if(!rows.length)await expect(page.locator('[data-home-upcoming]')).toBeHidden();else await expect(page.locator('[data-home-upcoming]')).toBeVisible();
+  for(const [i,key] of rows.entries())await expect(cards.nth(i)).toHaveAttribute('data-row',key);
   await noSample(page);
-  for(const row of await page.locator('.vz-summary-row').all())expect((await row.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  for(const row of await cards.all())expect((await row.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  // One card alone takes the whole row (its line gets the room); two share it.
+  if(rows.length){const section=await page.locator('[data-home-upcoming]').boundingBox(),first=await cards.first().boundingBox();
+   if(rows.length===1)expect(Math.abs(first.width-section.width)).toBeLessThanOrEqual(1);else expect(first.width).toBeLessThan(section.width/2);}
   for(const width of widths){await page.setViewportSize({width,height:940});await noOverflow(page);}
   await page.setViewportSize({width:390,height:940});await screenshot(page,testInfo,'student-home-upcoming-'+name+'-390.png');
  }
  expect((await db(page)).songs).toEqual(value.songs);
+});
+test('다가오는 일 · 오늘 부를 곡 at 320/390/430: long titles ellipsize inside their cards, no page overflow, 44px targets, the last block clears the record button',async({page})=>{
+ await phoneWidth(page);
+ const value=seed(),long='가을 정기 뮤지컬 갈라 콘서트 오디션 최종 라운드 LongEnglishStageTitle'.repeat(2),song='LongEnglishSongTitleAnd한글곡명'.repeat(4);
+ value.performances[0].title=long;value.performances[0].kind='audition';value.songs[0].title=song;
+ value.lessons[0].place='아주 긴 연습실 이름 '.repeat(4);
+ value.assignments.push(...[2,3,4,5,6,7,8,9,10,11].map(n=>({id:'a'+n,lessonId:'l1',title:'숙제 '+n,status:'active',startDate:'2026-11-01'})));
+ await boot(page,value);const before=await db(page);
+ const cards=page.locator('[data-home-upcoming] .vz-up-card');
+ await expect(cards.locator('.vz-up-line')).toHaveText(['18:30 · 숙제 11개',long]);
+ await expect(cards.locator('.vz-up-title>span')).toHaveText(['레슨','오디션']);
+ const cut=()=>page.locator('.vz-student-home').evaluate(h=>[...h.shadowRoot.querySelectorAll('.vz-up-card,.vz-up-line,.vz-up-title,.vz-recent-pill,.vz-pick-words>span,.vz-pick-why')].map(e=>{const r=e.getBoundingClientRect(),p=e.closest('.vz-up-card,.vz-recent-pill')?.getBoundingClientRect()||r;
+  return {cls:e.className,cut:e.scrollWidth>e.clientWidth+1,ellipsis:getComputedStyle(e).textOverflow,inside:r.left>=p.left-.5&&r.right<=p.right+.5,right:r.right};}));
+ for(const width of widths){
+  await page.setViewportSize({width,height:844});await noOverflow(page);
+  const list=await cut();
+  // The stage's long title is cut with an ellipsis inside its card; nothing spills out of a card or off the page.
+  expect(list.find(x=>x.cls==='vz-up-line'&&x.cut)).toBeTruthy();
+  for(const x of list){expect(x.inside,x.cls).toBe(true);if(x.cut)expect(x.ellipsis,x.cls).toBe('ellipsis');}
+  for(const x of list.filter(x=>/vz-up-card/.test(x.cls)))expect(x.right).toBeLessThanOrEqual(width-16+.5);
+  // The D-day is never the part that is cut.
+  for(const d of await cards.locator('.vz-up-dday').all()){const box=await d.boundingBox(),card=await d.locator('xpath=ancestor::button[1]').boundingBox();expect(box.x+box.width).toBeLessThanOrEqual(card.x+card.width-8);}
+  for(const t of await page.locator('.vz-up-card,.vz-sec-link,.vz-pick-random,.vz-recent-pill').all()){const b=await t.boundingBox();expect(b.height).toBeGreaterThanOrEqual(44);expect(b.width).toBeGreaterThanOrEqual(44);}
+  await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
+  const end=await page.locator('.vz-recent').boundingBox(),fab=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(end.y+end.height+12).toBeLessThanOrEqual(fab.y);
+  await page.evaluate(()=>scrollTo(0,0));
+ }
+ // No songs for today: 다가오는 일 is the last block and still clears the button; one card alone spans the row.
+ await page.evaluate(()=>VZ.change(d=>{d.songs=[];d.performances=[];}));
+ await expect(page.locator('.vz-recent')).toBeHidden();await expect(cards).toHaveCount(1);
+ for(const width of widths){
+  await page.setViewportSize({width,height:844});await noOverflow(page);
+  const section=await page.locator('[data-home-upcoming]').boundingBox(),one=await cards.first().boundingBox();expect(Math.abs(one.width-section.width)).toBeLessThanOrEqual(1);
+  await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
+  const end=await page.locator('[data-home-upcoming]').boundingBox(),fab=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(end.y+end.height+12).toBeLessThanOrEqual(fab.y);
+ }
+ // Neither: the whole section leaves.
+ await page.evaluate(()=>VZ.change(d=>{d.lessons=[];}));
+ await expect(page.locator('[data-home-upcoming]')).toBeHidden();await expect(cards).toHaveCount(0);await noOverflow(page);
+ const after=await db(page);for(const key of ['dailyGoals','practicePlans','practices','assignments'])expect(after[key]).toEqual(before[key]);
+});
+test('지난주 요약 stays on home as a slim row under the date cards (alone when there is no date card); 랜덤 is a light pill',async({page})=>{
+ await phoneWidth(page);
+ await prepare(page);
+ // The row app/weekly-summary.js gives on Mon–Wed (its own spec covers when): stubbed here as a fixed row.
+ await page.addInitScript(()=>{let v;Object.defineProperty(window,'VZ',{configurable:true,get(){return v;},set(x){v=x;if(x)Object.defineProperty(x,'weeklySummaryHomeRow',{configurable:true,get(){return ()=>({key:'weekly',label:'지난주 요약',value:'연습 1시간 · 3일',aria:'지난주 요약 보기, 연습 1시간, 3일',action:()=>x.nav('#/vocal-growth?period=week&week=2026-10-26')});},set(){}});}});});
+ await page.goto('/#/home');await ready(page);const before=await db(page);
+ const row=page.locator('[data-home-weekly] [data-row=weekly]');
+ await expect(row).toBeVisible();await expect(row).toHaveAccessibleName('지난주 요약 보기, 연습 1시간, 3일');await expect(row).toContainText('지난주 요약연습 1시간 · 3일');
+ const cards=await page.locator('[data-home-upcoming]').boundingBox(),line=await row.boundingBox();
+ expect(Math.round(line.y-(cards.y+cards.height))).toBe(10);expect(Math.abs(line.x-cards.x)).toBeLessThanOrEqual(.5);expect(Math.abs(line.width-cards.width)).toBeLessThanOrEqual(1);expect(line.height).toBeGreaterThanOrEqual(44);
+ // 랜덤: a light purple pill with the dice, its button a 44px target.
+ const random=page.getByRole('button',{name:'아무 곡이나 랜덤으로 고르기',exact:true});
+ await expect(random.locator('span')).toHaveCSS('background-color','rgb(239, 232, 252)');await expect(random.locator('span')).toHaveCSS('color','rgb(91, 31, 194)');await expect(random.locator('svg')).toHaveCount(1);
+ expect((await random.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await expect(page.locator('.vz-recent-pill .vz-round-icon svg')).toHaveCount(1);
+ for(const width of widths){await page.setViewportSize({width,height:844});await noOverflow(page);}
+ await page.setViewportSize({width:390,height:844});
+ // No lesson or stage: 지난주 요약 stands alone, a section gap below 오늘의 연습.
+ await page.evaluate(()=>VZ.change(d=>{d.lessons=[];d.performances=[];}));
+ await expect(page.locator('[data-home-upcoming]')).toBeHidden();await expect(row).toBeVisible();
+ const pc=await page.locator('[data-home-today]').boundingBox(),alone=await row.boundingBox();expect(Math.round(alone.y-(pc.y+pc.height))).toBe(22);
+ await row.click();await expect(page).toHaveURL(/#\/vocal-growth\?period=week&week=2026-10-26$/);
+ const after=await db(page);for(const key of ['songs','assignments','dailyGoals','practicePlans','practices'])expect(after[key]).toEqual(before[key]);
 });
 test('HTML load failure shows a retry and does not change stored records',async({page})=>{
  await prepare(page);const pattern='**/design-system/Vocalzip_Floating_Record_Home.html?*';await page.route(pattern,r=>r.abort());await page.goto('/#/home');
@@ -1310,9 +1393,9 @@ test('every page shows the very same bottom dock as Home at phone widths',async(
   }
  }
 });
-test('tablets (768px+) put 오늘의 연습 beside the summary and recent songs, in landscape and portrait; narrower screens keep one column',async({page},info)=>{
+test('tablets (768px+) put 오늘의 연습 beside 다가오는 일 and 오늘 부를 곡, in landscape and portrait; narrower screens keep one column',async({page},info)=>{
  test.skip(info.project.name!=='chromium-desktop','sizes are set explicitly');
- const box=()=>page.evaluate(()=>{const r=document.querySelector('.vz-student-home').shadowRoot;const b=s=>{const q=r.querySelector(s).getBoundingClientRect();return {x:q.x,y:q.y,w:q.width,bottom:q.bottom};};return {phone:b('.vz-phone'),goals:b('[data-home-today]'),summary:b('.vz-summary'),recent:b('.vz-recent'),inMain:!!r.querySelector('.vz-col-main > [data-home-today]')};});
+ const box=()=>page.evaluate(()=>{const r=document.querySelector('.vz-student-home').shadowRoot;const b=s=>{const q=r.querySelector(s).getBoundingClientRect();return {x:q.x,y:q.y,w:q.width,bottom:q.bottom};};return {phone:b('.vz-phone'),goals:b('[data-home-today]'),summary:b('[data-home-upcoming]'),recent:b('.vz-recent'),inMain:!!r.querySelector('.vz-col-main > [data-home-today]')};});
  await page.setViewportSize({width:1180,height:820});await boot(page);
  let b=await box();
  expect(b.phone.w).toBeGreaterThan(900);expect(b.inMain).toBe(true);
@@ -1327,19 +1410,24 @@ test('tablets (768px+) put 오늘의 연습 beside the summary and recent songs,
  expect(b.phone.w).toBeLessThanOrEqual(560);
  expect(b.summary.y).toBeGreaterThan(b.goals.bottom-1);expect(Math.abs(b.summary.x-b.goals.x)).toBeLessThanOrEqual(4); // one column, as on phones (the card sits 4px further in, as designed)
 });
-test('tablets show the full 주간 연습 card beside the summary (rings, arrows, title to the calendar); phones do not; the top spans the width',async({page},info)=>{
+test('tablets show the full 주간 연습 card under 다가오는 일 (rings, arrows, title to the calendar); phones do not; the top spans the width',async({page},info)=>{
  test.skip(info.project.name!=='chromium-desktop','sizes are set explicitly');
  const value=seed();value.practices.push({id:'last-week',date:'2026-10-28',minutes:20});
  await page.setViewportSize({width:820,height:1180});await boot(page,value);const before=await db(page);
  const card=page.locator('.vz-col-side .vz-week'),row=weekStrip(page);
- await expect(card).toBeVisible();await expect(row).toBeVisible();await expect(page.locator('.vz-summary-row[data-row=week]')).toHaveCount(0);
+ await expect(card).toBeVisible();await expect(row).toBeVisible();await expect(page.locator('.vz-student-home [data-row=week]')).toHaveCount(0);
  // The top (ring, the week's days, the 단계 chips) spans the page above both columns.
  const span=await page.locator('.vz-student-home').evaluate(h=>{const r=h.shadowRoot,b=s=>r.querySelector(s).getBoundingClientRect();return {strip:b('.vz-week-strip'),main:b('.vz-col-main'),side:b('.vz-col-side')};});
  expect(span.strip.left).toBeLessThanOrEqual(span.main.left+9);expect(span.strip.right).toBeGreaterThanOrEqual(span.side.right-9);expect(span.strip.bottom).toBeLessThanOrEqual(span.main.top);
  await expect(card.locator('.vz-days>div')).toHaveCount(7);await expect(card.locator('.vz-time b')).toHaveText('30');
  await expect(card.locator('.vz-days>div[data-today=true]')).toHaveAttribute('data-date',TODAY);
- const order=await page.evaluate(()=>[...document.querySelector('.vz-student-home').shadowRoot.querySelector('.vz-col-side').children].map(e=>e.className.split(' ').find(c=>/vz-(summary|week|recent)$/.test(c))));
- expect(order).toEqual(['vz-summary','vz-week','vz-recent']);
+ const order=await page.evaluate(()=>[...document.querySelector('.vz-student-home').shadowRoot.querySelector('.vz-col-side').children].map(e=>e.className.split(' ').find(c=>/^vz-(upcoming|weekly-line|week|recent)$/.test(c))));
+ expect(order).toEqual(['vz-upcoming','vz-weekly-line','vz-week','vz-recent']);
+ // In the side column: 다가오는 일 at the top beside 오늘의 연습, its two cards side by side, 16px between the blocks.
+ const side=await page.locator('.vz-student-home').evaluate(h=>{const r=h.shadowRoot,b=s=>r.querySelector(s).getBoundingClientRect();return {up:b('[data-home-upcoming]'),pc:b('[data-home-today]'),weekly:b('[data-home-weekly]'),week:b('.vz-col-side .vz-week'),cards:[...r.querySelectorAll('.vz-up-card')].map(e=>e.getBoundingClientRect().y)};});
+ // (Wednesday with practice last week: the 지난주 요약 row is there, between 다가오는 일 and the 주간 연습 card.)
+ expect(Math.abs(side.up.y-side.pc.y)).toBeLessThan(1);expect(Math.abs(side.cards[0]-side.cards[1])).toBeLessThan(1);
+ expect(side.weekly.height).toBeGreaterThanOrEqual(44);expect(Math.round(side.weekly.y-side.up.bottom)).toBe(10);expect(Math.round(side.week.y-side.weekly.bottom)).toBe(16);
  await card.getByRole('button',{name:'이전 주',exact:true}).click();
  await expect(card).toHaveAttribute('data-week-start','2026-10-26');await expect(card.locator('.vz-time b')).toHaveText('20');
  await expect(row.locator('.vz-week-strip-text')).toHaveText('이번 주 연속 1일');await expect(row.locator('[data-today=true]')).toHaveAttribute('data-date',TODAY); // the days stay this week's
