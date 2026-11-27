@@ -35,7 +35,11 @@ test('기록 탭 첫 화면: 레슨·숙제·연습 기록·나의 공연으로 
   await page.setViewportSize({width,height:812});
   const boxes=await links.evaluateAll(list=>list.map(a=>{const r=a.getBoundingClientRect();return {top:Math.round(r.top),h:r.height,right:r.right}}));
   expect(new Set(boxes.map(b=>b.top)).size).toBe(1);
-  for(const b of boxes){expect(b.h).toBeGreaterThanOrEqual(44);expect(b.right).toBeLessThanOrEqual(width);}
+  for(const b of boxes)expect(b.h).toBeGreaterThanOrEqual(44);
+  // One row of white pills (rec1): when they do not fit, the row scrolls sideways, never the page.
+  const row=page.locator('.vz-record-links');
+  expect((await row.boundingBox()).x+(await row.boundingBox()).width).toBeLessThanOrEqual(width+0.5);
+  await links.last().scrollIntoViewIfNeeded();expect((await links.last().boundingBox()).x+(await links.last().boundingBox()).width).toBeLessThanOrEqual(width+0.5);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  }
  await links.nth(1).click();await expect(page.locator('#top h1')).toHaveText('숙제');

@@ -1,0 +1,97 @@
+/* 기록 탭 (rec1, 2026-11-27): owner-approved RecShine design. Header pills, a white shortcut row, the week strip (or the
+ * month), the chosen day's title + gray line and ONE white card with 레슨 · 무대 · 연습 · 따로 남긴 녹음.
+ * Purple only; the gradient is kept for the chosen day and the 레슨/무대 marks. Loaded after record-experience.css. */
+body.vz-calendar-mode .v-app{padding-left:16px;padding-right:16px}
+body.vz-calendar-mode #top{min-height:56px;margin:0 0 14px;padding:8px 4px 0}
+body.vz-calendar-mode #top h1{font-size:32px;font-weight:900;letter-spacing:-.03em;line-height:1.1;color:#101828}
+body.vz-calendar-mode #top .v-top-actions{display:flex;align-items:center;gap:8px}
+body.vz-calendar-mode .rt-head-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;min-width:44px;height:44px;margin:0;padding:0 12px;border:0;border-radius:99px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.04),0 6px 18px rgba(59,15,140,.06);color:#344054;font:inherit;font-size:14px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
+body.vz-calendar-mode .rt-head-btn i{font-size:19px}
+body.vz-calendar-mode .rt-chart{width:44px;padding:0}
+body.vz-calendar-mode .rt-chart[aria-expanded=true]{background:#EFE8FC;color:#5B1FC2}
+body.vz-calendar-mode .rt-add{padding:0 15px 0 13px;background:#EFE8FC;box-shadow:none;color:#5B1FC2;font-weight:800}
+body.vz-calendar-mode .rt-add i{font-size:16px;font-weight:700}
+body.vz-calendar-mode .rt-head-btn:focus-visible,body.vz-calendar-mode .rt-links a:focus-visible,body.vz-calendar-mode .rt-dayb:focus-visible,body.vz-calendar-mode .rt-cal :is(button):focus-visible,body.vz-calendar-mode .rt-card :is(a,button):focus-visible{outline:2px solid #DCC4FF;outline-offset:2px}
+
+/* Shortcut pills: one row, sideways scroll when it does not fit. */
+body.vz-calendar-mode .rt-links{display:flex;flex-wrap:nowrap;gap:6px;margin:0 -16px 14px;padding:2px 16px 4px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+body.vz-calendar-mode .rt-links::-webkit-scrollbar{display:none}
+body.vz-calendar-mode .rt-links a{flex:none;display:inline-flex;flex-direction:row;align-items:center;gap:5px;min-height:44px;padding:0 13px 0 11px;border-radius:99px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.05);color:#344054;font-size:14px;font-weight:600;line-height:1;white-space:nowrap;text-decoration:none}
+body.vz-calendar-mode .rt-links a i{font-size:15px;color:#667085}
+body.vz-calendar-mode .rt-links a:active{background:#F3ECFF}
+
+/* This month's practice (folded behind the chart button). */
+body.vz-calendar-mode .rt-summary .calendar-summary{margin:0 0 14px;border-radius:22px;box-shadow:0 1px 2px rgba(59,15,140,.05),0 8px 24px rgba(59,15,140,.06)}
+
+/* Calendar card. */
+body.vz-calendar-mode .rt-cal{margin:0;padding:12px 10px 6px;border-radius:22px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.05),0 8px 24px rgba(59,15,140,.06)}
+.rt-cal-head{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;margin:0 0 2px}
+.rt-cal-head strong{text-align:center;color:#101828;font-size:16px;font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rt-cal-mv{display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:50%;background:none;color:#7D8597;font-size:18px;cursor:pointer}
+.rt-dows,.rt-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.rt-dows span{padding:0 0 4px;text-align:center;color:#7D8597;font-size:13px;line-height:18px}
+.rt-dayb{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-width:0;min-height:48px;margin:0;padding:1px 0 0;border:0;background:none;color:#7D8597;font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.rt-circle{position:relative;display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:99px}
+.rt-circle b{position:relative;font-size:14px;font-weight:500;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";line-height:1}
+.rt-dayb.has-any .rt-circle b{color:#344054;font-weight:700}
+.rt-dayb.has-ring .rt-circle b{color:#101828;font-size:13px;font-weight:800}
+.rt-dayb.today:not([aria-pressed=true]) .rt-circle b{color:#5B1FC2;font-weight:800}
+.rt-ring{position:absolute;inset:0;width:38px;height:38px}
+.rt-ring circle{fill:none;stroke-width:3.4}
+.rt-ring-track{stroke:#E3D6FB}
+.rt-ring-bar{stroke:#7A32F5;stroke-linecap:round}
+.rt-dayb[aria-pressed=true] .rt-circle{background:var(--vz-gradient-primary,linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%));box-shadow:0 4px 10px rgba(122,50,245,.3)}
+.rt-dayb[aria-pressed=true] .rt-circle b{color:#fff;font-size:14px;font-weight:800}
+.rt-dot{display:block;width:5px;height:5px;margin:4px auto 0;border-radius:99px;background:transparent}
+.rt-dot.on{background:#5B1FC2}
+.rt-dayb.out{opacity:.38}
+.rt-tw{position:absolute;display:block;line-height:0;color:#B892FF;opacity:0;pointer-events:none;animation:rtTw 2.4s ease-in-out infinite}
+.rt-tw svg{display:block;width:100%;height:100%}
+@keyframes rtTw{0%,100%{opacity:0;transform:scale(.2) rotate(0deg)}45%{opacity:.55;transform:scale(1) rotate(30deg)}60%{opacity:.45;transform:scale(.85) rotate(40deg)}}
+.rt-cal[data-view=month] .rt-days{row-gap:2px}
+.rt-cal-foot{display:flex;align-items:center;justify-content:center;gap:4px}
+.rt-cal-link{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 12px;border:0;background:none;color:#5B1FC2;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.rt-cal-link[data-today]{color:#667085}
+.rt-cal-link[hidden]{display:none}
+.rt-cal-view i{font-size:13px;transition:transform .2s}
+.rt-cal-view[aria-expanded=true] i{transform:rotate(180deg)}
+@media(max-width:350px){body.vz-calendar-mode .rt-cal{padding-left:4px;padding-right:4px}.rt-circle,.rt-ring{width:36px;height:36px}}
+
+/* The chosen day. */
+body.vz-calendar-mode .rt-day-head{display:block;min-height:0;margin:22px 4px 12px}
+body.vz-calendar-mode .rt-day-head h2{margin:0;color:#101828;font-size:18px;font-weight:800;line-height:26px;letter-spacing:-.02em}
+.rt-day-sum{margin:2px 0 0;color:#667085;font-size:13px;line-height:19px}
+.rt-empty{margin:0 4px;color:#667085;font-size:14px}
+.rt-card{padding:4px 16px 10px;border-radius:22px;background:#fff;box-shadow:0 1px 2px rgba(59,15,140,.05),0 8px 24px rgba(59,15,140,.06)}
+.rt-sec+.rt-sec{margin-top:8px;border-top:1px solid #F3EEFC}
+.rt-sec-head{display:flex;justify-content:space-between;gap:8px;margin:0;padding:12px 0 2px;color:#667085;font-size:13px;font-weight:800;line-height:18px}
+.rt-sec-total{font-variant-numeric:tabular-nums}
+.rt-item{position:relative;display:flex;gap:12px;padding:10px 0}
+.rt-body{flex:1;min-width:0}
+.rt-main{display:block;width:100%;min-height:44px;margin:0;padding:2px 0;border:0;background:none;color:inherit;font:inherit;text-align:left;text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+div.rt-main{cursor:default}
+.rt-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.rt-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#101828;font-size:16px;font-weight:700;line-height:23px}
+.rt-right{flex:none;color:#101828;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rt-item[data-kind=lesson] .rt-right{color:#5B1FC2}
+.rt-sub,.rt-note{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#667085;font-size:13px;line-height:19px}
+.rt-note{color:#344054;font-size:14px;line-height:21px;margin-top:4px}
+.rt-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.rt-media{display:contents}
+.rt-chip{display:inline-flex;align-items:center;gap:5px;min-height:32px;margin:0;padding:0 11px;border:0;border-radius:99px;background:#EFE8FC;color:#5B1FC2;font:inherit;font-size:13px;font-weight:700;line-height:1;text-decoration:none;white-space:nowrap;cursor:pointer;position:relative}
+/* 32px chip, 44px touch area. */
+/* media-dock.css marks every recording host for its tick buttons (left padding); this card has none (data-no-media-select). */
+#view .rt-card .rt-chip{padding:0 11px}
+.rt-chip::after{content:"";position:absolute;left:0;right:0;top:-6px;bottom:-6px}
+.rt-chip[aria-expanded=true]{background:#5B1FC2;color:#fff}
+.rt-player{flex:1 0 100%;min-width:0;margin-top:4px}
+.rt-player[hidden]{display:none}
+.rt-badge{display:flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;margin-top:3px;border-radius:8px;background:var(--vz-gradient-primary,linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%));color:#fff}
+.rt-item[data-status=cancelled]{opacity:.55}
+.rt-mic{display:flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;margin-top:3px;border-radius:99px;background:#F3EEFC;color:#667085}
+/* 연습 timeline: purple dots on a thin line. */
+.rt-node{position:relative;z-index:1;display:flex;justify-content:center;flex:none;width:28px}
+.rt-node::before{content:"";width:10px;height:10px;margin-top:9px;border-radius:99px;background:var(--vz-gradient-primary,linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%));box-shadow:0 0 0 3px #fff}
+.rt-item.is-plan .rt-node::before{background:#E3D6FB}
+.rt-line:not(:last-child)::before{content:"";position:absolute;left:13px;top:26px;bottom:-14px;width:2px;background:#F3EEFC}
+@media(prefers-reduced-motion:reduce){.rt-tw{animation:none;opacity:.4;transform:none}.rt-cal-view i{transition:none}}

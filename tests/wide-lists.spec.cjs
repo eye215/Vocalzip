@@ -60,13 +60,19 @@ test('전체 녹음 lists a month in two columns on a tablet and opens a row in 
 });
 
 test('기록 shows the chosen day beside the calendar on a tablet and below it on a phone',async({page})=>{
- await page.setViewportSize({width:820,height:1180});await boot(page);await page.goto('/#/calendar');
+ await page.setViewportSize({width:820,height:1180});await boot(page);await page.goto('/#/calendar?date='+day(3));
  const calendar=page.locator('.vz-calendar-month'),dayList=page.locator('[data-day]'),summary=page.locator('[data-calendar-summary]');
- await expect(calendar).toBeVisible();await page.locator('.cal-day[data-d="'+day(3)+'"]').click();
+ await expect(calendar).toBeVisible();await expect(page.locator('.rt-dayb[data-d="'+day(3)+'"]')).toHaveAttribute('aria-pressed','true');
  await expect(dayList).toContainText('11월 3일');
- const c=await box(calendar),d=await box(dayList),s=await box(summary);
+ let c=await box(calendar),d=await box(dayList);
+ expect(d.x).toBeGreaterThanOrEqual(c.r);expect(Math.abs(d.y-c.y)).toBeLessThan(4);
+ // The month summary (chart button) opens above the calendar; the day stays beside them.
+ await page.locator('#top [data-cal-chart]').click();await expect(summary).toBeVisible();
+ c=await box(calendar);d=await box(dayList);const s=await box(summary);
  expect(d.x).toBeGreaterThanOrEqual(c.r);expect(Math.abs(d.y-s.y)).toBeLessThan(4);
  expect(c.y).toBeLessThan(s.b+20); // no gap opened between the summary and the calendar
+ await page.locator('[data-cal-view]').click();await expect(page.locator('.rt-cal')).toHaveAttribute('data-view','month');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.setViewportSize({width:390,height:844});
  await expect.poll(async()=>(await box(dayList)).y>(await box(calendar)).b-1).toBe(true);
 });

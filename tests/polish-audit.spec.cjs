@@ -43,9 +43,10 @@ test('2. another month selects its 1st (today for this month); a stale day gives
   await boot(page);
   const head = page.locator('.vz-calendar-day-head h2'), now = new Date();
   await expect(head).toContainText(label(now));
+  await page.locator('[data-cal-view]').click(); // 한 달 보기 (the tab opens on the week)
   await page.getByRole('button', {name:'다음 달', exact:true}).click();
   await expect(head).toContainText(label(new Date(now.getFullYear(), now.getMonth() + 1, 1)));
-  await expect(page.locator('.cal-day[aria-pressed="true"]')).toHaveCount(1);
+  await expect(page.locator('.rt-dayb[aria-pressed="true"]')).toHaveCount(1);
   await page.getByRole('button', {name:'이전 달', exact:true}).click();
   await expect(head).toContainText(label(now));
   // After midnight: the day shown yesterday (never picked by hand) is replaced by today.
@@ -67,16 +68,19 @@ test('3. the overdue badge stays whole; the text before it ellipsizes', async ({
 
 test('4. a lesson brought in from billing without a time reads 시간 미정', async ({page}) => {
   await boot(page);
-  const rows = page.locator('.cal-own[data-kind=lesson] .item-title');
+  const rows = page.locator('.rt-item[data-kind=lesson] .rt-sub');
   await expect(rows).toHaveCount(2);
-  await expect(page.locator('.cal-list').first()).not.toContainText('00:00');
+  await expect(page.locator('[data-section=lesson]')).not.toContainText('00:00');
   await expect(rows.filter({hasText:'시간 미정'})).toHaveCount(1);
-  await expect(rows.filter({hasText:'10:00 – 11:00'})).toHaveCount(1);
+  await expect(rows.filter({hasText:'10:00'})).toHaveCount(1);
+  // The timed lesson shows its length on the right; the billing one (00:00 placeholder) none.
+  await expect(page.locator('.rt-item[data-kind=lesson] .rt-right')).toHaveText(['1시간']);
   expect(await page.evaluate(k => JSON.parse(localStorage.getItem(k)).lessons[0].startTime, KEY)).toBe('00:00'); // stored value untouched
 });
 
 test('5. named songs lead the month summary, 곡 미지정 comes last, and it stops rotating once used', async ({page}) => {
   await boot(page);
+  await page.locator('#top [data-cal-chart]').click(); // the month summary is folded behind the chart button
   const spot = page.locator('.cs-spotlight');
   await expect(spot).toHaveAttribute('data-cs-song', 'b');
   await spot.click();
@@ -86,10 +90,10 @@ test('5. named songs lead the month summary, 곡 미지정 comes last, and it st
   await expect(spot).toHaveAttribute('data-cs-song', 'b');
 });
 
-test('6. the day + button is clear of the floating mic, and 나의 공연 looks like the other menu rows', async ({page}) => {
+test('6. the + 직접 적기 button is clear of the floating mic, and 나의 공연 looks like the other menu rows', async ({page}) => {
   await page.setViewportSize({width:375, height:812});
   await boot(page);
-  const add = page.locator('.vz-calendar-day-head [data-add]'), mic = page.getByRole('link', {name:'녹음 시작', exact:true});
+  const add = page.locator('#top [data-add]'), mic = page.getByRole('link', {name:'녹음 시작', exact:true});
   const a = await add.boundingBox(), m = await mic.boundingBox();
   expect(a.x + a.width <= m.x || a.y + a.height <= m.y || a.y >= m.y + m.height || a.x >= m.x + m.width).toBe(true);
   await add.click();
