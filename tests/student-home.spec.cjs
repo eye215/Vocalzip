@@ -1205,7 +1205,8 @@ test('shared colors, type hierarchy, cards and four-item dock (v4 IA) apply to r
     navItems:nav.querySelectorAll('a').length,
     navHeight:nav.getBoundingClientRect().height,
     fab:css(document.querySelector('.vz-collection-record')).display,
-    cardRadius:css(document.querySelector('.card,.list,.empty,.vz-review-link')).borderRadius};
+    // 내 곡 (new design, 2026-11-27) has its own 22px cards (the 전체 녹음 · 나의 공연 card is always there).
+    cardRadius:css(document.querySelector('.vz-st-more,.card,.list,.empty,.vz-review-link')).borderRadius};
   });
   expect(shell.accent).toBe('#7A32F5');
   expect(shell.background).toBe('rgb(248, 246, 253)');
@@ -1213,7 +1214,7 @@ test('shared colors, type hierarchy, cards and four-item dock (v4 IA) apply to r
   expect(shell.navItems).toBe(4);
   expect(shell.navHeight).toBe(70);
   expect(shell.fab).toBe('grid');
-  expect(shell.cardRadius).toBe(route==='calendar'?'22px':'20px'); // 기록 (rec1): the new 22px cards
+  expect(shell.cardRadius).toBe(route==='calendar'||route==='songs'?'22px':'20px'); // 기록 (rec1) · 내 곡 (songs1): the new 22px cards
   await noOverflow(page);
  }
 });

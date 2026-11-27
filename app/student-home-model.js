@@ -210,6 +210,7 @@ function savePlan(db,input){
   if(has(input,'targetMinutes')||has(input,'weekTargetMinutes'))db.practicePlans=plans;
   return true;
 }
-return {build,weekBounds,setGoal,savePlan,planSnapshot,keptGoal};
+// nextStage: also read by 내 곡's 무대 곡 card (app/views-main.js), so both say the same next stage.
+return {build,weekBounds,setGoal,savePlan,planSnapshot,keptGoal,nextStage};
 });
 
