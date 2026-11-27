@@ -377,12 +377,14 @@ test('곡별 목록: no 최근 연습곡 card (home has 오늘 부를 곡), an u
   await page.setViewportSize({width:375, height:812});
   await page.goto('/#/songs');
   const list = page.locator('.vz-song-list a'), titles = () => list.locator('.item-title').allInnerTexts();
-  // 최근 연습곡 left 내 곡 (화면 지도 정리, 2026-11-26); 나의 공연 and the 곡별 | 전체 녹음 switch stay.
+  // 최근 연습곡 left 내 곡 (화면 지도 정리, 2026-11-26); 나의 공연 and 전체 녹음 are the rows under the list (new design 2026-11-27).
   await expect(list.first()).toBeVisible();
   await expect(page.locator('.vz-recent-song')).toHaveCount(0);
-  await expect(page.locator('.vz-performances')).toHaveAttribute('href', '#/performances');
-  await expect(page.getByRole('navigation', {name:'내 곡 보기'}).getByRole('link', {name:'전체 녹음'})).toBeVisible();
+  await expect(page.locator('[data-songs-performances]')).toHaveAttribute('href', '#/performances');
+  await expect(page.locator('[data-songs-library]')).toHaveAttribute('href', '#/library');
   const status = id => page.locator('.vz-song-list a[href="#/song/' + id + '"] .vz-song-status');
+  await expect(status('s1')).toHaveCount(0); // 연습 중 is not repeated on the 연습 중 tab
+  await page.locator('[data-song-view=all]').click();
   await expect(status('s1')).toHaveText('연습 중'); // words only
   await expect(status('s2')).toHaveCount(0); // no status: no line at all (UI 정리 2026-11-23, was a grey "상태 미지정")
   // Sort by name, open a song, come back: still by name.

@@ -3375,10 +3375,12 @@ test('v4 IA: 보관함 survives as 내 곡 › 전체 녹음 with the old route 
  const nav=page.locator('.v-nav');
  await page.goto('/#/songs');await expect(nav.locator('a[data-nav="library"]')).toHaveCount(0);
  await expect(nav.locator('a[aria-current="page"]')).toHaveAttribute('data-nav','songs');
- const sw=page.getByRole('navigation',{name:'내 곡 보기'});
- await expect(sw.getByRole('link')).toHaveText(['곡별','전체 녹음']);await expect(sw.getByRole('link',{name:'곡별'})).toHaveAttribute('aria-current','page');
+ // 내 곡 (new design, 2026-11-27): 전체 녹음 is the row under the song list; 전체 녹음 keeps the 곡별 | 전체 녹음 switch.
+ await expect(page.getByRole('navigation',{name:'내 곡 보기'})).toHaveCount(0);
  const before=await page.evaluate(()=>localStorage.getItem('vocal-zip_mvp_v1'));
- await sw.getByRole('link',{name:'전체 녹음'}).click();await expect(page).toHaveURL(/#\/library$/);
+ await page.getByRole('link',{name:/^전체 녹음/}).click();await expect(page).toHaveURL(/#\/library$/);
+ const sw=page.getByRole('navigation',{name:'내 곡 보기'});
+ await expect(sw.getByRole('link')).toHaveText(['곡별','전체 녹음']);
  await expect(page.locator('#top h1')).toHaveText('내 곡');
  await expect(page.getByRole('navigation',{name:'내 곡 보기'}).getByRole('link',{name:'전체 녹음'})).toHaveAttribute('aria-current','page');
  await expect(nav.locator('a[aria-current="page"]')).toHaveAttribute('data-nav','songs');

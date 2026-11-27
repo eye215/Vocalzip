@@ -16,7 +16,7 @@ async function boot(page,{seed=initial(),remote=null}={}){
  await page.route('**/tus.min.js',r=>r.fulfill({contentType:'application/javascript',body:'window.tus={}'}));await page.route('**/*.supabase.co/**',r=>r.abort());
  await page.addInitScript(([key,data,remote])=>{window.__archiveRemote=remote;if(!sessionStorage.getItem('archiveSeed')){localStorage.setItem(key,JSON.stringify(data));sessionStorage.setItem('archiveSeed','1')}},[KEY,seed,remote]);
  await page.goto('/#/songs');await expect(page.locator('#vzip-auth-screen')).toBeHidden();
- await expect(page.getByRole('link',{name:'나의 공연',exact:true})).toBeVisible();
+ await expect(page.getByRole('link',{name:/^나의 공연/})).toBeVisible(); // 내 곡's 나의 공연 row (예정 · 지난 counts after the name)
 }
 // Compare the rendered phone geometry before and after removing only the tablet override.
 for(const [route,marker] of [['song/song1','.vz-song-detail-hero'],['lessons','.lesson-tabs'],['lesson/lesson1','[data-del-lesson]'],['practice-stats','.growth-shell'],['settings','.vz-settings']]){

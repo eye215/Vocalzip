@@ -137,6 +137,9 @@ V.repertoire={
  toolbar:()=>'<div class="archive-toolbar"><a class="btn secondary" href="#/performances">나의 공연</a><label class="field"><span>레퍼토리 상태</span><select data-rep-filter aria-label="레퍼토리 상태">'+opt(A.states,filter,'전체')+'</select></label></div>',
  matches:s=>!filter||info(s).status===filter,
  statusLabel:s=>A.states[info(s).status]||'',
+ // 내 곡 (2026-11-27): the raw status for its 연습 중 · 보관 tabs, and this account's productions for its 나의 공연 row. Read only.
+ status:s=>info(s).status||'',
+ shows:()=>shows(),
  // For the calendar and the song page: this account's productions on a day / with a song.
  showsOn:date=>shows().filter(p=>p.status!=='cancelled'&&days(p).has(date)),
  showsForSong:id=>shows().filter(p=>(p.songLinks||[]).some(l=>l.songId===id)),
