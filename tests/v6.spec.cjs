@@ -2,6 +2,7 @@
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test,{approvedHome:info=>['Bottom navigation reaches the four main screens and the record button without horizontal overflow','Practice records are grouped by day, say where they were recorded and leave out empty set steps'].includes(info.title)});
 const labClear = require('./lab-clear-selection.cjs');
+const {songTab} = require('./helpers/song-screen.cjs');
 const fs = require('node:fs'), path = require('node:path');
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.__up=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
@@ -200,16 +201,16 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  });
  await page.goto('/#/vocal-lab/s1');
  await expect(page.locator('[data-gsp-hero] h2')).toHaveText('This Is the Moment');
- await expect(page.locator('.vl-player-head')).toContainText('2 / 2'); // opens with the analysed takes selected
+ await expect(page.locator('.vl-player-head')).toContainText('2개 중 2번째'); // opens with the analysed takes selected
  await labClear(page);
  await expect(page.locator('.vl-player')).toHaveCount(0);
  await page.locator('.vl-dates button').first().click();
- await expect(page.locator('.vl-single')).toBeVisible();
+ await expect(page.locator('[data-sa-analysis]')).toBeVisible();
  await expect(page.locator('.vl-recommend')).toContainText('3개 이상');
  await page.locator('.vl-dates button').nth(1).click();
  await expect(page.locator('.vl-trend')).toBeVisible();
  await expect(page.locator('.vl-recommend')).toContainText('3개 이상');
- await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
+ await expect(page.locator('.vl-player-head')).toContainText('2개 중 2번째');
  await page.locator('.vl-plot-dates button').first().click();
  await expect(page.locator('.sheet')).toContainText('소리의 음높이 흔들림');
  await page.locator('.sheet [data-close-observe]').click();
@@ -217,7 +218,7 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  await page.goto('/#/lab-reports');
  await expect(page.locator('.vl-report')).toHaveCount(1);
  await page.locator('.vl-report').click();
- await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
+ await expect(page.locator('.vl-player-head')).toContainText('2개 중 2번째');
  // The song page holds no lab content of its own: the hero's 곡 분석 and the 녹음 heading's 곡 분석 lead to the song's
  // 곡 분석 screen (nothing is ticked by default any more).
  await page.goto('/#/song/s1');
@@ -240,6 +241,7 @@ test('Vocal lab growth AI asks the server for a measured same-song report (overa
  await page.goto('/#/vocal-lab/s1');
  await labClear(page); await page.locator('.vl-dates button').first().click();
  await page.locator('.vl-dates button').nth(1).click();
+ await songTab(page, 'flow'); await page.locator('[data-song-fold="detail"] > summary').click();   // 흐름 › 자세히 보기
  await page.locator('[data-growth-ai]').click();
  await page.locator('.sheet [data-ok]').click();   // asked first (큰 정리 2번)
  await expect(page.locator('.vl-growth-ai-text')).toContainText('다음 연습: 같은 구간을');
@@ -252,6 +254,7 @@ test('Vocal lab growth AI asks the server for a measured same-song report (overa
  await page.reload();
  await labClear(page); await page.locator('.vl-dates button').first().click();
  await page.locator('.vl-dates button').nth(1).click();
+ await songTab(page, 'flow');
  await expect(page.locator('.vl-growth-ai-text')).toContainText('좋아진 점: 지속음 흔들림이 줄었어요.');
 });
 
@@ -270,6 +273,7 @@ test('Vocal lab growth report re-analyses older (v1) recordings in place so they
  await page.goto('/#/vocal-lab/s1');
  await labClear(page); await page.locator('.vl-dates button').first().click();
  await page.locator('.vl-dates button').nth(1).click();
+ await songTab(page, 'flow');                                       // 처음 vs 최근
  const redo=page.locator('[data-growth-reanalyze]');
  await expect(redo).toContainText('2개 다시 분석');
  await redo.click();
@@ -293,6 +297,7 @@ test('Vocal lab shows a compact recommendation list and opens the chosen practic
  await page.goto('/#/vocal-lab/s1');
  await labClear(page); await page.locator('.vl-dates button').first().click();
  // 다음 연습 here IS the shared list (VZ.nextPractice) filtered to this song, its 측정 기반 rows from this song's takes.
+ await songTab(page, 'next');
  const rows=page.locator('.vl-recommend [data-vl-next] .np-item');
  await expect(rows.first()).toBeVisible();
  const shared=await page.evaluate(async()=>{const all=await VZ.media.list(),song=all.filter(m=>m.songId==='s1');
@@ -307,7 +312,7 @@ test('Vocal lab shows a compact recommendation list and opens the chosen practic
  await first.locator('[data-np-add]').click();
  await expect(first.locator('[data-np-added]')).toHaveText('목표에 담김 ✓');
  expect(await page.evaluate(k=>VZ.db.dailyGoals.filter(g=>g.date===VZ.today()&&g.sourceId==='analysis:'+k&&g.songId==='s1').length,tip)).toBe(1);
- await expect(page).toHaveURL(/#\/growth-song\/s1$/);
+ await expect(page).toHaveURL(/#\/growth-song\/s1\?tab=next$/);
 });
 
 test('Vocal lab keeps the viewport on date, metric, and satisfaction selection', async ({page}) => {
@@ -2209,7 +2214,7 @@ test('Song detail shows real growth, recording selection and analysis handoff', 
   await page.getByRole('button', {name:'보컬 분석하기'}).click();
   await expect(page).toHaveURL(/#\/growth-song\/s1\?selection=1$/);
   await expect(page.locator('.vl-dates button[aria-pressed="true"]')).toHaveCount(2);
-  await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
+  await expect(page.locator('.vl-player-head')).toContainText('2개 중 2번째');
   expect((await page.evaluate(() => JSON.parse(sessionStorage.getItem('vocalzip-vocal-lab-selected-media-v1')))).sort()).toEqual(['m1','m2']);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
@@ -3347,10 +3352,10 @@ test('AI exercise appears inline in the same card form and follow-along uses its
   for(const m of (await VZ.media.list()).filter(x=>x.songId==='s1'))await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:18,notes:4},intonation:{meanAbsCents:28,notes:10},range:{lowCents:6000,highCents:8100},breath:{medianPhrase:2.4}},confidence:{voiceOverMrDb:12}}},{quiet:true});VZ.media.invalidate();
   window.vzipCloudCoach=async input=>{window.__aiInput=input;return {exercise:{family:'diction',name:'가사 자음 또렷하게 읽기',reason:'기존 두 연습과 다른 전달 연습이에요.',steps:['가사 한 줄을 읽어요.','핵심 단어를 적어요.'],goal:'전할 단어 하나 정하기',minutes:4}};};
  });
- await page.goto('/#/vocal-lab/s1');await labClear(page); await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-vl-next] .np-item').first()).toBeVisible();await expect(page.locator('.vl-tip')).toHaveCount(0);
+ await page.goto('/#/vocal-lab/s1');await labClear(page); await page.locator('.vl-dates button').first().click();await songTab(page,'next');await expect(page.locator('[data-vl-next] .np-item').first()).toBeVisible();await expect(page.locator('.vl-tip')).toHaveCount(0);
  const rowTitles=await page.locator('[data-vl-next] .np-title').allTextContents();
  // Asked first: nothing is sent before 보내기 (취소 sends nothing).
- const ask=page.getByRole('button',{name:'다른 연습 하나 AI 추천받기'}),dialog=page.getByRole('dialog',{name:'다른 연습 하나 AI 추천받기'});
+ const ask=page.getByRole('button',{name:'AI 추천 하나 더'}),dialog=page.getByRole('dialog',{name:'다른 연습 하나 AI 추천받기'});
  await ask.click();await expect(dialog).toContainText('NVIDIA');await expect(dialog).toContainText('녹음 파일은 보내지 않아요');
  await page.waitForTimeout(300);expect(await page.evaluate(()=>window.__aiInput===undefined)).toBe(true);
  await dialog.getByRole('button',{name:'취소'}).click();await expect(dialog).toHaveCount(0);await expect(ask).toBeEnabled();expect(await page.evaluate(()=>window.__aiInput===undefined)).toBe(true);
@@ -3361,10 +3366,10 @@ test('AI exercise appears inline in the same card form and follow-along uses its
  await ask.click();await dialog.getByRole('button',{name:'보내기'}).click();await expect(page.locator('.vl-tip')).toHaveCount(1);
  await page.evaluate(()=>window.vzipCloudCoach=async()=>{throw Error('요청 실패 테스트');});await ask.click();await dialog.getByRole('button',{name:'보내기'}).click();await expect(page.locator('[data-ai-status]')).toHaveText('요청 실패 테스트');await expect(page.locator('.vl-tip')).toHaveCount(1);
  expect(await page.evaluate(()=>__aiInput.mode)).toBe('inline-exercise');expect(await page.evaluate(()=>__aiInput.excluded.length)).toBeGreaterThan(0);
- expect(await page.evaluate(()=>JSON.parse(__aiInput.answers[0]).displayed.map(x=>x.title))).toEqual(rowTitles);await expect(page).toHaveURL(/#\/growth-song\/s1$/);
+ expect(await page.evaluate(()=>JSON.parse(__aiInput.answers[0]).displayed.map(x=>x.title))).toEqual(rowTitles);await expect(page).toHaveURL(/#\/growth-song\/s1\?tab=next$/);
  const before=await page.evaluate(()=>VZ.db.practices.length);
  await page.goto('/#/song/s1');await page.goto('/#/vocal-lab/s1');await labClear(page); await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');
- await page.reload();await labClear(page); await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('[data-ai-status]')).toContainText('저장된 AI 추천');expect(await page.evaluate(()=>VZ.db.practices.length)).toBe(before);
+ await page.reload();await labClear(page); await page.locator('.vl-dates button').first().click();await songTab(page,'next');await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('[data-ai-status]')).toContainText('저장된 AI 추천');expect(await page.evaluate(()=>VZ.db.practices.length)).toBe(before);
  await page.evaluate(()=>VZ.practiceSheet=input=>window.__recordPreset=input);await card.getByRole('button',{name:'연습 기록에 담기'}).click();expect(await page.evaluate(()=>__recordPreset.preset.minutes)).toBe(4);
  await card.getByRole('link',{name:'따라 하기'}).click();
  // 따라 하기 is a set of one step in 오늘의 연습 (2026-11-26): the saved steps are what that step says to do.

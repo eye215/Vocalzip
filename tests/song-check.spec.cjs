@@ -2,6 +2,7 @@
 // 성장 › 곡 (one line) and on 곡 하나, with the song it sits with; 옮기기 · 곡 바꾸기 · 맞아요. Fake analyses, fake saves.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
+const {songTab} = require('./helpers/song-screen.cjs');
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},from:()=>{const c={};for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle','in','limit'])c[m]=()=>c;c.then=r=>r({data:[],error:null});return c}})};`;
 const seed = {categories:[], songs:[{id:'river', title:'The River'}, {id:'home', title:'Home'}], lessons:[], assignments:[], practices:[], performances:[], comparisonReports:[], dailyGoals:[], practicePlans:[]};
@@ -44,6 +45,7 @@ test('성장 › 곡 says how many; 곡 점검 lists the take with the song it s
 test('맞아요 keeps it from being asked again (one synced plan row); 곡 하나 shows the song’s own', async ({page}) => {
   await boot(page);
   await page.evaluate(() => { location.hash = '#/growth-song/river'; });
+  await songTab(page, 'takes');                                        // 녹음별, at the top
   const box = page.locator('[data-gsp-check]');
   await expect(box).toContainText('곡 확인이 필요해 보이는 녹음');
   await box.locator('[data-sc-row="x"] [data-sc-ok]').click();

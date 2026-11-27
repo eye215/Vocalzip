@@ -89,13 +89,13 @@ test('최근 분석한 녹음: 곡의 연습 녹음에는 연습, 영상에는 �
 test('곡 하나: 곡의 녹음 목록은 같은 규칙 — 영상도 있고, 연습·영상 표시가 붙고, 삭제 목록의 녹음은 없다', async ({page}) => {
   await boot(page);
   const dates = () => page.locator('.vl-dates [data-date]').evaluateAll(els => els.map(e => [e.dataset.date, e.textContent.replace(/\s+/g, ' ').trim()]));
-  await go(page, '#/vocal-lab/s5', '.vl-dates [data-date]');
+  await go(page, '#/vocal-lab/s5', '[data-gsp-hero]');
   expect(await dates()).toEqual([['e1', '10.05'], ['ey', '11.05'], ['ex', '11.06'], ['et', '11.07 연습'], ['er', '11.08 연습'], ['e2', '11.09']]);
   await go(page, '#/vocal-analysis', '[data-hub-song]');
-  await go(page, '#/vocal-lab/s4', '.vl-dates [data-date]');
+  await go(page, '#/vocal-lab/s4', '[data-gsp-hero]');
   expect(await dates()).toEqual([['d1', '11.02'], ['dv', '11.06 영상'], ['dc', '11.07 영상'], ['d2', '11.09']]);
   await go(page, '#/vocal-analysis', '[data-hub-song]');
-  await go(page, '#/vocal-lab/s2', '.vl-dates [data-date]');
+  await go(page, '#/vocal-lab/s2', '[data-gsp-hero]');
   expect((await dates()).map(d => d[0])).toEqual(['b1', 'b2', 'b5', 'b4', 'b3']);          // g1 is in the deleted list
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   expect(page.__errors).toEqual([]);

@@ -127,7 +127,7 @@ test('곡: songs with an analysed take and their real counts (the rest folded as
   await rows.nth(0).click();
   await expect(page).toHaveURL(/#\/growth-song\/s1$/);
   await expect(page.locator('[data-gsp-hero]')).toContainText('Defying Gravity');
-  await expect(page.locator('#top h1')).toHaveText('곡');
+  await expect(page.locator('#top h1')).toHaveText('곡 분석');
   await expect(page.locator('[data-song-section="changes"]')).toBeVisible();
   await expect(page.locator('[data-gsp-all]')).toHaveCount(0);
   await page.locator('[data-back]').click();

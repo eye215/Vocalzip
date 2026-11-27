@@ -4,6 +4,7 @@
 // and 판정 보류 is said once with one reason.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
+const {songTab} = require('./helpers/song-screen.cjs');
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
@@ -73,8 +74,8 @@ test('vocal lab opens with the newest analysed takes selected; explicit selectio
   await page.goto('/#/vocal-lab/s1');
   await expect(pressed(page)).toHaveCount(5);                       // 7 analysed → the newest 5
   expect(await pressed(page).evaluateAll(list => list.map(b => b.dataset.date))).toEqual(['a2', 'a3', 'a4', 'a5', 'a6']);
-  await expect(page.locator('.vl-player-head')).toContainText('5 / 5');   // the newest take is the one shown
-  await expect(page.locator('#view')).not.toContainText('날짜를 선택해 주세요');
+  await expect(page.locator('.vl-player-head')).toContainText('5개 중 5번째');   // the newest take is the one shown
+  await expect(page.locator('#view')).not.toContainText('날짜를 골라 주세요');
   await expect(page.locator('[data-growth-report]')).toBeVisible();
   // Fewer than 5 analysed: what there is. None analysed: the newest recording, so the player is there.
   await page.goto('/#/home'); await page.goto('/#/vocal-lab/s2');
@@ -82,6 +83,7 @@ test('vocal lab opens with the newest analysed takes selected; explicit selectio
   await page.goto('/#/home'); await page.goto('/#/vocal-lab/s4');
   await expect(pressed(page)).toHaveCount(1);
   expect(await pressed(page).evaluateAll(list => list.map(b => b.dataset.date))).toEqual(['d2']);
+  await songTab(page, 'takes');
   await expect(page.locator('.vl-player')).toBeVisible();
   // Explicit selections from other entry points are kept as they are.
   await openWith(page, 's1', ['a1', 'a6']);
@@ -93,8 +95,9 @@ test('vocal lab opens with the newest analysed takes selected; explicit selectio
   // The person can still clear the selection by hand.
   await page.goto('/#/home'); await page.goto('/#/vocal-lab/s2');
   // (A date is opened by the first tap and left out by the next one: 큰 정리 2번's timeline.)
+  await songTab(page, 'takes');
   while (await pressed(page).count()) await pressed(page).first().click();
-  await expect(page.locator('.vl-empty')).toContainText('날짜를 선택해 주세요');
+  await expect(page.locator('.vl-empty')).toContainText('날짜를 골라 주세요');
 });
 
 test('녹음별 변화 speaks in each metric\'s unit, and its 판정 보류 reason comes from the growth model', async ({page}) => {
@@ -131,7 +134,7 @@ test('one take, one whole-recording number: other bases are labelled; 추천 연
   await page.locator('[data-metric="into"]').click();
   await expect(page.locator('.vl-plot-dates button').last()).toHaveAttribute('aria-label', /음정 정확도 ±14 cent/);
   // …and the report, which compares the same phrases (±30 → ±11), names its basis and repeats the whole-recording value.
-  const row = page.locator('[data-growth-row="intonation"]');
+  const row = page.locator('[data-growth-detail="intonation"]');
   await expect(row).toContainText('±30 cent → ±11 cent');
   await expect(row.locator('small')).toHaveText('같은 프레이즈 5개 비교 · 녹음 전체로는 ±33 cent → ±14 cent');
   // Counted as 무엇이 달라졌나 counts: the six v2 takes measured the same way (the v1 take is another analysis version).
@@ -145,6 +148,7 @@ test('one take, one whole-recording number: other bases are labelled; 추천 연
   // The report right above says 음정 정확도 improved → it is not recommended under it; the reason is said.
   const recommend = page.locator('.vl-recommend');
   await expect(row).toHaveClass(/good/);
+  await songTab(page, 'next');
   await expect(recommend.locator('[data-vl-next] .np-item').first()).toBeVisible();
   await expect(recommend.locator('[data-np-item="intonation:s1"]')).toHaveCount(0);
   expect(await recommend.locator('.np-title').allTextContents()).not.toContain(tips.tips.find(t => t.key === 'into').name);
@@ -222,18 +226,19 @@ test('small things: AI label after an error, chart at the newest point, 44px tap
   expect(await scroll.evaluate(e => e.scrollLeft > 0)).toBe(true);
   // Peek arrows look 18px wide: a tap up to 44px from the card's edge moves to the neighbour take.
   const head = page.locator('.vl-player-head');
-  await expect(head).toContainText('7 / 7');
+  await expect(head).toContainText('7개 중 7번째');
   const carousel = page.locator('[data-carousel]'), box = await carousel.boundingBox(), top = (await page.locator('.vl-player').boundingBox()).y - box.y + 5;
   const touch = await page.evaluate(() => navigator.maxTouchPoints > 0); // the desktop project has no touch: a click there
   const press = position => touch ? carousel.tap({position}) : carousel.click({position});
   await press({x:40, y:top});                     // inside the card, 40px from the left edge
-  await expect(head).toContainText('6 / 7');
+  await expect(head).toContainText('7개 중 6번째');
   await press({x:box.width - 40, y:top});
-  await expect(head).toContainText('7 / 7');
+  await expect(head).toContainText('7개 중 7번째');
   await press({x:box.width / 2, y:top});          // the middle does nothing
   await page.waitForTimeout(200);
-  await expect(head).toContainText('7 / 7');
-  // The two buttons under 추천 연습 no longer touch.
+  await expect(head).toContainText('7개 중 7번째');
+  // The two buttons under 이 곡 다음 연습 (다음 연습 tab) no longer touch.
+  await songTab(page, 'next');
   const [a, b] = await Promise.all([page.locator('[data-repeat-practice]').boundingBox(), page.locator('[data-ai-exercise]').boundingBox()]);
   expect(a.height).toBeGreaterThanOrEqual(44); expect(b.height).toBeGreaterThanOrEqual(44);
   expect(b.y >= a.y + a.height + 8 || b.x >= a.x + a.width + 8).toBe(true);

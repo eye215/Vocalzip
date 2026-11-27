@@ -253,10 +253,10 @@ test('전체 · 곡별 ▾ opens the chosen song on its own screen, at this mont
   await expect(choices.first()).toBeVisible();
   await expect(page.locator('.sheet [data-mbs-song="s5"]')).toContainText('지난달 녹음과 견줄 수 있어요');
   await page.locator('.sheet [data-mbs-song="s5"]').click();
-  // 곡 하나 (큰 정리 2번): the song's own screen at this month's chip, with that month's line for the song.
+  // 곡 분석: the song's own screen at this month's chip, with that month's line for the song (흐름 › 자세히 보기).
   await expect(page).toHaveURL(/#\/growth-song\/s5\?month=2026-11$/);
   await expect(page.locator('[data-gsp-period="month"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('[data-song-section="changes"] [data-growth-changes] [data-gc-song]')).toHaveCount(1);
+  await expect(page.locator('[data-song-fold="detail"] [data-growth-changes] [data-gc-song]')).toHaveCount(1);
   await expect(page.locator('[data-song-month-detail] .growth-section h2')).toHaveText('이달의 변화 · Home');
   // 뒤로: 나 at the month, 곡마다 자세히 open, every song again.
   await page.locator('[data-back]').click();

@@ -254,7 +254,7 @@ test('one name per thing: 다음 연습 · 녹음 분석 · 곡 분석 — the o
   await to(page, '#/vocal-lab/s1');
   await check('곡 분석', '[data-song-section="changes"]');
   await expect(page).toHaveURL(/#\/growth-song\/s1$/);          // 곡 분석 is the song screen (큰 정리 2번)
-  await expect(page.locator('#top h1')).toHaveText('곡');
+  await expect(page.locator('#top h1')).toHaveText('곡 분석');
   await to(page, '#/growth-lab');
   await check('연구소', '[data-lab-tool="reports"]');
   await to(page, '#/growth-ear');

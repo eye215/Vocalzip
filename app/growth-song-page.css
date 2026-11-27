@@ -1,46 +1,35 @@
-/* 성장 › 곡 하나 (app/growth-song-page.js): light, short; the same card language as 성장 › 나. */
-.gsp{display:grid;gap:12px;padding-bottom:24px}
-.gsp-hero{display:grid;gap:8px;padding:18px 16px;border-radius:22px;background:linear-gradient(135deg,#9B5CFF,#6E2BEA);color:#fff}
-.gsp-hero h2{margin:0;font-size:24px;line-height:31px;letter-spacing:-.02em}
-.gsp-kicker{margin:0;font-size:12px;font-weight:600;opacity:.8}
-.gsp-word{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:0;font-size:14px;line-height:20px}
-.gsp-hero .gsp-chip{background:rgba(255,255,255,.22);color:#fff}
-.gsp-sub{margin:0;font-size:12px;opacity:.85}
-.gsp-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
-.gsp-play{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:0;border-radius:99px;background:#fff;color:#5B21D6;font:inherit;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer}
+/* 곡 분석 (app/growth-song-page.js): the hero — a purple gradient card with a few soft stars — and the 들어 본 평가 card.
+ * Light, purple only; the cards are the screen's .sa-card (app/vocal-lab.css). */
+.gsp{display:grid;gap:12px}
+.gsp-hero{position:relative;overflow:hidden;isolation:isolate;display:grid;gap:0;padding:18px;border-radius:22px;background:linear-gradient(135deg,#9A5BFF 0%,#7A32F5 45%,#5B1FC2 100%);color:#fff;box-shadow:0 10px 24px rgba(122,50,245,.28)}
+.gsp-hero>*{position:relative;z-index:1}
+.gsp-kicker{margin:0 0 2px;font-size:13px;line-height:18px;font-weight:700;opacity:.85;overflow-wrap:anywhere}
+.gsp-hero h2{margin:0;color:#fff;font-size:22px;line-height:29px;font-weight:900;letter-spacing:-.02em;overflow-wrap:anywhere}
+.gsp-word{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;margin:10px 0 0;font-size:15px;line-height:22px;font-weight:700;overflow-wrap:anywhere}
+.gsp-hero .gsp-chip{padding:0;background:none;color:#fff;font-size:15px;line-height:22px;font-weight:800}
+.gsp-dot{opacity:.7}
+.gsp-period-tag{display:inline-flex;align-items:center;margin-right:2px;padding:0 8px;border-radius:99px;background:rgba(255,255,255,.2);font-size:12px;line-height:20px;font-weight:700;white-space:nowrap}
+.gsp-sub{margin:3px 0 0;font-size:13px;line-height:19px;opacity:.82;overflow-wrap:anywhere}
+.gsp-note{font-size:12px;line-height:17px}
+.gsp-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.gsp-play{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 16px;border:0;border-radius:99px;background:#fff;color:#5B1FC2;font:inherit;font-size:14px;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}
+.gsp-play i{font-size:12px}
 .gsp-play.is-soft{background:rgba(255,255,255,.18);color:#fff}
-.gsp-player:not(:empty){margin-top:6px;padding:8px;border-radius:14px;background:#fff;color:#101828}
-.gsp-card{display:grid;gap:10px;padding:16px;border-radius:20px;background:#fff;box-shadow:0 0 0 1px #EFE9F8}
-.gsp-card h3{display:flex;align-items:baseline;gap:6px;margin:0;font-size:17px;line-height:24px}
-.gsp-card h3 small{color:#667085;font-size:12px;font-weight:600}
+.gsp-play:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.gsp-play[disabled]{opacity:.6;cursor:default}
+/* Soft twinkling 4-point stars (max opacity .55, staggered), on the hero and by a graph's latest point. */
+.gsp-stars{position:absolute;inset:0;z-index:0;pointer-events:none}
+.gsp-stars i{position:absolute;left:var(--x);top:var(--y);width:var(--s);height:var(--s);opacity:0;animation:gspTw var(--d) ease-in-out var(--w) infinite}
+.gsp-stars svg{display:block;width:100%;height:100%;fill:#fff}
+@keyframes gspTw{0%,100%{opacity:0;transform:scale(.2) rotate(0deg)}45%{opacity:.55;transform:scale(1) rotate(30deg)}60%{opacity:.45;transform:scale(.85) rotate(40deg)}}
+@media (prefers-reduced-motion:reduce){.gsp-stars{display:none}}
+/* 들어 본 평가 */
+.gsp-card{display:grid;gap:10px}
 .gsp-empty{margin:0;color:#667085;font-size:14px;line-height:21px}
-.gsp-note,.gsp-disclaimer{margin:0;color:#98A2B3;font-size:12px;line-height:18px}
-.gsp-chip{display:inline-flex;align-items:center;padding:0 8px;border-radius:99px;background:#F2F4F7;color:#475467;font-size:12px;line-height:20px;font-weight:700;white-space:nowrap}
-.gsp-chip[data-state=better]{background:#ECFDF3;color:#067647}
-.gsp-chip[data-state=worse]{background:#FEF3F2;color:#B42318}
-.gsp-chip[data-state=mixed]{background:#FFFAEB;color:#B54708}
-.gsp-timeline{display:flex;gap:6px;overflow-x:auto;padding:4px 2px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.gsp-timeline::-webkit-scrollbar{display:none}
-.gsp-dot{flex:none;display:grid;justify-items:center;gap:4px;min-width:48px;min-height:64px;padding:6px 4px;border:0;border-radius:14px;background:none;color:#475467;font:inherit;cursor:pointer}
-.gsp-dot i{width:14px;height:14px;border-radius:50%;border:2px solid #C4B5FD;background:#fff}
-.gsp-dot[data-analysed] i{background:#7A32F5;border-color:#7A32F5}
-.gsp-dot span{font-size:12px;font-variant-numeric:tabular-nums}
-.gsp-dot b{font-size:11px;color:#6E3FD1}
-.gsp-dot[data-active]{background:#F3ECFF}
-.gsp-rows,.gsp-heard,.gsp-tips{display:grid;gap:0;margin:0;padding:0;list-style:none}
-.gsp-rows li,.gsp-tips li{display:grid;gap:2px;padding:10px 0;border-top:1px solid #F2EFF7}
-.gsp-rows li:first-child,.gsp-tips li:first-child{border-top:0;padding-top:0}
-.gsp-rows li div{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.gsp-rows strong,.gsp-tips strong{font-size:15px}
-.gsp-rows p{margin:0;color:#344054;font-size:14px;line-height:20px}
-.gsp-rows small,.gsp-tips small{color:#98A2B3;font-size:12px;line-height:17px}
-.gsp-heard li{padding:8px 0;border-top:1px solid #F2EFF7;color:#344054;font-size:14px;line-height:20px}
+.gsp-heard{display:grid;gap:0;margin:0;padding:0;list-style:none}
+.gsp-heard li{padding:9px 0;border-top:1px solid #F2EFF7;color:#344054;font-size:14px;line-height:20px;overflow-wrap:anywhere}
 .gsp-heard li:first-child{border-top:0;padding-top:0}
-.gsp-link{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;color:#6E3FD1;font-size:14px;font-weight:600;text-decoration:none}
-.gsp-all{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-radius:18px;background:#F2F4F7;color:#101828;text-decoration:none}
-.gsp-all span{display:grid;gap:2px}
-.gsp-all small{color:#667085;font-size:12px}
-.gsp-points .vz-pts-card{margin:0}
+.gsp-chip{display:inline-flex;align-items:center;padding:0 8px;border-radius:99px;background:#EFE8FC;color:#5B1FC2;font-size:12px;line-height:20px;font-weight:700;white-space:nowrap}
 /* 곡 확인이 필요해 보이는 녹음 (app/song-check.js): the list here and on #/song-mismatch, and the 성장 › 곡 line. */
 .sc{display:grid;gap:12px;padding-bottom:24px}
 .sc-lead{margin:0;padding:12px 14px;border-radius:14px;background:#F8F5FD;color:#4A3B66;font-size:13px;line-height:20px}
@@ -62,10 +51,10 @@
 .sc-notice i:first-child{font-size:20px}
 .sc-notice span{flex:1}
 /* 들어 본 평가 모아 보기 */
-.gsp-ear{display:grid;gap:6px;margin:0 0 10px;padding:12px;border-radius:12px;background:#F7F5FB}
-.gsp-ear p{margin:0;font-size:15px;line-height:21px;color:#1D2939}
+.gsp-ear{display:grid;gap:6px;padding:12px;border-radius:14px;background:#F7F5FB}
+.gsp-ear p{margin:0;font-size:15px;line-height:21px;color:#101828}
 .gsp-ear small{color:#475467;font-size:13px;line-height:18px}
 .gsp-ear-bar{display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden}
-.gsp-ear-bar i[data-k=later]{background:#6E3FD1}
-.gsp-ear-bar i[data-k=same]{background:#C9BEEB}
-.gsp-ear-bar i[data-k=earlier]{background:#98A2B3}
+.gsp-ear-bar i[data-k=later]{background:#7A32F5}
+.gsp-ear-bar i[data-k=same]{background:#C9AEFB}
+.gsp-ear-bar i[data-k=earlier]{background:#E6DDF6}

@@ -13,7 +13,7 @@
  * A run is saved only with 저장 at the end. A take recorded in the viewer during the run is linked by its id
  * (vzip:score-take-saved from app/score-audio.js); practice time is never counted from a run.
  *   window.VzipScorePoints.viewer(ctx) → {menu(actions), add(measure), destroy()}
- *   VZ.scorePoints = {card(host, songId), lessonEntry(main, lesson), manage(songId), editor(songId, preset), start(songId), addMany(rows),
+ *   VZ.scorePoints = {card(host, songId), lessonEntry(main, lesson), manage(songId), editor(songId, preset), start(songId), begin(songId), addMany(rows),
  *     fromMark(songId, {text, measures, fromMark, scoreId})} */
 (() => {
 'use strict';
@@ -459,5 +459,5 @@ function viewer(ctx) {
   };
 }
 window.VzipScorePoints = {viewer};
-VZ.scorePoints = {card, lessonEntry, manage, editor, start, addMany, fromMark};
+VZ.scorePoints = {card, lessonEntry, manage, editor, start, begin, addMany, fromMark};
 })();
