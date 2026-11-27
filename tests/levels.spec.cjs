@@ -1,4 +1,4 @@
-// 단계 (app/levels.js, app/levels-model.js): the line on 오늘 (Lv · 이름 · a thin bar) and the 단계 page it opens — the
+// 단계 (app/levels.js, app/levels-model.js): the chips on 오늘 (Lv · 이름, then the eight 기본기) and the 단계 page they open — the
 // 큰 단계 card with today's points, the 기본기 tiles in every state, an area's page with its progress, the 선생님 지적
 // 배지, the 기준표 as text with 복사 — then a finished set that completes the third day of a step (the step is kept and
 // told once, on the screen after saving), and the kept rows following the account through a sync (data-merge.js, as
@@ -12,14 +12,17 @@ test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
 // WebKit reloads on goto() to the URL it is already on: addresses change in the page.
 const to = (page, hash) => page.evaluate(h => { location.hash = h; }, hash);
 const db = page => page.evaluate(() => JSON.parse(JSON.stringify(VZ.db)));
-const homeLine = page => page.locator('.vz-student-home .vz-today-line');
+const homeLine = page => page.locator('.vz-student-home .vz-level-row');
 const chip = page => page.locator('.vz-student-home [data-home-level]');
+const streak = page => page.locator('.vz-student-home [data-home-week] .vz-week-strip-text');
+/** The chip's spoken name says how far the next level is (the thin bar under it is gone, 2026-11-27). */
+const chipSays = async page => expect(chip(page)).toHaveAccessibleName(await page.evaluate(() => VZ.levels.home().label));
 const host = page => page.locator('[data-lv-host]');
 const tile = (page, area) => host(page).locator('.lv-tile[data-area="' + area + '"]');
 const plans = async (page, kind) => (await db(page)).practicePlans.filter(p => p.kind === kind);
 async function noOverflow(page) {
   const r = await page.evaluate(() => {
-    const all = [...document.querySelectorAll('#view *,.sheet *'), ...(document.querySelector('.vz-student-home')?.shadowRoot?.querySelectorAll('.vz-today-line,.vz-today-line *') || [])];
+    const all = [...document.querySelectorAll('#view *,.sheet *'), ...(document.querySelector('.vz-student-home')?.shadowRoot?.querySelectorAll('.vz-header,.vz-header *,.vz-week-strip,.vz-week-strip *,.vz-level-row') || [])];
     return {wide:Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - innerWidth, over:all.filter(e => { const b = e.getBoundingClientRect(); return b.width && b.right > innerWidth + 1; }).map(e => e.className || e.tagName).slice(0, 5)};
   });
   expect(r.wide).toBeLessThanOrEqual(1); expect(r.over).toEqual([]);
@@ -37,43 +40,45 @@ const sync = (page, remote) => page.evaluate(remote => {
   storage.setItem('vocal-zip_mvp_v1', JSON.stringify(merged)); window.dispatchEvent(new CustomEvent('vzip:data-changed', {detail:{source:'cloud-merge'}}));
 }, remote);
 
-test('오늘: "Lv · 이름" with a thin bar next to the streak opens 단계; the level never drops when records are deleted', async ({page}) => {
-  // Nothing yet: Lv 1, an empty bar, and reading home writes nothing.
+test('오늘: the "Lv · 이름" chip leads the 단계 chips and opens 단계; the level never drops when records are deleted', async ({page}) => {
+  // Nothing yet: Lv 1, and reading home writes nothing.
   const empty = seed();
   await boot(page, empty);
   await expect(chip(page)).toBeVisible();
-  await expect(chip(page).locator('.vz-today-level-text')).toHaveText('Lv 1 · ' + L.LEVELS[0].name);
-  expect(await chip(page).locator('.vz-today-level-bar i').evaluate(e => e.style.width)).toBe('0%');
+  await expect(chip(page)).toHaveText('Lv 1 · ' + L.LEVELS[0].name);
   await expect(chip(page)).toHaveAccessibleName('큰 단계 Lv 1, ' + L.LEVELS[0].name + ', 다음 단계까지 100점, 단계 보기');
+  // The eight 기본기 follow it, in the order of 단계, none measured yet.
+  await expect(homeLine(page).locator('[data-home-area]')).toHaveCount(8);
+  await expect(homeLine(page).locator('[data-home-area]').first()).toHaveAccessibleName('호흡, 아직, 자세히 보기');
   expect((await db(page)).practicePlans).toEqual([]);
-  // Five finished sets (150 points): Lv 2, a quarter of the way to Lv 3 — next to the date and the streak, on one line.
+  // Five finished sets (150 points): Lv 2, a quarter of the way to Lv 3; the week's days above say five days in a row.
   await page.evaluate(rows => VZ.change(d => { d.practices.push(...rows); }), [16, 17, 18, 19, 20].map(n => setRow(day(n))));
-  await expect(chip(page).locator('.vz-today-level-text')).toHaveText('Lv 2 · ' + L.LEVELS[1].name);
-  expect(await chip(page).locator('.vz-today-level-bar i').evaluate(e => e.style.width)).toBe('25%');
+  await expect(chip(page)).toHaveText('Lv 2 · ' + L.LEVELS[1].name);
+  await chipSays(page);expect(await page.evaluate(() => VZ.levels.home().percent)).toBe(25);
   await expect(chip(page)).toHaveAttribute('data-level', '2');
-  await expect(homeLine(page).locator('.vz-today-streak')).toContainText('5일 연속');
+  await expect(streak(page)).toHaveText('이번 주 연속 5일');
   for (const [width, height] of SIZES) {
     await page.setViewportSize({width, height});
-    // A 44px target of its own, inside the line it sits on.
+    // A 44px target of its own, inside the row it sits in.
     const box = await chip(page).boundingBox(), line = await homeLine(page).boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(43.9); expect(box.width).toBeGreaterThanOrEqual(44);
     expect(box.y).toBeGreaterThanOrEqual(line.y - .5); expect(box.y + box.height).toBeLessThanOrEqual(line.y + line.height + .5);
     expect(box.x + box.width).toBeLessThanOrEqual(width);
-    // No two targets overlap: its box does not intersect the bell, the profile button or any card of the home.
+    // No two targets overlap: its box does not intersect the bell, the settings button, the week's days or any card of the home.
     const hits = await page.evaluate(() => { const root = document.querySelector('.vz-student-home').shadowRoot, c = root.querySelector('[data-home-level]').getBoundingClientRect();
-      const others = [...root.querySelectorAll('[aria-label="알림"],[aria-label="설정"],.vz-event,.vz-card,.vz-summary,.vz-schedule')].filter(e => e.getClientRects().length);
+      const others = [...root.querySelectorAll('[aria-label="알림"],[aria-label="설정"],.vz-week-strip,.vz-event,.vz-card,.vz-summary,.vz-schedule')].filter(e => e.getClientRects().length);
       return {checked:others.length, first:!!root.querySelector('.vz-event')?.getClientRects().length,
         over:others.filter(e => { const r = e.getBoundingClientRect(); return r.left < c.right - .5 && r.right > c.left + .5 && r.top < c.bottom - .5 && r.bottom > c.top + .5; }).map(e => e.getAttribute('aria-label') || e.className)}; });
-    expect(hits.checked).toBeGreaterThanOrEqual(4); expect(hits.first).toBe(true); expect(hits.over).toEqual([]);
+    expect(hits.checked).toBeGreaterThanOrEqual(5); expect(hits.first).toBe(true); expect(hits.over).toEqual([]);
     await noOverflow(page);
   }
   await page.setViewportSize({width:390, height:844});
   // The level passed is kept (one row), so deleting records lowers the points but not the level shown.
   await expect.poll(async () => (await plans(page, 'level-state')).map(p => [p.id, p.level])).toEqual([['level-state', 2]]);
   await page.evaluate(ids => VZ.change(d => { d.practices = d.practices.filter(p => !ids.includes(p.id)); }), [16, 17, 18].map(n => 'practice-set:' + day(n)));
-  await expect(homeLine(page).locator('.vz-today-streak')).toContainText('2일 연속');
-  await expect(chip(page).locator('.vz-today-level-text')).toHaveText('Lv 2 · ' + L.LEVELS[1].name);
-  expect(await chip(page).locator('.vz-today-level-bar i').evaluate(e => e.style.width)).toBe('0%');
+  await expect(streak(page)).toHaveText('이번 주 연속 2일');
+  await expect(chip(page)).toHaveText('Lv 2 · ' + L.LEVELS[1].name);
+  await chipSays(page);expect(await page.evaluate(() => VZ.levels.home().percent)).toBe(0);
   expect(await page.evaluate(() => VZ.levels.now().points)).toBe(60);
   // Tap: the 단계 page, under the 오늘 tab.
   await chip(page).click();
@@ -277,7 +282,7 @@ test('a finished set that completes the third day of a step: the step is kept, t
   const value = seed({practicePlans:[{...ONLY_EAR}], practices:[1, 2].flatMap(n => [setRow(day(n), {pitch:4, sd:null, range:null}),
     {id:'m' + n, date:day(n), minutes:20, manualMinutes:20, practiceTimeSource:'manual', practiceMode:'song', songId:'s1', created:2}])});
   await boot(page, value);
-  await expect(chip(page).locator('.vz-today-level-text')).toHaveText('Lv 1 · ' + L.LEVELS[0].name);
+  await expect(chip(page)).toHaveText('Lv 1 · ' + L.LEVELS[0].name);
   expect(L.skill(value, 'pitch', {today:TODAY}).next).toEqual(expect.objectContaining({step:1, count:2, due:false}));
   await startSet(page);
   // 1 / 2 목 풀기 is skipped; 2 / 2 음 따라 부르기 with the mic: five notes, each held for four seconds.
@@ -328,7 +333,12 @@ test('a finished set that completes the third day of a step: the step is kept, t
   // 오늘 and 단계 follow.
   await page.clock.resume();
   await to(page, '#/home');
-  await expect(chip(page).locator('.vz-today-level-text')).toHaveText('Lv 2 · ' + L.LEVELS[1].name);
+  await expect(chip(page)).toHaveText('Lv 2 · ' + L.LEVELS[1].name);
+  // The 기본기 chips beside it say the same as the tiles: 음정 1단계 (one segment filled), 음역 기준 맞추는 중.
+  const pitchChip = homeLine(page).locator('[data-home-area=pitch]');
+  await expect(pitchChip).toHaveAttribute('data-state', 'earned'); await expect(pitchChip.locator('.vz-chip-seg i.is-on')).toHaveCount(1);
+  await expect(pitchChip).toHaveAccessibleName('음정, 1단계, 자세히 보기');
+  await expect(homeLine(page).locator('[data-home-area=range]')).toHaveAttribute('data-state', 'calibrating');
   await chip(page).click();
   await expect(tile(page, 'pitch').locator('strong')).toHaveText('1 / 5단계');
   await expect(tile(page, 'pitch').locator('[data-tile-sub]')).toHaveText('요즘도 유지 중');
@@ -378,7 +388,7 @@ test('the kept level and the earned steps follow the account: a sync both ways, 
     expect((await plans(p, 'level-state')).map(x => x.level)).toEqual([3]);
     expect(await p.evaluate(() => VZ.levels.now().level)).toBe(3);
   }
-  await expect(chip(page).locator('.vz-today-level-text')).toHaveText('Lv 3 · ' + L.LEVELS[2].name);
+  await expect(chip(page)).toHaveText('Lv 3 · ' + L.LEVELS[2].name);
   expect(phone.__errors).toEqual([]);
   await context.close();
 });

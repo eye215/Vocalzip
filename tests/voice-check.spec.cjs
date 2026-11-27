@@ -94,7 +94,7 @@ test('daily check: 오늘 › 연습하기 row → 30-second check saved as trai
  await expect(page.locator('.vc-entry')).toHaveCount(0);
  // 오늘: the row stays and says today's check is done; now it opens the page with the result and the last 30 days.
  await page.evaluate(()=>window.VZ.nav('#/home'));
- await expect(page.locator('.vz-student-home .vz-today-line')).toBeVisible();
+ await expect(page.locator('.vz-student-home [data-home-ring]')).toBeVisible();
  await expect(card).toHaveCount(1);await expect(card).toContainText('오늘 완료 · 연속 1일');
  await card.click();
  await expect(page).toHaveURL(/#\/voice-check$/);

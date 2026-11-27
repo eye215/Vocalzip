@@ -239,8 +239,10 @@ test('the set list keeps the person\'s own steps under today\'s built-in ones; e
   await page.clock.resume();
   await page.getByRole('link',{name:'홈으로'}).click();await ready(page);
   await expect(entry(page)).toContainText('오늘 연습 끝 · 9분');
-  await page.locator('.vz-summary-row[data-row=week]').waitFor();
-  await expect(page.locator('.vz-summary-row[data-row=week]')).toContainText('39분');
+  // Today's ring and the week's days (the 오늘 · 이번 주 row before, 2026-11-27) count it once too.
+  await page.locator('.vz-student-home [data-home-ring]').waitFor();
+  await expect(page.locator('.vz-student-home [data-home-ring]')).toHaveAttribute('aria-label', /^오늘 연습 39분, /);
+  await expect(page.locator('.vz-student-home [data-home-week]')).toHaveAttribute('aria-label', /, 이번 주 연습 39분, /);
 });
 
 test('an own step follows the clock: another app and a reload count the real time once, pause stops it, the trip to the recorder keeps it', async({page}) => {

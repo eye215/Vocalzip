@@ -134,8 +134,10 @@ test('home shows 지난주 요약 on Monday and opens the seeded week; reading i
   expect(after).toEqual(before);
   // Opened once: the home row steps aside.
   await page.evaluate(() => {location.hash='#/home';});
-  await expect(page.locator('.vz-summary')).toBeVisible();
+  // Home is drawn again (the ring at the top); with no lesson or stage either, the summary card has no rows and stays hidden.
+  await expect(page.locator('.vz-student-home [data-home-ring]')).toBeVisible();
   await expect(page.locator('.vz-summary-row[data-row=weekly]')).toHaveCount(0);
+  await expect(page.locator('.vz-summary')).toBeHidden();
 });
 
 test('previous / next week with the ‹ › of 나, empty week and the old addresses',async({page})=>{
