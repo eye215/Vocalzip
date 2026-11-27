@@ -4,6 +4,7 @@
 // "녹음 분석", "곡 분석"). 연구소 itself (rows, states, sub-pages) is in tests/growth-tabs.spec.cjs; 발성 정밀 측정's row in
 // tests/precision-session.spec.cjs; the 보이스 체크 flow in tests/voice-check.spec.cjs. Fake data only.
 const {test, expect} = require('@playwright/test');
+const {openFold} = require('./growth-me-helpers.cjs');
 require('./legacy-session-mode.cjs')(test, {approvedHome:true});
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
@@ -186,7 +187,8 @@ test('old addresses: #/vocal-training and #/vocal-growth/training land on 오늘
     await homeLit(page);
   };
   for (const old of ['#/vocal-training', '#/vocal-growth/training']) {
-    await to(page, '#/vocal-growth?period=week');                     // 나 › 주 carries 다음 연습 (큰 정리 3번)
+    await to(page, '#/vocal-growth?period=week');                     // 나 carries 다음 연습 as a row (새 디자인)
+    await openFold(page, 'next');
     await expect(page.locator('[data-gm-section="next"]')).toBeVisible();
     await to(page, old);
     await shown();
@@ -194,6 +196,7 @@ test('old addresses: #/vocal-training and #/vocal-growth/training land on 오늘
     await expect(page).toHaveURL(/#\/vocal-growth\?period=week$/);
   }
   // 나 › 다음 연습: one line where the practice entries used to be reached from 성장.
+  await openFold(page, 'next');
   const line = page.locator('[data-gm-section="next"] [data-gm-today]');
   await expect(line).toHaveText('연습은 오늘 탭에서 해요');
   expect((await line.boundingBox()).height).toBeGreaterThanOrEqual(44);
@@ -232,6 +235,7 @@ test('one name per thing: 다음 연습 · 녹음 분석 · 곡 분석 — the o
   await to(page, '#/roadmap');
   await check('내 로드맵', '[data-roadmap]');
   await to(page, '#/vocal-growth?period=week');
+  await openFold(page, 'next');
   expect(await check('나 · 주', '[data-gm-section="next"]')).toContain('다음 연습');
   await to(page, '#/growth-flow?period=all');
   const overall = await check('지난 흐름 전체', '[data-overall-body]');

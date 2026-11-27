@@ -1,5 +1,6 @@
 // 주간 요약: fixture-only browser QA. No live Supabase, media, or account writes.
 const {test, expect} = require('@playwright/test');
+const {period, openPeriods} = require('./growth-me-helpers.cjs');
 require('./legacy-session-mode.cjs')(test,{approvedHome:true});
 const KEY = 'vocal-zip_mvp_v1';
 const NOW = '2026-11-16T03:00:00.000Z'; // Monday 12:00 in Korea: last week (11/9–11/15) has just ended
@@ -144,7 +145,7 @@ test('home shows 지난주 요약 on Monday and opens the seeded week; reading i
 
 test('previous / next week with the ‹ › of 나, empty week and the old addresses',async({page})=>{
   await boot(page,{hash:'#/growth-flow?period=all'});
-  await page.locator('[data-gm-period="week"]').click();
+  await period(page, 'week');
   await expect(page).toHaveURL(/#\/vocal-growth\?period=week$/);
   await expect(page.locator('[data-gm-week-ai]')).toContainText('주간 AI 종합은 아직 없어요');
   const s = summary(page), label = page.locator('[data-gm-label]'), move = d => page.locator('[data-gm-move="' + d + '"]');
@@ -172,7 +173,7 @@ test('previous / next week with the ‹ › of 나, empty week and the old addre
   await page.evaluate(() => {location.hash='#/growth-flow?period=week&week=2026-11-02';});
   await expect(page).toHaveURL(/#\/vocal-growth\?period=week&week=2026-11-02$/);
   await expect(s).toHaveAttribute('data-week', '2026-11-02');
-  await page.locator('[data-gm-period="month"]').click();
+  await period(page, 'month');
   await expect(page.locator('[data-gm-report="month"] [data-month-section="results"]')).toBeVisible();
 });
 
@@ -189,7 +190,9 @@ test('320px: no horizontal overflow and 44px controls',async({page})=>{
   await boot(page,{hash:'#/weekly-summary?week=2026-11-09'});
   await expect(summary(page).locator('[data-ws-minutes]')).toHaveText('1시간');
   await noOverflow(page);
-  for (const selector of ['[data-gm-move="-1"]','[data-gm-move="1"]','[data-ws-image]','[data-ws-copy]','[data-gm-period]']) {
+  await openPeriods(page);                       // 주 · 월 · 전체 and ‹ › open from the period pill (새 디자인)
+  await noOverflow(page);
+  for (const selector of ['[data-gm-period-open]','[data-gm-move="-1"]','[data-gm-move="1"]','[data-ws-image]','[data-ws-copy]','[data-gm-period]']) {
     const box = await page.locator(selector).first().boundingBox();
     expect(box.height, selector).toBeGreaterThanOrEqual(44);
     expect(box.width, selector).toBeGreaterThanOrEqual(44);

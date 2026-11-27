@@ -2,6 +2,7 @@
 // Every value on the screen is compared with the model (app/growth-range-model.js, tested in Node by
 // tests/growth-range.test.cjs) for the same fake recordings. Screenshots: RANGE_SHOTS=<dir> (2×).
 const {test, expect} = require('@playwright/test');
+const {period} = require('./growth-me-helpers.cjs');
 const fs = require('node:fs'), path = require('node:path');
 require('./legacy-session-mode.cjs')(test);
 const KEY = 'vocal-zip_mvp_v1', NOW = '2026-11-13T03:00:00.000Z';   // Friday 12:00 in Korea
@@ -371,7 +372,7 @@ test.describe('phone 375', () => {
   test('월별 분석: the chosen month shows its own row (every kind counted), an empty month says so', async ({page}) => {
     await boot(page, FULL);
     await page.locator('[data-range-group="lesson"]').click();                           // the chips of 전체 do not change the month row
-    await page.locator('[data-gm-period="month"]').click();
+    await period(page, 'month');
     const row = page.locator('[data-range-month]');
     await expect(row).toHaveAttribute('data-range-month', '2026-11');
     const m = await modelOf(page, {all:true});
@@ -419,7 +420,7 @@ test.describe('phone 320', () => {
     expect(await page.locator('[data-range-view]').evaluateAll(els => els.every(e => e.getBoundingClientRect().height >= 44))).toBe(true);
     await noOverflow(page); await inside(page, '[data-range-section] *');
     await page.locator('[data-range-view="flow"]').click();
-    await page.locator('[data-gm-period="month"]').click();
+    await period(page, 'month');
     await expect(page.locator('[data-range-month]')).toBeVisible();
     await noOverflow(page);
     expect(page.__errors).toEqual([]);

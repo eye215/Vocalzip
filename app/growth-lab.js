@@ -175,7 +175,7 @@ async function mount(host) {
   paintStates(v);
 }
 const here = () => document.body.dataset.vzRoute === 'growth-lab' && view?.host?.isConnected ? view : null;
-V.route('growth-lab', {title:'성장', tab:'growth', noAutoRefresh:true,
+V.route('growth-lab', {title:'성장', tab:'growth', noAutoRefresh:true, actions:() => V.growthHub?.archive?.() || '',
   render:() => V.growthTabs('lab') + '<div class="growth-hub growth-lab" data-growth-lab></div>',
   mount(main) { mount(main.querySelector('[data-growth-lab]')); },
   leave() { request++; }

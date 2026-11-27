@@ -1,6 +1,7 @@
 // 성장 리포트 v2 in the real app on a phone: 성장 tab (전체/월별) and the vocal lab report show six separated
 // measures, withhold judgements without evidence, never judge from the highest note, and fit a 320px screen.
 const {test, expect} = require('@playwright/test');
+const {period, openPeriods} = require('./growth-me-helpers.cjs');
 require('./legacy-session-mode.cjs')(test);
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
@@ -87,6 +88,7 @@ test('성장 tab · 전체 분석: six separated measures, same-phrase basis, ho
   await expect(pass).toContainText('음정 데이터만으로 판별 불가, 선생님 판단 참고');
   await expect(page.locator('.growth-panel').last()).toContainText('이전 분석(v1) 1개');
   // 44px capsule targets for the view tabs.
+  await openPeriods(page);                                         // 주 · 월 · 전체 open from the period pill (새 디자인)
   for (const b of await page.locator('.growth-view-tabs button').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
   expect(await fits(page)).toMatchObject({width:320, scroll:320, over:[]});
   await shot(page, 'growth-overall-320');
@@ -99,7 +101,7 @@ test('성장 tab · 월별 분석 compares last month with this month per song a
   await page.setViewportSize({width:320, height:740});
   await boot(page);
   await page.goto('/#/growth-flow?period=all');
-  await page.locator('[data-gm-period="month"]').click();
+  await period(page, 'month');
   await expect(page.locator('[data-gm-report="month"] [data-month-section="results"]')).toBeVisible();   // 나 › 월 (큰 정리 3번)
   const cards = page.locator('[data-month-section="results"] .growth-metric');
   await expect(cards).toHaveCount(6);

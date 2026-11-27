@@ -1,6 +1,7 @@
 // Two takes recorded on the same day: every growth screen (성장 tab 전체/월별, 보컬 연구소, 곡 카드) reads the one
 // recorded later that day as the latest take — by the recording time, never by the (random) id.
 const {test, expect} = require('@playwright/test');
+const {period} = require('./growth-me-helpers.cjs');
 require('./legacy-session-mode.cjs')(test);
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
@@ -60,7 +61,7 @@ test('성장 tab: the evening take is the latest one in 전체 분석 and 월별
   await expect(into.locator('.growth-state').first()).toHaveText('좋아진 방향'); // ±20 (first take) → ±11 (evening), not → ±32
   const overall = await page.evaluate(async () => { const items = await VZ.media.list(); return window.VzipOverallGrowth.calculate(items, {getDate:VZ.media.dateOf, valid:m => VZ.analysisReliable(m.analysis)}).metrics.find(m => m.id === 'intonation').pairs[0]; });
   expect(overall).toMatchObject({firstId:'y-first', lastId:'a-evening', before:20, after:11});
-  await page.locator('[data-gm-period="month"]').click();
+  await period(page, 'month');
   await expect(page.locator('[data-gm-report="month"] [data-month-section="results"]')).toBeVisible();   // 나 › 월 (큰 정리 3번)
   // Last month's latest (evening, ±26) vs this month's latest (evening, ±11).
   await expect(page.locator('[data-month-section="results"] [data-growth-metric="intonation"] .growth-state').first()).toHaveText('좋아진 방향');
