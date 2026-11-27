@@ -1213,7 +1213,7 @@ test('shared colors, type hierarchy, cards and four-item dock (v4 IA) apply to r
   expect(shell.navItems).toBe(4);
   expect(shell.navHeight).toBe(70);
   expect(shell.fab).toBe('grid');
-  expect(shell.cardRadius).toBe('20px');
+  expect(shell.cardRadius).toBe(route==='calendar'?'22px':'20px'); // 기록 (rec1): the new 22px cards
   await noOverflow(page);
  }
 });

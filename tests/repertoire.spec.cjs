@@ -233,8 +233,9 @@ test('A production connects to the rest of the app: its day on the calendar, 공
  const rec=page.locator('[data-show-media]');await expect(rec).toContainText('Dancing Queen 공연');
  await rec.getByRole('button',{name:/곡 1개를 공연곡으로 연결/}).click();
  await expect.poll(async()=>(await db(page)).performances.find(p=>p.id===id).songLinks.map(l=>l.songId)).toEqual(['song2']);
- await page.goto('/#/calendar');await page.locator('[data-d="2026-11-01"]').click();
- await expect(page.locator('[data-day]')).toContainText('맘마미아');
+ await page.goto('/#/calendar?date=2026-11-01');await expect(page.locator('[data-d="2026-11-01"]')).toHaveAttribute('aria-pressed','true');
+ await expect(page.locator('[data-day] [data-section=stage]')).toContainText('맘마미아');
+ await expect(page.locator('[data-d="2026-11-01"]')).toHaveAttribute('data-has',/stage/);
  await page.goto('/#/song/song2');await page.getByRole('tab',{name:'활동 기록'}).click();await expect(page.locator('[data-body]')).toContainText('맘마미아');
  // App just opened / offline: the account this device last synced with still sees its productions.
  await page.evaluate(()=>{localStorage.setItem('vzip_cloud_linked_user','archive-user');window.vzipCloudUserId=()=>''});

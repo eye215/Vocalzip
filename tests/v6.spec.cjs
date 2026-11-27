@@ -154,8 +154,10 @@ test('Calendar add menu offers 숙제 next to 레슨 일정 and 연습 기록 an
   await boot(page);
   await page.goto('/#/calendar');
   // The day's + says what it opens: the 기록 추가 menu (it was labelled 일정 추가).
-  await expect(page.locator('.vz-calendar-day-head [data-add]')).toHaveAttribute('aria-label', '기록 추가');
-  await page.locator('.vz-calendar-day-head [data-add]').click();
+  // rec1: it is the header's + 직접 적기 pill now.
+  await expect(page.locator('#top [data-add]')).toHaveAttribute('aria-label', '기록 추가');
+  await expect(page.locator('#top [data-add]')).toHaveText('직접 적기');
+  await page.locator('#top [data-add]').click();
   const kinds = await page.locator('[data-calendar-add]').evaluateAll(b => b.map(x => x.dataset.calendarAdd));
   expect(kinds, JSON.stringify(kinds)).toEqual(['stage', 'lesson', 'practice', 'homework']);
   await page.locator('[data-calendar-add="homework"]').click();
@@ -1387,10 +1389,8 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   expect(a.dateSource).not.toBe('manual');
   expect(new Date(b.created).getFullYear() + '-' + (new Date(b.created).getMonth() + 1) + '-' + new Date(b.created).getDate()).toBe('2026-1-15');
   expect(await page.evaluate(() => window.__calls)).toBe(3);
-  await page.goto('/#/calendar');
-  await page.getByRole('button', {name:'다음 달'}).click();
-  for (let i = 0; i < 24 && !(await page.locator('[data-d="2026-01-15"]').count()); i++) await page.getByRole('button', {name:'이전 달'}).click();
-  await page.locator('[data-d="2026-01-15"]').click();
+  await page.goto('/#/calendar?date=2026-01-15');
+  await expect(page.locator('[data-d="2026-01-15"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-day] [data-media]')).toHaveCount(1);
 });
 
@@ -1433,29 +1433,40 @@ test('Library filters, edit and play; compare A/B with memo saved in v5 report s
 test('Calendar shows lessons, practice and recordings per day and adds lessons for the chosen date', async ({page}) => {
   await boot(page);
   await page.goto('/#/calendar');
-  if (day(-1).slice(0, 7) !== day(0).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
+  // The tab opens on this week (rec1); a day of the week is one tap, an older one is a ‹ week away.
+  await expect(page.locator('.rt-cal')).toHaveAttribute('data-view', 'week');
+  if (!(await page.locator('[data-d="' + day(-1) + '"]').count())) await page.getByRole('button', {name:'이전 주'}).click();
   await expect(async () => { await page.locator('[data-d="' + day(-1) + '"]').click(); await expect(page.locator('[data-d="' + day(-1) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
-  await expect(page.locator('[data-day]')).toContainText('25분');
+  await expect(page.locator('[data-day] [data-section=practice] .rt-sec-total')).toHaveText('25분');
+  await expect(page.locator('[data-day] [data-day-summary]')).toContainText('연습 25분');
   // The practice shows its linked recording underneath — and the same song's recording with no record of its own goes
-  // there too (2026-11-23), not into a loose "기록에 연결되지 않은 연습 녹음" list.
-  await expect(page.locator('[data-day] .cal-own').first().locator('[data-practice]')).toHaveCount(1);
+  // there too (2026-11-23), not into a loose "따로 남긴 녹음" list.
+  const practice = page.locator('[data-day] .rt-item[data-kind=practice]').first();
+  await expect(practice.locator('[data-practice]')).toHaveCount(1);
   await expect(page.locator('[data-day] [data-media]')).toHaveCount(2);
-  await expect(page.locator('[data-day] .cal-own').first().locator('[data-media]')).toHaveCount(2);
-  await page.locator('[data-day] .mini-row').first().click(); // a slim ▶ line opens the same player
+  await expect(practice.locator('[data-media]')).toHaveCount(2);
+  await practice.locator('[data-media] [data-toggle]').first().click(); // a ▶ 녹음 chip opens the same player
   await expect(page.locator('[data-day] .media-open:not([hidden])')).toHaveCount(1);
-  await page.locator('[data-day] .mini-row').first().click();
-  await expect(page.locator('[data-day]')).not.toContainText('기록에 연결되지 않은 연습 녹음');
-  if (day(-7).slice(0, 7) !== day(-1).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
+  await expect(page.locator('[data-day] .media-open:not([hidden]) [data-media-more]')).toHaveCount(1); // with its ⋯ menu
+  await practice.locator('[data-media] [data-toggle]').first().click();
+  await expect(page.locator('[data-day] [data-section=loose]')).toHaveCount(0);
+  for (let i = 0; i < 2 && !(await page.locator('[data-d="' + day(-7) + '"]').count()); i++) await page.getByRole('button', {name:'이전 주'}).click();
   await expect(async () => { await page.locator('[data-d="' + day(-7) + '"]').click(); await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
-  await expect(page.locator('[data-day]')).toContainText('완료');
-  await expect(page.locator('[data-day] .cal-own [data-media]')).toHaveCount(1); // the lesson's recording sits under the lesson
-  await page.locator('[data-day] [data-add]').click();
+  await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('data-has', /lesson/);
+  await expect(page.locator('[data-day] .rt-item[data-kind=lesson] .rt-note')).toContainText('호흡 길게');
+  await expect(page.locator('[data-day] .rt-item[data-kind=lesson] [data-media]')).toHaveCount(1); // the lesson's recording sits under the lesson
+  await page.locator('#top [data-add]').click();
   await sheet(page).getByRole('button', {name:'레슨 일정'}).click();
   await expect(sheet(page).locator('[name=date]')).toHaveValue(day(-7));
   await sheet(page).getByRole('button', {name:'돌아가기'}).click();
-  await page.getByRole('button', {name:'다음 달'}).click();
-  await page.getByRole('button', {name:'오늘'}).click();
+  // › back to this week lands on today; from another week 오늘 does the same.
+  await page.getByRole('button', {name:'다음 주'}).click();
   await expect(page.locator('[data-d="' + day(0) + '"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', {name:'오늘', exact:true})).toBeHidden();
+  await page.getByRole('button', {name:'이전 주'}).click();
+  await page.getByRole('button', {name:'오늘', exact:true}).click();
+  await expect(page.locator('[data-d="' + day(0) + '"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', {name:'오늘', exact:true})).toBeHidden();
 });
 
 test('Growth counts practice time once and shows empty state without invented scores', async ({page}) => {
@@ -2440,13 +2451,11 @@ test('Recordings can be tagged 공연 in 정보 수정; performances are filtere
   const minutes = await page.evaluate(async () => VZ.timeEntries(await VZ.media.list()).filter(e => e.kind === 'recording').map(e => e.ref.id));
   expect(minutes).not.toContain('m2');  // The calendar shows performances as their own group and dot.
   const m2day = await page.evaluate(async () => VZ.media.dateOf((await VZ.media.list()).find(m => m.id === 'm2')));
-  await page.goto('/#/calendar');
-  await expect(page.locator('.legend')).toContainText('공연');
-  for (let i = 0; i < 3 && !(await page.locator('[data-d="' + m2day + '"]').count()); i++) await page.getByRole('button', {name:'이전 달'}).click();
-  await page.locator('[data-d="' + m2day + '"]').click();
-  await expect(page.locator('[data-d="' + m2day + '"] .dots .s')).toHaveCount(1);
-  await expect(page.locator('[data-day] .cal-group').first()).toHaveText('공연·오디션');
-  await expect(page.locator('[data-day]')).toContainText('공연 녹음·영상');
+  await page.goto('/#/calendar?date=' + m2day);
+  await expect(page.locator('[data-d="' + m2day + '"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-d="' + m2day + '"]')).toHaveAttribute('data-has', /stage/);
+  await expect(page.locator('[data-day] .rt-sec-head').first()).toContainText('무대');
+  await expect(page.locator('[data-day] [data-section=stage]')).toContainText('공연 녹음·영상');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
@@ -2584,12 +2593,14 @@ test('Billing attendance records go into 레슨 기록 and the calendar by thems
   expect(d.lessons.some(l => l.date === '2026-10-09')).toBe(false);
   // They are on the calendar.
   await page.goto('/#/calendar');
-  for (let i = 0; i < 24 && !(await page.locator('.cal-day[data-d="2026-10-04"]').count()); i++) await page.locator('[data-mv="' + (new Date() > new Date(2026, 9, 31) ? -1 : 1) + '"]').click();
-  await expect(page.locator('.cal-day[data-d="2026-10-04"] .dots i.l')).toHaveCount(1);
-  await page.locator('.cal-day[data-d="2026-10-04"]').click();
+  await page.locator('[data-cal-view]').click(); // 한 달 보기
+  for (let i = 0; i < 24 && !(await page.locator('.rt-dayb[data-d="2026-10-04"]').count()); i++) await page.locator('[data-mv="' + (new Date() > new Date(2026, 9, 31) ? -1 : 1) + '"]').click();
+  await expect(page.locator('.rt-dayb[data-d="2026-10-04"]')).toHaveAttribute('data-has', /lesson/);
+  await expect(page.locator('.rt-dayb[data-d="2026-10-04"] .rt-dot.on')).toHaveCount(1);
+  await page.locator('.rt-dayb[data-d="2026-10-04"]').click();
   // The stored 00:00 start is a placeholder: the row says the time is not set.
-  await expect(page.locator('.cal-own[data-kind=lesson] .item-title').first()).toContainText('시간 미정');
-  await expect(page.locator('.cal-own[data-kind=lesson]').first()).not.toContainText('00:00');
+  await expect(page.locator('.rt-item[data-kind=lesson] .rt-sub').first()).toContainText('시간 미정');
+  await expect(page.locator('.rt-item[data-kind=lesson]').first()).not.toContainText('00:00');
   // Nothing is added twice, and a lesson the user deletes does not come back.
   await page.evaluate(() => VZ.change(db => { db.lessons = db.lessons.filter(l => l.id !== 'bill-d2'); }));
   await page.goto('/#/home'); await page.goto('/#/lessons');
@@ -3104,7 +3115,7 @@ test('Actual practice time excludes recording length across growth, calendar and
  await page.locator('[data-song-metric="files"]').click();
  await expect(page.locator('[data-song-stat="s1"]')).toContainText('2회');
  await page.goto('/#/song/s1');await expect(page.locator('[data-summary]')).toContainText('연습 25분');
- await page.goto('/#/calendar');await expect(page.locator('[data-month-minutes]')).toHaveText('25분');
+ await page.goto('/#/calendar');await page.locator('#top [data-cal-chart]').click();await expect(page.locator('[data-month-minutes]')).toHaveText('25분');
  expect((await data(page)).practices[0]).toMatchObject({minutes:30,manualMinutes:25,mediaSeconds:300});
 });
 
