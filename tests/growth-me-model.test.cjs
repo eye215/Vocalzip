@@ -84,3 +84,15 @@ test('stats: first, mean, the best in the measure\'s own direction, count', () =
   assert.equal(G.stats([3, 4.2, 3.4], 1).best, 4.2);
   assert.equal(G.stats([], 1).count, 0);
 });
+test('buckets: 주 → a point a day, 월 → a week from Monday, 전체 → a month (a quarter past 18 months), each the average', () => {
+  const pts = [{date:'2026-11-03', value:20}, {date:'2026-11-03', value:30}, {date:'2026-11-04', value:10}, {date:'2026-11-10', value:40}, {date:'bad', value:1}, {date:'2026-11-11', value:NaN}];
+  const week = G.buckets(pts, 'week');
+  assert.deepEqual(week.map(b => [b.label, b.value, b.count]), [['11/3', 25, 2], ['11/4', 10, 1], ['11/10', 40, 1]]);
+  const month = G.buckets(pts, 'month');   // 2026-11-02 is a Monday
+  assert.deepEqual(month.map(b => [b.from, b.label, b.value, b.count]), [['2026-11-02', '11/2주', 20, 3], ['2026-11-09', '11/9주', 40, 1]]);
+  const all = G.buckets([{date:'2026-08-09', value:2}, {date:'2026-08-30', value:4}, {date:'2026-11-28', value:6}], 'all');
+  assert.deepEqual(all.map(b => [b.label, b.value, b.unit]), [['8월', 3, 'month'], ['11월', 6, 'month']]);
+  const long = G.buckets([{date:'2024-01-03', value:1}, {date:'2024-02-03', value:3}, {date:'2026-05-03', value:5}], 'all');
+  assert.deepEqual(long.map(b => [b.label, b.value, b.unit]), [['24년 1분기', 2, 'quarter'], ['26년 2분기', 5, 'quarter']]);
+  assert.deepEqual(G.buckets([], 'all'), []);
+});

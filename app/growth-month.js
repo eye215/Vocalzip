@@ -375,7 +375,7 @@ function deltaText(m) {
   const d = r1(m.after - m.before), unit = m.unit === 'cent' ? ' cent' : m.unit === '초' ? '초' : '';
   return (d > 0 ? '+' : d < 0 ? '−' : '±') + Math.abs(d) + unit;
 }
-function flowSvg(m, o, pts) {
+function flowSvg(m, o, pts, takes = pts.length) {
   const W = 318, H = 138, top = 14, bottom = 118, vals = pts.map(p => p.value);
   let lo = Math.min(...vals), hi = Math.max(...vals);
   if (hi - lo < 1e-6) { lo -= 1; hi += 1; }
@@ -388,20 +388,26 @@ function flowSvg(m, o, pts) {
     '<text x="' + (x(cut) + 4).toFixed(1) + '" y="9" font-size="9" fill="#7D8597">' + Number(o.mp.from.slice(5, 7)) + '월</text>' : '';
   const md = d => Number(d.slice(5, 7)) + '/' + Number(d.slice(8, 10));
   const dir = m.direction === -1 || m.direction === 1 ? '위가 좋아요' : m.id === 'range' ? '위가 높은 음' : '';
-  return '<div class="gm-flow" data-gm-mx-graph="' + m.id + '"><svg class="gm-flow-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + e(m.title + ' 흐름, 녹음 ' + pts.length + '개') + '" focusable="false">' +
+  return '<div class="gm-flow" data-gm-mx-graph="' + m.id + '"><svg class="gm-flow-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + e(m.title + ' 흐름, ' + ME.UNIT_WORD[pts[0].unit] + '별 평균 ' + pts.length + '개, 녹음 ' + takes + '개') + '" focusable="false">' +
     '<defs><linearGradient id="gmFlowL" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#C9AEFB"/><stop offset=".6" stop-color="#7A32F5"/><stop offset="1" stop-color="#5B1FC2"/></linearGradient>' +
     '<linearGradient id="gmFlowA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8B45FF" stop-opacity=".34"/><stop offset="1" stop-color="#7A32F5" stop-opacity="0"/></linearGradient></defs>' +
     [.25, .5, .75].map(f => '<line x1="0" x2="' + W + '" y1="' + (top + f * (bottom - top)).toFixed(1) + '" y2="' + (top + f * (bottom - top)).toFixed(1) + '" stroke="#F3EEFC"/>').join('') + divider +
     (dir ? '<text x="0" y="9" font-size="9" fill="#98A2B3">' + dir + '</text>' : '') +
     '<polygon points="0,' + bottom + ' ' + line + ' ' + ex.toFixed(1) + ',' + bottom + '" fill="url(#gmFlowA)"/>' +
     '<polyline points="' + line + '" fill="none" stroke="url(#gmFlowL)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>' +
+    (pts.length <= 40 ? pts.slice(0, -1).map((p, i) => '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(p.value).toFixed(1) + '" r="2.6" fill="#fff" stroke="#7A32F5" stroke-width="1.6" data-gm-mx-dot/>').join('') : '') +
     '<circle cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="11" fill="#7A32F5" opacity=".12" data-gm-mx-glow/><circle cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="5" fill="#5B1FC2" stroke="#fff" stroke-width="2"/>' +
-    '<text x="0" y="' + (H - 4) + '" font-size="10" fill="#7D8597">' + md(pts[0].date) + '</text><text x="' + W + '" y="' + (H - 4) + '" font-size="10" fill="#7D8597" text-anchor="end">' + md(pts[end].date) + '</text></svg>' +
+    '<text x="0" y="' + (H - 4) + '" font-size="10" fill="#7D8597">' + e(pts[0].label || md(pts[0].date)) + '</text><text x="' + W + '" y="' + (H - 4) + '" font-size="10" fill="#7D8597" text-anchor="end">' + e(pts[end].label || md(pts[end].date)) + '</text></svg>' +
     // A few soft stars by the latest point (none with reduced motion, app/growth-month.css).
     '<span class="gm-stars" aria-hidden="true" style="left:' + (ex / W * 100).toFixed(2) + '%;top:' + (ey / H * 100).toFixed(2) + '%"><i style="--x:-16px;--y:-18px;--s:9px;--d:2.4s;--w:0s">' + STAR + '</i><i style="--x:6px;--y:-24px;--s:6px;--d:2.1s;--w:.9s">' + STAR + '</i><i style="--x:-26px;--y:-4px;--s:5px;--d:2.6s;--w:1.6s">' + STAR + '</i></span></div>';
 }
 function flowHtml(v) {
-  const o = v.o, m = o.metrics.find(x => x.id === v.metric) || o.metrics[0], pts = o.series[m.id] || [];
+  const o = v.o, m = o.metrics.find(x => x.id === v.metric) || o.metrics[0], wk = v.period.kind === 'week' && v.period.from ? v.period : null;
+  // 주 draws that week's days only (the numbers above stay the month's, "n월 기준"); 월 and 전체 draw the whole flow.
+  const raw = (o.series[m.id] || []).filter(p => !wk || (p.date >= wk.from && p.date <= wk.to));
+  // One point per day (주) · week (월) · month or quarter (전체): the average of that span's takes, so a long period
+  // reads as a line instead of a comb of single takes.
+  const pts = ME.buckets(raw, v.period.kind), unit = pts[0] ? ME.UNIT_WORD[pts[0].unit] : '';
   const state = m.id === 'passaggio' ? 'reference' : m.compared ? m.state : '';
   const last = o.mp ? '지난달' : '처음', vs = m.compared && m.before != null ? '<span class="gm-mx-vs">' + last + ' ' + e(m.id === 'range' ? m.before : valueText(m.id, m.before)) +
     (ARROW[m.state] || deltaText(m) ? ' <b>' + (ARROW[m.state] || '') + (deltaText(m) ? ' ' + e(deltaText(m)) : '') + '</b>' : '') + '</span>' : '';
@@ -409,10 +415,11 @@ function flowHtml(v) {
     '<span class="gm-mx-state" data-gm-mx-state>' + (STATE_WORD[state] || '비교 전') + '</span>' + vs + '</div>';
   let body;
   if (m.id === 'passaggio') body = '<p class="gm-mx-empty">파사지오는 참고로만 봐요 · ' + e(G.PASSAGGIO_NOTE) + '. 곡별 결과는 아래 리포트에 있어요.</p>';
-  else if (pts.length < 2) body = '<p class="gm-mx-empty" data-gm-mx-empty>' + (pts.length ? '녹음이 하나 더 쌓이면 흐름을 그려요.' : '이 기간에 잰 녹음이 아직 없어요.') + '</p>';
-  else body = flowSvg(m, o, pts);
+  else if (pts.length < 2) body = '<p class="gm-mx-empty" data-gm-mx-empty>' + (raw.length ? '다른 ' + (unit === '하루' ? '날' : unit) + '에 잰 녹음이 쌓이면 흐름을 그려요.' : wk ? '이 주에 잰 녹음이 아직 없어요.' : '이 기간에 잰 녹음이 아직 없어요.') + '</p>';
+  else body = flowSvg(m, o, pts, raw.length) + '<p class="gm-mx-unit" data-gm-mx-unit>점 하나 = ' + e(unit) + ' 평균' + (wk ? ' · ' + (wk.current ? '이번 주' : GM.md(wk.from) + ' 주') : '') + '</p>';
   // The unit is in the big number above: the stats line says the numbers only ("±29", "3.4초", "F5").
-  const st = ME.stats(pts.map(p => p.value), m.direction), val = x => e(valueText(m.id, x).replace(/ cent$/, ''));
+  // 처음 · 최고 are of the averaged points (one stray take is not the best); 평균 and the count are of every take.
+  const st = {...ME.stats(pts.map(p => p.value), m.direction), avg:ME.stats(raw.map(p => p.value)).avg, count:raw.length}, val = x => e(valueText(m.id, x).replace(/ cent$/, ''));
   const stats = st.count && m.id !== 'passaggio' ? '<p class="gm-mx-stats" data-gm-mx-stats><span>처음 <b>' + val(st.first) + '</b></span><span>평균 <b>' + val(m.id === 'range' ? Math.round(st.avg / 100) * 100 : st.avg) + '</b></span><span>' + (m.direction ? '최고' : '가장 높음') + ' <b>' + val(st.best) + '</b></span><span>녹음 ' + st.count + '개</span></p>' : '';
   return '<div class="gm-mx-flow" data-gm-mx-flow="' + m.id + '">' + head + body + stats + '</div>';
 }

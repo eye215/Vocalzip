@@ -186,6 +186,7 @@
 @keyframes gmTwinkle{0%,100%{opacity:0;transform:scale(.2) rotate(0deg)}45%{opacity:.55;transform:scale(1) rotate(30deg)}60%{opacity:.45;transform:scale(.85) rotate(40deg)}}
 .gm-mx-stats{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;margin:0;color:#667085;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums}
 .gm-mx-stats b{color:#101828}
+.gm-mx-unit{margin:-2px 0 8px;color:#98A2B3;font-size:11px;line-height:16px;text-align:right}
 /* 연습 구성 */
 .gm-mix-row{display:flex;align-items:center;gap:10px;min-width:0}
 .gm-mix-bar{position:relative;flex:1;min-width:0;height:30px;border-radius:10px;background:#F3EEFC;overflow:hidden}
